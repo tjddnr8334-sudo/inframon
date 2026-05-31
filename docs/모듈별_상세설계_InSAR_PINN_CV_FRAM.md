@@ -6,11 +6,15 @@
 > - **PINN**: 구조 건전성 PDE/ODE 데이터 생성 엔진 (FEM 연계)
 > - **CV**: ROI 산정 자동화 엔진
 > - **FRAM**: PINN 결합 시스템 안전 진단 엔진
+>
+> 본 문서는 **설계 스펙(목표 모습)**이다. **현재 구현 현황·살아있는 상태**는
+> [`개발_맥락_맵.md`](개발_맥락_맵.md)가 신뢰원이고, 아래 **0절**이 요약이다.
 
 ---
 
 ## 목차
 
+0. [구현 현황 (2026-06)](#0-구현-현황-2026-06)
 1. [전체 모듈 아키텍처](#1-전체-모듈-아키텍처)
 2. [모듈 1: InSAR — SARvey 상위호환 엔진](#2-모듈-1-insar--sarvey-상위호환-엔진)
 3. [모듈 2: PINN — 구조 건전성 PDE/ODE 엔진](#3-모듈-2-pinn--구조-건전성-pdeode-엔진)
@@ -18,6 +22,34 @@
 5. [모듈 4: FRAM — PINN 결합 안전 진단 엔진](#5-모듈-4-fram--pinn-결합-안전-진단-엔진)
 6. [모듈 간 데이터 인터페이스](#6-모듈-간-데이터-인터페이스)
 7. [통합 실행 체계](#7-통합-실행-체계)
+
+---
+
+## 0. 구현 현황 (2026-06)
+
+이 설계는 **4대 엔진 모두 실구현(real)으로 실현**됐다. 데이터 계약(Pydantic+HDF5)을
+**성역**으로 두고 stub→real 로 채워, 핫스왑(`--engine X=real`)·골든 회귀로 보호한다.
+합성·데모로 검증 완료(테스트 **164개**, GitHub CI ruff+pytest). 실데이터 수치
+게이트(G2~G5)만 실 SLC·제원·가중치 대기.
+
+### 설계 → 구현 매핑
+
+| 모듈(본문) | 구현 파일 | 설계 실현 핵심 |
+|---|---|---|
+| InSAR(§2) | `insar/real_engine.py` + 선별 A~E(`osm_bridge`/`slc_search`/`era5_master`) + `track_preflight` | SARvey Track H5 인제스트 → CV 정합(world xyz·DEM z·고정단 거리). 코어 F(ISCE2/MiaplPy/SARvey)는 WSL2, 어댑터·계약 검증됨 |
+| PINN(§3) | `pinn/real_engine.py` | PyTorch PINN + Euler-Bernoulli PDE(autograd 4차) + FEM 모달(해석해 5%내) + **절대 EI 식별**(비차원 PDE 균형) |
+| CV(§4) | `cv/real_engine.py` | Otsu+CC / Transformer(SegFormer) 분할 → PCA 축선 → **형상증거 부재분할(SAM 폴백)** → geo_transform/crs 산출 |
+| FRAM(§5) | `fram/real_engine.py` | 점별 공명 + 절대보정(sat) + **함수망 공명(N-K)** + **isotonic 캘리브**. §5.8 기능 공명 다이어그램 대시보드 구현 |
+
+### 설계를 넘어 추가된 것 (이번 구현 신규)
+
+- **오케스트레이션**: 핫스왑 셀렉터(`orchestrator/engines.py`)·증분 재개(fingerprint, `incremental.py`)·실행 매니페스트·골든 회귀 테스트.
+- **CV↔InSAR 좌표 체인**(설계 6절 인터페이스 구체화): `geo_transform`/`crs` 정합 → world xyz(EPSG:5179) → DEM 고도 z → 고정단(abutment) 미터 거리. 픽셀↔world 아핀은 `geotransform.py`.
+- **FRAM 고도화**(설계 5.5~5.6 실현+): 함수망 N-K 스펙트럼 공명, Morandi 합성 검증(ROC-AUC **0.946**), isotonic 캘리브(Brier 0.234→**0.059**).
+- **실데이터 진입 게이트**: `inventory`(`--inspect-data`)·Track preflight(`--check-track`)·readiness doctor(`--doctor`)·[실데이터 런북](실데이터_런북.md).
+- **거버넌스**: GitHub CI(`.github/workflows/tests.yml`), 테스트 89→**164**, 비공개 저장소 백업.
+
+> 살아있는 상세 상태: [`개발_맥락_맵.md`](개발_맥락_맵.md) · 실행 절차: [`실데이터_런북.md`](실데이터_런북.md) · 엔진별: [`맥락/`](맥락/README.md)
 
 ---
 
