@@ -1,0 +1,15 @@
+# 텍스트는 git 자동 판별 + 저장소·작업본 모두 LF 로 정규화(Windows CRLF 경고 제거)
+* text=auto eol=lf
+
+# WSL2 bash 스크립트는 반드시 LF — CRLF 면 bash 가 깨진다(`\r` 명령 없음 에러)
+*.sh text eol=lf
+
+# 바이너리(줄바꿈 변환 금지)
+*.h5 binary
+*.hdf5 binary
+*.npz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary

@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (core + 테스트에 필요한 선택 의존성, torch 는 CPU)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]" scipy scikit-image imageio pillow rasterio asf_search
+      - name: Lint (ruff)
+        run: ruff check src tests
+      - name: Test (pytest)
+        run: pytest -q
