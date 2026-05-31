@@ -1,0 +1,20 @@
+# conda 환경 — InSAR 계열(GDAL/rasterio)은 pip로 설치하면 깨지기 쉬워 conda-forge 사용.
+# 생성:  conda env create -f environment.yml
+#        conda activate inframon
+#        pip install -e .[dev,dashboard]
+name: inframon
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy>=1.26
+  - h5py>=3.10
+  - pydantic>=2.6
+  # InSAR 계열 (Phase 1)
+  - gdal
+  - rasterio
+  - snaphu
+  # CV / PINN 은 pip extras 로 (pyproject [project.optional-dependencies])
+  - pip
+  - pip:
+      - -e .[dev,dashboard]

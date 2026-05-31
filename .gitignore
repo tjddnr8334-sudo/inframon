@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# 데이터 (SLC 스택, 영상, 결과 HDF5)
+data/
+*.h5
+*.dim
+*.SAFE/
+
+# 도구
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# 로컬 설정 (개인 환경)
+.claude/settings.local.json

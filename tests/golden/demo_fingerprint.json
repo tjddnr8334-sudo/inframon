@@ -1,0 +1,249 @@
+{
+  "datasets": {
+    "cv/grid_density": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "float32"
+    },
+    "cv/member_abutment": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "uint8"
+    },
+    "cv/member_bearing": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "uint8"
+    },
+    "cv/member_deck": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "uint8"
+    },
+    "cv/member_pier": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "uint8"
+    },
+    "cv/roi_mask": {
+      "shape": [
+        256,
+        512
+      ],
+      "dtype": "uint8"
+    },
+    "fram/CRI": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "fram/R_ij": {
+      "shape": [
+        4,
+        4,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "fram/amplification": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "fram/divergence": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "fram/spatial_prop": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "insar/coherence": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "insar/dates": {
+      "shape": [
+        24
+      ],
+      "dtype": "float64"
+    },
+    "insar/l_from_fixed": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "insar/longitudinal": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "insar/los": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "insar/member": {
+      "shape": [
+        60
+      ],
+      "dtype": "int8"
+    },
+    "insar/point_id": {
+      "shape": [
+        60
+      ],
+      "dtype": "int64"
+    },
+    "insar/temporal_coherence": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "insar/xyz": {
+      "shape": [
+        60,
+        3
+      ],
+      "dtype": "float64"
+    },
+    "pinn/EI": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/V_anomaly": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/V_func_series": {
+      "shape": [
+        4,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/V_load": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/V_settle": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/V_thermal": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/alpha": {
+      "shape": [
+        60
+      ],
+      "dtype": "float64"
+    },
+    "pinn/comp_anomaly": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/comp_load": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/comp_settle": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/comp_thermal": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/deflection": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/natural_freq": {
+      "shape": [
+        3
+      ],
+      "dtype": "float64"
+    },
+    "pinn/strain": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    },
+    "pinn/stress": {
+      "shape": [
+        60,
+        24
+      ],
+      "dtype": "float64"
+    }
+  },
+  "scalars": {
+    "cri_global_max": 0.539518,
+    "level": "주의",
+    "critical_members": [],
+    "lead_time_days": null,
+    "func_names": [
+      "thermal",
+      "load",
+      "bearing",
+      "foundation"
+    ]
+  }
+}
