@@ -61,6 +61,11 @@ def run_demo(path: str, n_points: int, n_dates: int, engines: dict | None = None
     run_pipeline(path, cfg)
 
 
+def _recipe_dir() -> str:
+    """현재 교량 프로젝트의 레시피 폴더(상단에서 설정). 교량마다 분리해 여러 개를 관리."""
+    return (st.session_state.get("recipe_dir") or "data/insar_recipe").strip() or "data/insar_recipe"
+
+
 def project_times(path: str, start: date):
     """현재 project.h5 의 /insar 시점 축(달력 날짜)을 반환. 없으면 None."""
     if not has_group(path, "insar"):
@@ -79,7 +84,7 @@ def bridge_target_section() -> None:
         st.info("지도 기능에는 folium·streamlit-folium 이 필요합니다: `pip install -e .[dashboard]`")
         return
 
-    recipe_path = st.text_input("레시피 저장 경로", "data/insar_recipe/bridge_target.json",
+    recipe_path = st.text_input("레시피 저장 경로", f"{_recipe_dir()}/bridge_target.json",
                                key="recipe_path")
     existing = None
     if Path(recipe_path).exists():
@@ -157,7 +162,7 @@ def selection_criteria_section() -> None:
         save_selection_criteria,
     )
 
-    crit_path = st.text_input("선별 기준 저장 경로", "data/insar_recipe/selection_criteria.json",
+    crit_path = st.text_input("선별 기준 저장 경로", f"{_recipe_dir()}/selection_criteria.json",
                              key="crit_path")
     cur = SelectionCriteria()
     if Path(crit_path).exists():
@@ -218,14 +223,14 @@ def slc_search_section() -> None:
     )
     from inframon.insar.slc_search import search_slc, select_track
 
-    target_path = st.text_input("교량 타깃 레시피", "data/insar_recipe/bridge_target.json",
+    target_path = st.text_input("교량 타깃 레시피", f"{_recipe_dir()}/bridge_target.json",
                                key="slc_target_path")
     if not Path(target_path).exists():
         st.info("먼저 **🗺️ 교량 타깃 지정**에서 교량을 저장하세요(검색 영역 bbox 필요).")
         return
     target = load_bridge_target(target_path)
 
-    crit_path = "data/insar_recipe/selection_criteria.json"
+    crit_path = f"{_recipe_dir()}/selection_criteria.json"
     pol, orbit = "VV", None
     if Path(crit_path).exists():
         try:
@@ -275,7 +280,7 @@ def slc_search_section() -> None:
 
     if st.button("💾 트랙 선별 저장 (레시피)", key="btn_save_track"):
         sel = TrackSelection.from_selection(best, chosen, polarization=pol)
-        out = save_track_selection("data/insar_recipe/track_selection.json", sel)
+        out = save_track_selection(f"{_recipe_dir()}/track_selection.json", sel)
         st.success(f"저장됨 → `{out}` (SARvey 처리 대상 {sel.n_scenes}장)")
         st.json(sel.model_dump())
 
@@ -288,8 +293,8 @@ def era5_master_section() -> None:
         save_master_selection,
     )
 
-    target_path = "data/insar_recipe/bridge_target.json"
-    track_path = "data/insar_recipe/track_selection.json"
+    target_path = f"{_recipe_dir()}/bridge_target.json"
+    track_path = f"{_recipe_dir()}/track_selection.json"
     if not Path(target_path).exists() or not Path(track_path).exists():
         st.info("먼저 **교량 타깃**과 **🛰️ SLC 트랙 선별**을 저장하세요(위치·취득일 필요).")
         return
@@ -334,7 +339,7 @@ def era5_master_section() -> None:
                f"combined {max(w.combined for w in sel.scenes):.3f})")
 
     if st.button("💾 master 저장 (레시피)", key="btn_save_master"):
-        out = save_master_selection("data/insar_recipe/master_selection_era5.json", sel)
+        out = save_master_selection(f"{_recipe_dir()}/master_selection_era5.json", sel)
         st.success(f"저장됨 → `{out}` (inventory.py 호환: selected_master={sel.selected_master})")
         st.json(sel.model_dump())
 
@@ -343,7 +348,7 @@ def sarvey_bundle_section() -> None:
     """F 준비 — 레시피 4종을 SARvey 처리 번들(매니페스트 + config)로 묶는다."""
     from inframon.insar.sarvey_config import write_sarvey_bundle
 
-    recipe_dir = st.text_input("레시피 폴더", "data/insar_recipe", key="bundle_dir")
+    recipe_dir = st.text_input("레시피 폴더", _recipe_dir(), key="bundle_dir")
     st.caption("교량 타깃·트랙 선별이 있어야 하며, master(ERA5)가 있으면 reference_date 로 들어갑니다.")
 
     if st.button("🧩 SARvey 번들 생성", key="btn_bundle"):
@@ -367,7 +372,7 @@ def insar_process_section(path: str) -> None:
     """F 처리 실행 — demo(합성 시계열 → /insar→PINN→FRAM) 또는 real plan 보기."""
     from inframon.insar import processing
 
-    recipe_dir = st.text_input("레시피 폴더", "data/insar_recipe", key="proc_recipe")
+    recipe_dir = st.text_input("레시피 폴더", _recipe_dir(), key="proc_recipe")
     have = Path(recipe_dir, "bridge_target.json").exists() and \
         Path(recipe_dir, "track_selection.json").exists()
     if not have:
@@ -406,6 +411,12 @@ def insar_process_section(path: str) -> None:
 def tab_insar(path: str, start: date) -> None:
     st.subheader("① InSAR — 변위 시계열 추출 (데이터 관문)")
 
+    # 교량 프로젝트(레시피 폴더) — 교량마다 다른 폴더를 쓰면 여러 교량을 따로 관리한다.
+    # 아래 A~F 단계의 모든 레시피 경로가 이 폴더를 기준으로 자동 구성된다.
+    st.text_input("🌉 교량 프로젝트 (레시피 폴더)", "data/insar_recipe", key="recipe_dir",
+                  help="교량마다 다른 폴더명을 쓰세요. 예: data/insar_recipe/한강대교 · "
+                       "data/insar_recipe/마포대교 — 여러 교량을 덮어쓰지 않고 따로 보관합니다.")
+
     with st.expander("🗺️ 교량 타깃 지정 (지도 + OSM 확인)  · A·B 단계", expanded=False):
         bridge_target_section()
 
@@ -427,7 +438,7 @@ def tab_insar(path: str, start: date) -> None:
     # 실데이터 인벤토리 점검
     with st.expander("🛰️ 실데이터 인벤토리 점검 (SLC/궤도/DEM)"):
         root = st.text_input("InSAR 데이터 루트", "", key="insar_root",
-                             placeholder="예: D:/insar_data/jeongjagyo")
+                             placeholder="예: D:/insar_data/<교량명>")
         if st.button("인벤토리 점검", key="btn_inspect") and root:
             from inframon.insar.inventory import build_scene_manifest, inspect_insar_data
             try:
