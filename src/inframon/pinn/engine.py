@@ -1,11 +1,10 @@
-"""모듈 2: PINN — 구조 건전성 PDE/ODE 엔진 (Phase 0 STUB).
+"""모듈 2: PINN — 구조 건전성 PDE/ODE 엔진 (STUB; real 은 `real_engine.py`).
 
-실제 구현 예정: PyTorch PINN + Euler-Bernoulli PDE 손실 + FEM 연계.
-지금은 InSAR 변위를 성분 분해(열팽창/하중/침하/이상)하고,
-물리이탈로부터 변동 V 를 산출해 FRAM 입력을 만든다.
-
-성분 분해는 데모용 최소 모델(계절 사인 + 선형 추세 회귀)이지만,
-출력 구조와 변동 V 의 의미는 실제 PINN과 동일하게 맞춘다.
+이 파일은 **stub**(핫스왑 기본값 `pinn=stub`) — InSAR 변위를 성분 분해(열팽창/하중/
+침하/이상)하고 변동 V 를 산출해 FRAM 입력을 만든다. 데모용 최소 모델(계절 사인 + 선형
+추세 회귀)이지만 출력 구조·변동 V 의미는 real 과 동일하게 맞춘다.
+실구현은 `pinn/real_engine.py`(`run_pinn_real`, `--engine pinn=real`): PyTorch PINN +
+Euler-Bernoulli PDE 손실(autograd 4차) + FEM 모달 + 절대 EI 식별.
 """
 
 from __future__ import annotations

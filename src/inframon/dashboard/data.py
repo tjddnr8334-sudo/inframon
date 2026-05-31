@@ -55,3 +55,26 @@ def fram_panel_data(path: str) -> dict:
         "calibrated_risk": cal,
         "calibrated_max": None if cal is None else float(np.max(cal)),
     }
+
+
+def fram_function_diagram(path: str, k: int | None = None) -> dict | None:
+    """FRAM 기능 공명 다이어그램 데이터 — 4기능 변동(레이더) + R_ij 결합행렬(시점 k).
+
+    `/pinn/V_func_series`[4,M] 의 시점 k 기능별 변동과 `/fram/R_ij`[4,4,M] 의 시점 k
+    기능 간 결합을 돌려준다(설계 5.6 FRAM 기능망 동역학의 단면). pinn/fram 없으면 None.
+    """
+    vfs, rij = read_arrays(path, "/pinn/V_func_series", "/fram/R_ij")
+    if vfs is None or rij is None:
+        return None
+    vfs, rij = np.asarray(vfs), np.asarray(rij)
+    func_names = read_meta(path, "pinn").get("func_names") or [
+        "thermal", "load", "bearing", "foundation"]
+    n_dates = int(vfs.shape[1])
+    kk = (n_dates - 1) if k is None else max(0, min(int(k), n_dates - 1))
+    return {
+        "func_names": list(func_names),
+        "variability": vfs[:, kk].astype(float),       # [n_func]
+        "coupling": rij[:, :, kk].astype(float),        # [n_func, n_func]
+        "k": kk,
+        "n_dates": n_dates,
+    }

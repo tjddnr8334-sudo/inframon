@@ -1,8 +1,9 @@
-"""모듈 1: InSAR — 변위 추출 엔진 (Phase 0 STUB).
+"""모듈 1: InSAR — 변위 추출 엔진 (STUB; real 은 `real_engine.py`).
 
-실제 구현 예정: 다중포맷 어댑터(SNAP/ISCE/GAMMA) → PS/DS → 언래핑 →
-시계열 역산 → LOS→종방향 분해. (Phase 1 에서 MintPy 등 래핑)
-지금은 CV의 ROI/부재 라벨을 받아 가짜 LOS 변위 시계열을 생성한다.
+이 파일은 **stub**(핫스왑 기본값 `insar=stub`) — CV의 ROI/부재 라벨을 받아 가짜 LOS
+변위 시계열을 생성한다. 실구현은 `insar/real_engine.py`(`run_insar_real`,
+`--engine insar=real`): SARvey 등이 만든 Track 결과 H5 → CV 정합(world→pixel) →
+/insar 계약. 선별 A~E·인제스트는 osm_bridge/slc_search/era5_master/track_reader 참조.
 
 가짜 변위는 의도적으로 '물리적으로 그럴듯하게' 만든다:
   열팽창(계절 사인) + 선형 침하 + 부재별 이상 = PINN/FRAM 데모에 의미가 생김.

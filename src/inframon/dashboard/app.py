@@ -5,7 +5,7 @@
 
 데이터 흐름의 시작점인 InSAR(실측 변위)를 첫 탭·관문으로 두고,
 PINN(물리 해석) → FRAM(공명 위험 CRI) 순으로 파이프라인을 따라간다.
-육각형 FRAM 다이어그램은 Phase 4 에서 확장.
+FRAM 탭은 기능 공명 다이어그램(4기능 변동 레이더 + R_ij 결합)을 포함한다.
 """
 
 from __future__ import annotations
@@ -18,7 +18,12 @@ import pandas as pd
 import streamlit as st
 
 from inframon.contracts.schema import MEMBER_TYPES
-from inframon.dashboard.data import fram_panel_data, has_group, read_meta
+from inframon.dashboard.data import (
+    fram_function_diagram,
+    fram_panel_data,
+    has_group,
+    read_meta,
+)
 from inframon.dashboard.data import read_arrays as read
 
 DEFAULT_H5 = "data/project.h5"
@@ -621,6 +626,30 @@ def tab_fram(path: str, start: date) -> None:
             st.caption("전역 최대 붕괴확률 시계열")
             st.line_chart(pd.DataFrame({"P_max": cal.max(axis=0)},
                                        index=pd.Index(times, name="날짜")))
+
+    # ── FRAM 기능 공명 다이어그램 (4기능 변동 레이더 + 기능 간 결합 R_ij) ──
+    diag = fram_function_diagram(path, k)
+    if diag is not None:
+        st.markdown(f"**FRAM 기능 공명 다이어그램** (시점 {times[k]:%Y-%m-%d}) — "
+                    "4기능 변동 + 기능 간 결합")
+        d1, d2 = st.columns(2)
+        with d1:
+            names, vals = diag["func_names"], diag["variability"]
+            try:
+                import plotly.graph_objects as go
+                fig = go.Figure(go.Scatterpolar(
+                    r=list(vals) + [vals[0]], theta=names + [names[0]], fill="toself",
+                    line_color="#d62728"))
+                fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 1]}},
+                                  showlegend=False, height=320,
+                                  margin={"l": 40, "r": 40, "t": 20, "b": 20})
+                st.plotly_chart(fig, use_container_width=True)
+            except ImportError:  # plotly 없으면 막대그래프 폴백
+                st.bar_chart(pd.DataFrame({"변동 V": vals}, index=pd.Index(names, name="기능")))
+        with d2:
+            st.caption("기능 간 공명 R_ij (1에 가까울수록 동조 → 공명 위험)")
+            st.dataframe(pd.DataFrame(diag["coupling"], index=names, columns=names).round(2),
+                         use_container_width=True)
 
 
 # ───────────────────────────────── main ───────────────────────────────

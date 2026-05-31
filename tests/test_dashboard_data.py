@@ -9,7 +9,13 @@ from __future__ import annotations
 import numpy as np
 
 from inframon.config import PipelineConfig
-from inframon.dashboard.data import fram_panel_data, has_group, read_arrays, read_meta
+from inframon.dashboard.data import (
+    fram_function_diagram,
+    fram_panel_data,
+    has_group,
+    read_arrays,
+    read_meta,
+)
 from inframon.fram.calibration import IsotonicCalibrator
 from inframon.orchestrator.pipeline import run_pipeline
 
@@ -47,6 +53,31 @@ def test_fram_panel_stub_has_no_extras(tmp_path):
     assert data["calibrated_risk"] is None         # 캘리브레이터 미설정
     assert data["cri"].shape == (20, 10)
     assert data["cri_max"] is not None
+
+
+def test_fram_function_diagram(tmp_path):
+    path = _run(tmp_path, {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    diag = fram_function_diagram(path, k=5)
+    assert diag is not None
+    assert diag["variability"].shape == (4,)
+    assert diag["coupling"].shape == (4, 4)
+    assert len(diag["func_names"]) == 4
+    assert diag["k"] == 5 and diag["n_dates"] == 10
+    # k 범위 밖이면 클램프
+    assert fram_function_diagram(path, k=999)["k"] == 9
+
+
+def test_fram_function_diagram_none_without_fram(tmp_path):
+    # /pinn·/fram 이 없으면(insar 만) None
+    cfg = PipelineConfig(n_points=12, n_dates=6,
+                         engines={"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "stub"})
+    out = tmp_path / "insar_only.h5"
+    from inframon.contracts.io import ProjectStore
+    from inframon.cv.engine import run_cv
+    from inframon.insar.engine import run_insar
+    with ProjectStore(out, mode="w") as store:
+        run_insar(store, run_cv(store, cfg), cfg)      # cv+insar 만, pinn/fram 없음
+    assert fram_function_diagram(str(out)) is None
 
 
 def test_data_helpers_basic(tmp_path):
