@@ -22,7 +22,14 @@ import numpy as np
 
 from ..config import PipelineConfig
 from ..contracts.io import ProjectStore
-from ..contracts.schema import MEMBER_TYPES, FRAMOutput, FRAMWarning, InSAROutput, PINNOutput
+from ..contracts.schema import (
+    FRAM_FUNCTIONS,
+    MEMBER_TYPES,
+    FRAMOutput,
+    FRAMWarning,
+    InSAROutput,
+    PINNOutput,
+)
 
 
 def _sat(x: np.ndarray, scale: float) -> np.ndarray:
@@ -86,6 +93,38 @@ def _pointwise_resonance(Vi: np.ndarray, win: int = 6) -> np.ndarray:
                 R[:, k] += np.abs((am * bm).sum(1) / denom)
             pairs += 1
     return R / max(pairs, 1)
+
+
+def _function_states(V_func: np.ndarray, names, lo: float = 0.33, hi: float = 0.66) -> dict:
+    """기능별 상태 — 최근 정규화 변동(V_func_series[f] 의 마지막 1/4 평균) → 정상/주의/위험.
+
+    V_func 는 기능별 [0,1] 정규화 시계열이라 최근값이 1 에 가까우면 그 기능이 지금
+    가장 활발(전조). 설계 §5.7 function_states 실현.
+    """
+    M = V_func.shape[1]
+    w = max(1, M // 4)
+    out = {}
+    for i, name in enumerate(names):
+        recent = float(V_func[i, -w:].mean())
+        out[name] = "위험" if recent >= hi else "주의" if recent >= lo else "정상"
+    return out
+
+
+def _forecast_to_threshold(series: np.ndarray, dates: np.ndarray, thr: float) -> float | None:
+    """최근 절반 추세를 선형 외삽해 series 가 thr(위험)에 도달할 때까지 예상 일수.
+
+    이미 도달했거나 상승 추세가 아니면 None. 설계 '예상 붕괴까지 시간'의 전방 예측.
+    """
+    n = len(series)
+    if n < 3:
+        return None
+    k = max(2, n // 2)
+    slope, intercept = np.polyfit(dates[-k:], series[-k:], 1)
+    cur = float(series[-1])
+    if cur >= thr or slope <= 1e-9:
+        return None
+    t_hit = (thr - intercept) / slope
+    return float(t_hit - dates[-1]) if t_hit > dates[-1] else None
 
 
 def run_fram_real(
@@ -153,13 +192,6 @@ def run_fram_real(
 
     cri_max = float(CRI.max())
     t_lo, t_mid, t_hi = cfg.cri_thresholds
-    level = ("위험" if cri_max >= t_hi else "경고" if cri_max >= t_mid
-             else "주의" if cri_max >= t_lo else "정상")
-    last = CRI[:, -1]
-    crit = sorted({MEMBER_TYPES[member[i]] for i in np.where(last >= t_mid)[0]})
-    cri_t = CRI.max(axis=0)
-    over = np.where(cri_t >= t_mid)[0]
-    lead = float(dates[-1] - dates[over[0]]) if len(over) else None
 
     g = "/fram"
     store.write_array(f"{g}/R_ij", R_ij)
@@ -169,8 +201,9 @@ def run_fram_real(
     store.write_array(f"{g}/CRI", CRI)
     store.write_array(f"{g}/network_resonance", S_net.astype(np.float32))
 
-    # 선택: isotonic 캘리브레이터(cfg.fram_calibrator, dict)가 있으면 CRI→붕괴확률 보정맵.
+    # ③ 선택 isotonic 캘리브레이터 → 절대 붕괴확률 보정맵(경보 근거로도 사용).
     calibrated_ds = None
+    calibrated = None
     cal_spec = getattr(cfg, "fram_calibrator", None)
     if cal_spec is not None:
         from .calibration import IsotonicCalibrator
@@ -179,6 +212,23 @@ def run_fram_real(
         store.write_array(f"{g}/calibrated_risk", calibrated)
         calibrated_ds = f"{g}/calibrated_risk"
 
+    def _level(v: float) -> str:
+        return ("위험" if v >= t_hi else "경고" if v >= t_mid
+                else "주의" if v >= t_lo else "정상")
+
+    # 경보 근거: 보정확률 있으면 절대확률, 없으면 원시 CRI (③)
+    if calibrated is not None:
+        level, basis = _level(float(calibrated.max())), "calibrated_probability"
+    else:
+        level, basis = _level(cri_max), "cri"
+    last = CRI[:, -1]
+    crit = sorted({MEMBER_TYPES[member[i]] for i in np.where(last >= t_mid)[0]})
+    cri_t = CRI.max(axis=0)
+    over = np.where(cri_t >= t_mid)[0]
+    lead = float(dates[-1] - dates[over[0]]) if len(over) else None        # 후방 경과
+    lead_fwd = _forecast_to_threshold(cri_t, dates, t_hi)                  # ④ 전방 예측
+    fstates = _function_states(V_func, FRAM_FUNCTIONS)                     # ① 기능별 상태
+
     out = FRAMOutput(
         n_points=N, n_dates=M,
         resonance_Rij_ds=f"{g}/R_ij", amplification_ds=f"{g}/amplification",
@@ -186,7 +236,9 @@ def run_fram_real(
         CRI_ds=f"{g}/CRI", network_resonance_ds=f"{g}/network_resonance",
         calibrated_risk_ds=calibrated_ds,
         cri_global_max=cri_max,
-        warning=FRAMWarning(level=level, lead_time_days=lead, critical_members=crit),
+        warning=FRAMWarning(level=level, lead_time_days=lead, critical_members=crit,
+                            function_states=fstates, lead_time_forecast_days=lead_fwd,
+                            basis=basis),
     )
     store.write_meta("fram", out)
     return out

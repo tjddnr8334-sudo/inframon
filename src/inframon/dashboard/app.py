@@ -580,18 +580,30 @@ def tab_fram(path: str, start: date) -> None:
     banner_fn, emoji = LEVEL_STYLE.get(level, ("info", "⚪"))
     members = warning.get("critical_members", [])
     lead = warning.get("lead_time_days")
-    getattr(st, banner_fn)(f"{emoji} 경보 등급: **{level}**")
+    lead_fwd = warning.get("lead_time_forecast_days")
+    basis = warning.get("basis", "cri")
+    fstates = warning.get("function_states", {})
+    basis_ko = "보정 붕괴확률" if basis == "calibrated_probability" else "원시 CRI"
+    getattr(st, banner_fn)(f"{emoji} 경보 등급: **{level}**  ·  근거: {basis_ko}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("최대 CRI", f"{cri.max():.3f}")
-    c2.metric("예상 리드타임", "—" if lead is None else f"{lead:.0f} 일")
+    # 전방 예측(위험 도달까지) 우선, 없으면 후방 경과
+    if lead_fwd is not None:
+        c2.metric("위험 도달 예측", f"{lead_fwd:.0f} 일 후")
+    else:
+        c2.metric("리드타임(경과)", "—" if lead is None else f"{lead:.0f} 일")
     c3.metric("위험 부재 수", len(members))
-    # 보정 캘리브레이터가 있으면 절대 붕괴확률을, 없으면 격자 크기를 보여준다.
     if data["calibrated_max"] is not None:
         c4.metric("최대 붕괴확률(보정)", f"{data['calibrated_max'] * 100:.1f}%")
     else:
         c4.metric("측정점 × 시점", f"{N} × {M}")
     if members:
         st.caption("위험 부재: " + ", ".join(members))
+    # ① 기능별 상태 (열팽창/하중/받침/침하)
+    if fstates:
+        _emoji = {"위험": "🔴", "주의": "🟠", "정상": "🟢"}
+        st.caption("기능 상태 — " + " · ".join(
+            f"{_emoji.get(s, '⚪')} {f}: {s}" for f, s in fstates.items()))
 
     k = st.slider("시점 (t)", 0, M - 1, M - 1, key="fram_t")
     st.caption(f"선택 시점: **{times[k]:%Y-%m-%d}**")

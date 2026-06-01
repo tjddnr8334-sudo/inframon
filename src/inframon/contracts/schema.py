@@ -99,8 +99,11 @@ class PINNOutput(BaseModel):
 # ───────────────────────────── 모듈 4: FRAM ────────────────────────────
 class FRAMWarning(BaseModel):
     level: str                # 정상 / 주의 / 경고 / 위험
-    lead_time_days: float | None = None   # 예상 붕괴까지 시간
+    lead_time_days: float | None = None   # (후방) CRI 가 임계 넘은 뒤 경과 시간
     critical_members: list[str] = Field(default_factory=list)
+    function_states: dict[str, str] = Field(default_factory=dict)  # 기능별 상태(정상/주의/위험)
+    lead_time_forecast_days: float | None = None  # (전방) 위험 임계 도달 예측까지 일수
+    basis: str = "cri"        # 경보 근거: "cri" 또는 "calibrated_probability"
 
 
 class FRAMOutput(BaseModel):
