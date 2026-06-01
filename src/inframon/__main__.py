@@ -35,6 +35,9 @@ def main() -> None:
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
+    p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
+                   help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
+                        "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
     p.add_argument(
         "--engine",
         action="append",
@@ -76,6 +79,28 @@ def main() -> None:
         cfg.validate()
     except ValueError as exc:
         p.error(str(exc))
+
+    if args.custom_pinn:
+        from .custom_pinn import run_custom_pinn
+
+        try:
+            lat, lon = (float(v) for v in args.custom_pinn.split(","))
+        except ValueError:
+            p.error("--custom-pinn 형식은 LAT,LON 입니다 (예: 37.3634,127.1090)")
+        try:
+            summary = run_custom_pinn(args.out, lat, lon)
+        except (ValueError, FileNotFoundError) as exc:
+            p.error(str(exc))
+        print("=" * 56)
+        print("  교량 맞춤형 PINN 완료")
+        print("=" * 56)
+        print(f"  교량       : {summary['bridge_name'] or '-'} ({summary['bridge_type']}/{summary['material']})")
+        print(f"  스팬       : {summary['span_m']} m  · 제원출처 {summary['collected']['profile_source']}")
+        print(f"  온도       : {summary['collected']['temperature']}")
+        print(f"  교통량     : {summary['collected']['traffic']}")
+        print(f"  최대 CRI   : {summary['cri_global_max']:.3f}  경보 {summary['warning_level']}")
+        print("=" * 56)
+        return
 
     if args.doctor is not None:
         from .doctor import format_report, run_doctor

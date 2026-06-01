@@ -50,6 +50,7 @@
   - **형식별 지배 PDE**(`pde.py`): 일반형 `w''''+p2·w''+p0·w` 의 x-분산 손실 — 거더=보(w''''), **사장교=탄성지지**(+k·w, k≥0), **아치·현수=축력**(+p2·w''). 학습된 k/p2 기록.
   - **외생 데이터 구동**: 온도 ΔT→열팽창 `α·L·ΔT`, 교통량→하중 변조 `traffic(t)·w`.
   - **자동 수집**: 제원=OSM 태그(무키)/data.go.kr(키), 온도=Open-Meteo ERA5(무키, `weather.fetch_temperature_series`), 교통량=공공 교통 API(키, `traffic.fetch_traffic_series`). 미지정 시 강재 거더교·계절가정 폴백.
+  - **오케스트레이션**(`custom_pinn.run_custom_pinn`, CLI `--custom-pinn LAT,LON`): 위치 하나로 제원·온도·교통량을 자동 수집해 기존 `/insar` 위에 형식별 PINN+FRAM 을 실행(수집 실패는 폴백).
 - **실데이터 진입 게이트**: `inventory`(`--inspect-data`)·Track preflight(`--check-track`)·readiness doctor(`--doctor`)·[실데이터 런북](실데이터_런북.md).
 - **거버넌스**: GitHub CI(`.github/workflows/tests.yml`), 테스트 89→**164**, 비공개 저장소 백업.
 
