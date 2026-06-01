@@ -1,11 +1,15 @@
 """모듈 2: PINN — 구조 건전성 모니터링 실구현 (Phase 4, PyTorch + Euler-Bernoulli + FEM).
 
+교량 제원(`structure.BridgeProfile`)과 외생 데이터(온도·교통량)로 **교량별 맞춤형**으로
+돈다. 제원 미지정·외생 미제공이면 강재 거더교 가정으로 폴백(기존 동작 유지).
+
 InSAR 종방향 변위장 u(x,t)를 물리 성분으로 분해하고 보 거동을 추정한다.
   분해: u = thermal + load + settle + anomaly
-    · thermal(x,t) = L_fixed(x) · (a·sinθ + b·cosθ)   (열팽창 ∝ 고정단 거리 × 계절)
+    · thermal(x,t) = α·L_fixed(x)·ΔT(t)  (온도데이터) 또는 L_fixed·(a·sin+b·cos)(가정)
     · settle(x,t)  = s(x) · t                          (선형 침하)
-    · load(x,t)    = w_θ(x,t)  (MLP, PINN)             (역학적 처짐 — 보 PDE 지배)
+    · load(x,t)    = traffic(t)·w_θ(x,t)  (교통량 변조) 또는 w_θ (보 PDE 지배)
     · anomaly(x,t) = a_θ(x,t)  (잔차 MLP, 정규화로 작게)
+  외생(선택, [M] 정렬): `cfg.pinn_temperature`(°C)·`cfg.pinn_traffic`. 제원: `cfg.bridge_profile`.
 
   보 PDE (Euler-Bernoulli, 분포하중 가정):  EI·∂⁴w/∂x⁴ = q(x,t)
     자중 등 균일하중 가정 → ∂⁴w/∂x⁴ 이 x 에 대해 (시점별) 균일해야 함을 PDE 손실로 강제.
@@ -97,7 +101,17 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     l_fixed = store.read_array(insar.l_from_fixed_ds).astype(np.float64)  # [N]
     xyz = store.read_array(insar.xyz_ds).astype(np.float64)
     N, M = los.shape
-    L_m = _span_meters(xyz)                                            # 교량 스팬 [m]
+
+    # 교량 구조 프로파일(제원) — 하드코딩 가정 대신 교량별 E/단면/질량/자중/스팬
+    from ..structure import resolve_profile
+    prof = resolve_profile(cfg, xyz)
+    L_m = float(prof.length_m or _span_meters(xyz))                   # 교량 스팬 [m]
+
+    # 외생 입력(선택, [M] 정렬): 온도 ΔT → 열팽창 구동, 교통량 → 하중 변조
+    temp = getattr(cfg, "pinn_temperature", None)
+    traffic = getattr(cfg, "pinn_traffic", None)
+    use_temp = temp is not None and np.asarray(temp).ravel().shape[0] == M
+    use_traffic = traffic is not None and np.asarray(traffic).ravel().shape[0] == M
 
     epochs = int(getattr(cfg, "pinn_epochs", 600))
     torch.manual_seed(getattr(cfg, "seed", 42))
@@ -121,6 +135,17 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     Lf_t = torch.tensor(Lf_n, dtype=torch.float32)[:, None].expand(N, M)
     ty = torch.tensor(t_year, dtype=torch.float32)[None, :].expand(N, M)
 
+    # 외생 텐서: 온도 ΔT(중앙화·정규화), 교통량(평균=1 곱셈 변조)
+    dT_phys_max = 1.0
+    dT_t = traffic_t = None
+    if use_temp:
+        dT = np.asarray(temp, dtype=np.float64).ravel() - float(np.mean(temp))
+        dT_phys_max = float(np.abs(dT).max()) + 1e-9
+        dT_t = torch.tensor(dT / dT_phys_max, dtype=torch.float32)[None, :].expand(N, M)
+    if use_traffic:
+        tr = np.asarray(traffic, dtype=np.float64).ravel()
+        traffic_t = torch.tensor(tr / (tr.mean() + 1e-9), dtype=torch.float32)[None, :].expand(N, M)
+
     def mlp():
         return torch.nn.Sequential(
             torch.nn.Linear(2, 32), torch.nn.Tanh(),
@@ -129,13 +154,24 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
 
     w_net = mlp()       # load 처짐 w(x,t)
     a_net = mlp()       # anomaly
-    a_th = torch.nn.Parameter(torch.zeros(1))   # 열팽창 sin 계수
-    b_th = torch.nn.Parameter(torch.zeros(1))   # 열팽창 cos 계수
+    a_th = torch.nn.Parameter(torch.zeros(1))   # 열팽창 sin 계수(온도 미사용 시)
+    b_th = torch.nn.Parameter(torch.zeros(1))   # 열팽창 cos 계수(온도 미사용 시)
+    alpha_th = torch.nn.Parameter(torch.zeros(1))  # 온도 사용 시: thermal = αₜ·L·ΔT
     s_rate = torch.nn.Parameter(torch.zeros(N))  # 점별 침하율
     # EI 는 학습 파라미터가 아니라 비차원 PDE 균형으로 사후 식별(_identify_EI_from_pde).
 
+    def thermal_field():
+        """온도 데이터가 있으면 α·L·ΔT(물리), 없으면 계절 sin/cos(가정)."""
+        if use_temp:
+            return alpha_th * Lf_t * dT_t
+        return Lf_t * (a_th * sin_t + b_th * cos_t)
+
+    def load_field(w_raw):
+        """교통량이 있으면 traffic(t)·w(영향선 변조), 없으면 자유 처짐 w."""
+        return traffic_t * w_raw if use_traffic else w_raw
+
     params = (list(w_net.parameters()) + list(a_net.parameters())
-              + [a_th, b_th, s_rate])
+              + [a_th, b_th, alpha_th, s_rate])
     opt = torch.optim.Adam(params, lr=5e-3)
 
     def feat(xx, tt_):
@@ -148,9 +184,10 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
 
     for ep in range(epochs):
         opt.zero_grad()
-        w = w_net(feat(grid_x, grid_t)).reshape(N, M)
+        w_raw = w_net(feat(grid_x, grid_t)).reshape(N, M)
+        w = load_field(w_raw)                            # 교통량 변조(있으면)
         anom = a_net(feat(grid_x, grid_t)).reshape(N, M)
-        thermal = Lf_t * (a_th * sin_t + b_th * cos_t)
+        thermal = thermal_field()                        # 온도 구동(있으면)
         settle = s_rate[:, None] * ty
         total = thermal + settle + w + anom
         loss_data = torch.mean((total - y) ** 2)
@@ -190,32 +227,37 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     d4_hat = float(np.mean(d4_vals))
 
     with torch.no_grad():
-        w_load = w_net(feat(grid_x, grid_t)).reshape(N, M).numpy() * los_scale
+        w_raw = w_net(feat(grid_x, grid_t)).reshape(N, M)
+        w_load = load_field(w_raw).numpy() * los_scale
         anom = a_net(feat(grid_x, grid_t)).reshape(N, M).numpy() * los_scale
-        thermal = (Lf_t * (a_th * sin_t + b_th * cos_t)).numpy() * los_scale
+        thermal = thermal_field().numpy() * los_scale
         settle = (s_rate[:, None] * ty).numpy() * los_scale
         curvature = wxx.reshape(N, M).detach().numpy() * los_scale     # ∂²w/∂x²
-        # 절대 EI: 비차원 PDE 균형 EI·∂⁴w/∂x⁴=q (가정 자중 Q0), 처짐 스케일 los_scale[mm]→m
-        EI_global = _identify_EI_from_pde(d4_hat, L_m, Q0_NOMINAL, los_scale * 1e-3)
+        # 절대 EI: 비차원 PDE 균형 EI·∂⁴w/∂x⁴=q (프로파일 자중), 처짐 스케일 los_scale[mm]→m
+        EI_global = _identify_EI_from_pde(d4_hat, L_m, prof.load_per_len, los_scale * 1e-3)
 
     comp_thermal, comp_load = thermal, w_load
     comp_settle, comp_anomaly = settle, anom
 
-    # 구조응답
+    # 구조응답 (프로파일 단면·재료)
     deflection = comp_load
-    strain = -HALF_DEPTH * curvature
-    stress = E_MODULUS * strain
+    strain = -prof.half_depth() * curvature
+    stress = prof.youngs() * strain
 
     # 역산: 점별 EI — 곡률 큰 곳(=휨 집중/손상 의심) 저강성
     kappa = np.abs(curvature).mean(axis=1)                            # [N]
     EI = EI_global * (np.median(kappa) + 1e-9) / (kappa + 1e-9)
     EI = np.clip(EI, EI_global * 0.1, EI_global * 10)
-    # 열팽창계수: thermal 진폭 / 가정 ΔT(20℃)
-    amp = float(np.hypot(a_th.item(), b_th.item())) * los_scale * 1e-3   # m
-    alpha = np.full(N, max(amp / (20.0 * (Lf.max() + 1e-9)), 1e-7))
+    # 열팽창계수 α: 온도 데이터면 실측 ΔT 로 식별, 아니면 가정 ΔT(20℃)
+    if use_temp:
+        amp = abs(alpha_th.item()) * los_scale * 1e-3                 # 물리 thermal 진폭 [m]
+        alpha = np.full(N, max(amp / ((Lf.max() + 1e-9) * dT_phys_max), 1e-7))
+    else:
+        amp = float(np.hypot(a_th.item(), b_th.item())) * los_scale * 1e-3
+        alpha = np.full(N, max(amp / (20.0 * (Lf.max() + 1e-9)), 1e-7))
 
-    # 고유진동수: FEM 모달 (식별 EI_global, 가정 ρA, 추정 span)
-    natural_freq = _fem_beam_frequencies(EI_global, RHO_A, L_m)
+    # 고유진동수: FEM 모달 (식별 EI_global, 프로파일 ρA, 스팬)
+    natural_freq = _fem_beam_frequencies(EI_global, prof.rho_a(), L_m)
 
     # ───────── 변동 V (FRAM 입력) ─────────
     ss_res = np.sum(comp_anomaly ** 2, axis=1)
@@ -266,4 +308,11 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         func_names=list(FRAM_FUNCTIONS),
     )
     store.write_meta("pinn", out)
+    store.write_json_attr("pinn", "inputs", {
+        "bridge_type": prof.bridge_type, "material": prof.material,
+        "span_m": L_m, "youngs_Pa": prof.youngs(), "load_per_len": prof.load_per_len,
+        "profile_source": prof.source,
+        "temperature_driven": bool(use_temp), "traffic_driven": bool(use_traffic),
+        "EI_global": EI_global,
+    })
     return out

@@ -84,6 +84,82 @@ def test_real_pinn_fills_contract(tmp_path):
         store.__exit__(None, None, None)
 
 
+def _insar_for_pinn(tmp_path, n_points=25, n_dates=12, epochs=120):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    cfg = PipelineConfig(n_points=n_points, n_dates=n_dates)
+    cfg.pinn_epochs = epochs
+    store = ProjectStore(tmp_path / "p.h5", mode="w").__enter__()
+    cv = run_cv(store, cfg)
+    insar = run_insar(store, cv, cfg)
+    return cfg, store, insar
+
+
+def test_pinn_profile_scales_response(tmp_path):
+    """단면 깊이 2배 → 변형률 2배(같은 곡률, 프로파일이 응답 스케일만 바꿈, 결정론)."""
+    cfg1, s1, ins1 = _insar_for_pinn(tmp_path / "a")
+    o1 = run_pinn_real(s1, ins1, cfg1)
+    strain1 = abs(s1.read_array(o1.strain_ds)).mean()
+    s1.__exit__(None, None, None)
+
+    cfg2, s2, ins2 = _insar_for_pinn(tmp_path / "b")
+    cfg2.bridge_profile = {"section_depth_m": 2.0}     # 기본 1.0 → 2.0
+    o2 = run_pinn_real(s2, ins2, cfg2)
+    strain2 = abs(s2.read_array(o2.strain_ds)).mean()
+    s2.__exit__(None, None, None)
+    assert strain2 / (strain1 + 1e-30) == pytest.approx(2.0, rel=1e-3)
+
+
+def test_pinn_temperature_drives_thermal(tmp_path):
+    """온도 ΔT 데이터 → 열팽창 성분이 온도를 추종(thermal=α·L·ΔT), α 식별."""
+    cfg, store, insar = _insar_for_pinn(tmp_path)
+    dates = store.read_array(insar.dates_ds)
+    ty = (dates - dates[0]) / 365.0
+    temp = 15.0 + 10.0 * np.sin(2 * np.pi * ty)        # 계절 온도(°C)
+    cfg.pinn_temperature = temp
+    try:
+        out = run_pinn_real(store, insar, cfg)
+        ct = store.read_array(out.comp_thermal_ds)
+        alpha = store.read_array(out.alpha_ds)
+        inp = store.read_json_attr("pinn", "inputs")
+    finally:
+        store.__exit__(None, None, None)
+    assert inp["temperature_driven"] is True
+    corr = np.corrcoef(ct.mean(axis=0), temp)[0, 1]
+    assert corr > 0.9                                  # 열팽창이 실측 온도를 추종
+    assert (alpha > 0).all()
+
+
+def test_pinn_traffic_modulates_load(tmp_path):
+    """교통량 데이터 → 하중 성분이 교통량으로 변조됨(메커니즘 engaged + 결과 변화)."""
+    cfg, store, insar = _insar_for_pinn(tmp_path / "base")
+    base = run_pinn_real(store, insar, cfg)
+    load_base = store.read_array(base.comp_load_ds).copy()
+    store.__exit__(None, None, None)
+
+    cfg2, s2, ins2 = _insar_for_pinn(tmp_path / "traf")
+    cfg2.pinn_traffic = 5000.0 + 3000.0 * np.abs(np.sin(np.linspace(0, 3, 12)))
+    out = run_pinn_real(s2, ins2, cfg2)
+    load_traf = s2.read_array(out.comp_load_ds)
+    inp = s2.read_json_attr("pinn", "inputs")
+    s2.__exit__(None, None, None)
+    assert inp["traffic_driven"] is True
+    assert np.isfinite(load_traf).all()
+    assert not np.allclose(load_traf, load_base)       # 교통량이 하중 성분을 실제로 바꿈
+
+
+def test_pinn_inputs_attr_records_profile(tmp_path):
+    cfg, store, insar = _insar_for_pinn(tmp_path)
+    cfg.bridge_profile = {"name": "테스트교", "bridge_type": "girder",
+                          "material": "concrete", "source": "manual"}
+    try:
+        run_pinn_real(store, insar, cfg)
+        inp = store.read_json_attr("pinn", "inputs")
+    finally:
+        store.__exit__(None, None, None)
+    assert inp["material"] == "concrete" and inp["bridge_type"] == "girder"
+    assert inp["profile_source"] == "manual" and inp["span_m"] > 0
+
+
 def test_real_pinn_registered():
     from inframon.orchestrator import engines
 
