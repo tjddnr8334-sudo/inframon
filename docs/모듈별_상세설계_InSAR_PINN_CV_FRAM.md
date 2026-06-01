@@ -46,7 +46,10 @@
 - **오케스트레이션**: 핫스왑 셀렉터(`orchestrator/engines.py`)·증분 재개(fingerprint, `incremental.py`)·실행 매니페스트·골든 회귀 테스트.
 - **CV↔InSAR 좌표 체인**(설계 6절 인터페이스 구체화): `geo_transform`/`crs` 정합 → world xyz(EPSG:5179) → DEM 고도 z → 고정단(abutment) 미터 거리. 픽셀↔world 아핀은 `geotransform.py`.
 - **FRAM 고도화**(설계 5.5~5.6 실현+): 함수망 N-K 스펙트럼 공명, Morandi 합성 검증(ROC-AUC **0.946**), isotonic 캘리브(Brier 0.234→**0.059**).
-- **교량별 맞춤형 PINN**(`structure.py`·`bridge_info.py`): 교량 제원(형식·재료·단면·자중·스팬)을 `BridgeProfile`로 받아 하드코딩 가정 대체 + **외생 데이터 구동**(온도 ΔT→열팽창 α·L·ΔT, 교통량→하중 변조). 제원은 OSM 태그(키 불필요) 또는 공공데이터포털 data.go.kr 교량 제원 API(키 필요)에서 자동 구성. 미지정 시 강재 거더교 폴백.
+- **교량별 맞춤형 PINN**(`structure.py`·`bridge_info.py`·`pinn/pde.py`·`weather.py`·`traffic.py`): 교량 제원(형식·재료·단면·자중·스팬)을 `BridgeProfile`로 받아 하드코딩 가정 대체.
+  - **형식별 지배 PDE**(`pde.py`): 일반형 `w''''+p2·w''+p0·w` 의 x-분산 손실 — 거더=보(w''''), **사장교=탄성지지**(+k·w, k≥0), **아치·현수=축력**(+p2·w''). 학습된 k/p2 기록.
+  - **외생 데이터 구동**: 온도 ΔT→열팽창 `α·L·ΔT`, 교통량→하중 변조 `traffic(t)·w`.
+  - **자동 수집**: 제원=OSM 태그(무키)/data.go.kr(키), 온도=Open-Meteo ERA5(무키, `weather.fetch_temperature_series`), 교통량=공공 교통 API(키, `traffic.fetch_traffic_series`). 미지정 시 강재 거더교·계절가정 폴백.
 - **실데이터 진입 게이트**: `inventory`(`--inspect-data`)·Track preflight(`--check-track`)·readiness doctor(`--doctor`)·[실데이터 런북](실데이터_런북.md).
 - **거버넌스**: GitHub CI(`.github/workflows/tests.yml`), 테스트 89→**164**, 비공개 저장소 백업.
 

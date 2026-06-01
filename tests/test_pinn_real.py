@@ -160,6 +160,46 @@ def test_pinn_inputs_attr_records_profile(tmp_path):
     assert inp["profile_source"] == "manual" and inp["span_m"] > 0
 
 
+def test_pde_terms_and_params():
+    """형식별 PDE 항 매핑 + 학습 파라미터 활성화."""
+    import torch
+
+    from inframon.pinn.pde import PDE_TERMS, make_pde_params
+    assert PDE_TERMS["girder"] == (False, False, False)
+    assert PDE_TERMS["cable_stayed"][1] is True       # 탄성지지 항
+    assert PDE_TERMS["arch"][0] is True               # 축력 항
+    # girder: 둘 다 None / cable_stayed: p0만 / arch: p2만
+    assert make_pde_params("girder", torch) == (None, None)
+    p2, p0 = make_pde_params("cable_stayed", torch)
+    assert p2 is None and p0 is not None
+    p2, p0 = make_pde_params("arch", torch)
+    assert p2 is not None and p0 is None
+
+
+@pytest.mark.parametrize("bridge_type,axial,found", [
+    ("girder", False, False),
+    ("cable_stayed", False, True),
+    ("arch", True, False),
+    ("suspension", True, False),
+])
+def test_pinn_form_specific_pde(tmp_path, bridge_type, axial, found):
+    """각 형식이 자기 지배 PDE로 학습되고 형식별 파라미터가 기록된다."""
+    cfg, store, insar = _insar_for_pinn(tmp_path / bridge_type, n_points=18, n_dates=10, epochs=80)
+    cfg.bridge_profile = {"bridge_type": bridge_type}
+    try:
+        out = run_pinn_real(store, insar, cfg)
+        inp = store.read_json_attr("pinn", "inputs")
+        ei = store.read_array(out.EI_ds)
+    finally:
+        store.__exit__(None, None, None)
+    assert inp["pde_form"] == bridge_type
+    assert (inp["pde_axial_p2"] is not None) == axial         # 아치·현수만 축력항
+    assert (inp["pde_foundation_k"] is not None) == found     # 사장교만 탄성지지항
+    if found:
+        assert inp["pde_foundation_k"] >= 0                   # softplus → k≥0
+    assert (ei > 0).all() and np.isfinite(ei).all()
+
+
 def test_real_pinn_registered():
     from inframon.orchestrator import engines
 

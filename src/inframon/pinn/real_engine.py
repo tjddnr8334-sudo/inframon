@@ -170,8 +170,13 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         """교통량이 있으면 traffic(t)·w(영향선 변조), 없으면 자유 처짐 w."""
         return traffic_t * w_raw if use_traffic else w_raw
 
+    # 교량 형식별 PDE 파라미터(사장교=탄성지지 p0, 아치·현수=축력 p2). 거더는 None.
+    from .pde import make_pde_params, pde_loss
+    p2_pde, p0_pde = make_pde_params(prof.bridge_type, torch)
+
     params = (list(w_net.parameters()) + list(a_net.parameters())
-              + [a_th, b_th, alpha_th, s_rate])
+              + [a_th, b_th, alpha_th, s_rate]
+              + [p for p in (p2_pde, p0_pde) if p is not None])
     opt = torch.optim.Adam(params, lr=5e-3)
 
     def feat(xx, tt_):
@@ -192,17 +197,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         total = thermal + settle + w + anom
         loss_data = torch.mean((total - y) ** 2)
 
-        # PDE: ∂⁴w/∂x⁴ 가 (시점별) x 에 대해 균일(균일하중) → 분산 패널티
-        loss_pde = torch.zeros(())
-        for tc in t_sub:
-            xc = xc0.clone().requires_grad_(True)
-            inp = torch.stack([xc, tc.expand(n_col)], dim=1)
-            ww = w_net(inp)
-            g = ww
-            for _ in range(4):
-                g = torch.autograd.grad(g, xc, torch.ones_like(g), create_graph=True)[0]
-            loss_pde = loss_pde + torch.var(g)
-        loss_pde = loss_pde / len(t_sub)
+        # 형식별 지배 PDE 잔차(거더=w'''', 사장교=+탄성지지, 아치·현수=+축력) x-분산 패널티
+        loss_pde = pde_loss(w_net, xc0, t_sub, n_col, p2_pde, p0_pde, prof.bridge_type, torch)
 
         loss_reg = 1e-2 * torch.mean(anom ** 2) + 1e-4 * torch.mean(w ** 2)
         loss = loss_data + 1e-3 * loss_pde + loss_reg
@@ -308,11 +304,15 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         func_names=list(FRAM_FUNCTIONS),
     )
     store.write_meta("pinn", out)
+    import torch.nn.functional as _F
     store.write_json_attr("pinn", "inputs", {
         "bridge_type": prof.bridge_type, "material": prof.material,
         "span_m": L_m, "youngs_Pa": prof.youngs(), "load_per_len": prof.load_per_len,
         "profile_source": prof.source,
         "temperature_driven": bool(use_temp), "traffic_driven": bool(use_traffic),
         "EI_global": EI_global,
+        "pde_form": prof.bridge_type,
+        "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),
+        "pde_foundation_k": None if p0_pde is None else float(_F.softplus(p0_pde).item()),
     })
     return out
