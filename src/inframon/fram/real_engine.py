@@ -127,6 +127,27 @@ def _forecast_to_threshold(series: np.ndarray, dates: np.ndarray, thr: float) ->
     return float(t_hit - dates[-1]) if t_hit > dates[-1] else None
 
 
+def _forecast_residual(series: np.ndarray, dates: np.ndarray, win: int = 6) -> np.ndarray:
+    """롤링 선형예측 잔차 [N,M] — 각 시점에서 과거 win 점 선형 외삽 대비 실제 이탈.
+
+    설계 [공명4] `‖d_observed − d_linear(t)‖`. 선형 추세면 ≈0, 비선형 가속(붕괴 전조)
+    이면 커진다. 변위 잔차[mm] (관측이 선형 예측에서 얼마나 발산하는가).
+    """
+    N, M = series.shape
+    res = np.zeros((N, M))
+    for t in range(M):
+        a = max(0, t - win)
+        if t - a < 2:                                    # 선형 외삽엔 ≥2점 필요
+            continue
+        x = dates[a:t]
+        y = series[:, a:t]                               # [N,k] 과거 윈도우
+        xm = x - x.mean()
+        slope = (y - y.mean(axis=1, keepdims=True)) @ xm / (float((xm ** 2).sum()) + 1e-12)
+        pred = y.mean(axis=1) + slope * (dates[t] - x.mean())   # 시점 t 선형 예측
+        res[:, t] = np.abs(series[:, t] - pred)
+    return res
+
+
 def run_fram_real(
     store: ProjectStore, insar: InSAROutput, pinn: PINNOutput, cfg: PipelineConfig
 ) -> FRAMOutput:
@@ -144,15 +165,14 @@ def run_fram_real(
 
     # 절대 보정 스케일 (조정 가능, mm/yr 등)
     vel_scale = float(getattr(cfg, "fram_vel_scale", 10.0))      # 변위속도 [mm/yr]
-    acc_scale = float(getattr(cfg, "fram_accel_scale", 8.0))     # 가속 [mm/yr²]
     grad_scale = float(getattr(cfg, "fram_grad_scale", 6.0))     # 공간기울기 [mm/yr/점]
+    fore_scale = float(getattr(cfg, "fram_forecast_scale", 3.0))  # 예측 이탈 [mm]
     win = int(getattr(cfg, "fram_corr_win", 6))
 
     def ddt(a: np.ndarray) -> np.ndarray:
         return np.gradient(a, dates, axis=1) * 365.0            # /일 → /년
 
     rate = ddt(los)                                             # [N,M] mm/yr
-    accel = ddt(rate)                                           # mm/yr²
 
     # 점·시점·기능별 변동 [4,N,M] — load 는 실제 comp_load 에서
     Vi = np.stack([
@@ -174,8 +194,8 @@ def run_fram_real(
     sp[order] = np.abs(np.gradient(rate[order], axis=0))
     R_spatial = _sat(sp, grad_scale)
 
-    # [공명4] 예측 발산 — 비선형 가속 절대 보정
-    R_div = _sat(np.abs(accel), acc_scale)
+    # [공명4] 예측 발산 — 롤링 선형예측 잔차(관측이 선형 외삽에서 발산하는 정도) 절대 보정
+    R_div = _sat(_forecast_residual(los, dates, win), fore_scale)
 
     # 시스템 수준 공명 행렬 [4,4,M] + 함수망 공명 강도 [M] (N-K 결합)
     R_ij = _windowed_corr(V_func, win)
@@ -228,6 +248,11 @@ def run_fram_real(
     lead = float(dates[-1] - dates[over[0]]) if len(over) else None        # 후방 경과
     lead_fwd = _forecast_to_threshold(cri_t, dates, t_hi)                  # ④ 전방 예측
     fstates = _function_states(V_func, FRAM_FUNCTIONS)                     # ① 기능별 상태
+
+    # 6측면 함수망 진단 — 결합이 어느 기능을 통해 어느 경로로 전파되는지(설계 §5.3)
+    from .network import function_network
+    store.write_json_attr("fram", "function_network",
+                          function_network(R_ij, list(FRAM_FUNCTIONS)))
 
     out = FRAMOutput(
         n_points=N, n_dates=M,

@@ -38,6 +38,9 @@ def main() -> None:
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
+    p.add_argument("--serve", action="store_true",
+                   help="--out 의 FRAM 결과를 FastAPI 로 실시간 서빙(읽기전용). --port 로 포트")
+    p.add_argument("--port", type=int, default=8000, help="--serve 포트 (기본 8000)")
     p.add_argument(
         "--engine",
         action="append",
@@ -79,6 +82,16 @@ def main() -> None:
         cfg.validate()
     except ValueError as exc:
         p.error(str(exc))
+
+    if args.serve:
+        try:
+            from .serve import serve
+        except ImportError:
+            p.error("서빙에는 fastapi·uvicorn 이 필요합니다: `pip install -e .[serve]`")
+        print(f"FRAM 실시간 모니터: http://127.0.0.1:{args.port}  (project: {args.out})")
+        print("  GET /health · /status · /cri · /function-network   (Ctrl+C 종료)")
+        serve(args.out, port=args.port)
+        return
 
     if args.custom_pinn:
         from .custom_pinn import run_custom_pinn

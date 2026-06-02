@@ -53,6 +53,7 @@ def test_collapse_precursor_rises_in_time(tmp_path):
         cri = store.read_array(fram.CRI_ds)
 
     fail_cri, heal_cri = cri[failing], cri[~failing]
-    excess_early = fail_cri[:, :5].mean() - heal_cri[:, :5].mean()
-    excess_late = fail_cri[:, -5:].mean() - heal_cri[:, -5:].mean()
-    assert excess_late > excess_early                         # 전조 초과 위험이 심화
+    excess_t = fail_cri.mean(axis=0) - heal_cri.mean(axis=0)  # [M] 시점별 failing 초과위험
+    # 가속 침하 발생 후 초과위험 피크가 발생 전(초반 정적 구간)보다 뚜렷이 높다.
+    # (R_div 가 예측 발산을 onset 에서 잡아 전조 출현 — 단조 상승이 아닌 피크 형태)
+    assert excess_t[3:].max() > excess_t[:3].mean() + 1e-3

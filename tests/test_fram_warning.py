@@ -7,7 +7,11 @@ import pytest
 
 from inframon.config import PipelineConfig
 from inframon.contracts.schema import FRAM_FUNCTIONS
-from inframon.fram.real_engine import _forecast_to_threshold, _function_states
+from inframon.fram.real_engine import (
+    _forecast_residual,
+    _forecast_to_threshold,
+    _function_states,
+)
 from inframon.orchestrator.pipeline import run_pipeline
 
 
@@ -36,6 +40,16 @@ def test_forecast_to_threshold_none_cases():
     assert _forecast_to_threshold(np.full(10, 0.2), dates, 0.85) is None   # 상승 아님
     assert _forecast_to_threshold(np.full(10, 0.9), dates, 0.85) is None   # 이미 도달
     assert _forecast_to_threshold(np.array([0.1, 0.2]), dates[:2], 0.85) is None  # 점 부족
+
+
+# ── [공명4] 예측 발산 (롤링 선형예측 잔차) ──
+def test_forecast_residual_linear_vs_accel():
+    dates = np.arange(12, dtype=float)
+    linear = np.outer(np.ones(3), 0.5 * dates)        # 완전 선형 → 잔차 ≈0
+    accel = np.outer(np.ones(3), 0.1 * dates ** 2)    # 가속 → 잔차 큼
+    assert _forecast_residual(linear, dates).max() < 1e-6
+    assert _forecast_residual(accel, dates).max() > 0.1
+    assert _forecast_residual(accel, dates).shape == (3, 12)
 
 
 # ── 통합: 경보에 신규 필드 ──

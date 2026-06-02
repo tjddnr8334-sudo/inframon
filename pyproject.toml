@@ -24,7 +24,9 @@ insar = ["mintpy", "rasterio>=1.3", "gdal"]
 # SLC 검색·선별(C·D)만 — 가벼운 pip 패키지라 Windows 에서도 설치 가능(insar 본체와 분리)
 search = ["asf_search>=7.0"]
 dashboard = ["streamlit>=1.33", "plotly>=5.20", "folium>=0.16", "streamlit-folium>=0.20"]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+# FRAM 실시간 서빙(--serve) + 6측면 함수망 그래프
+serve = ["fastapi>=0.110", "uvicorn>=0.29", "networkx>=3.2"]
+dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27"]
 
 [project.scripts]
 inframon = "inframon.__main__:main"
