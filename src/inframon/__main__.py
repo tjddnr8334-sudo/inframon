@@ -41,6 +41,8 @@ def main() -> None:
     p.add_argument("--serve", action="store_true",
                    help="--out 의 FRAM 결과를 FastAPI 로 실시간 서빙(읽기전용). --port 로 포트")
     p.add_argument("--port", type=int, default=8000, help="--serve 포트 (기본 8000)")
+    p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
+                   help="--out 모니터링(PINN+FRAM 재계산·경보)을 SECONDS 간격 Prefect 스케줄 실행")
     p.add_argument(
         "--engine",
         action="append",
@@ -82,6 +84,16 @@ def main() -> None:
         cfg.validate()
     except ValueError as exc:
         p.error(str(exc))
+
+    if args.schedule:
+        try:
+            from .schedule import serve_schedule
+        except ImportError:
+            p.error("스케줄링에는 prefect 가 필요합니다: `pip install -e .[schedule]`")
+        print(f"FRAM 모니터 스케줄: {args.schedule}초 간격  (project: {args.out})")
+        print("  매 사이클 PINN+FRAM 재계산 → 경보 에스컬레이션 (Ctrl+C 종료)")
+        serve_schedule(args.out, interval_seconds=args.schedule)
+        return
 
     if args.serve:
         try:

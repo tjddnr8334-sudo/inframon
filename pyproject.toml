@@ -26,6 +26,8 @@ search = ["asf_search>=7.0"]
 dashboard = ["streamlit>=1.33", "plotly>=5.20", "folium>=0.16", "streamlit-folium>=0.20"]
 # FRAM 실시간 서빙(--serve) + 6측면 함수망 그래프
 serve = ["fastapi>=0.110", "uvicorn>=0.29", "networkx>=3.2"]
+# 모니터링 스케줄(--schedule)
+schedule = ["prefect>=2.16"]
 dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27"]
 
 [project.scripts]
