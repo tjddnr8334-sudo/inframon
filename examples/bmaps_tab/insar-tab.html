@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>교량 InSAR 위성 변위 분석 — Bmaps 탭 연동 예제</title>
+<!-- 지도(Leaflet) + 차트(Chart.js) CDN. Bmaps 실제 통합 시엔 플랫폼 기존 지도/차트 라이브러리로 대체. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: "Malgun Gothic", system-ui, sans-serif; margin: 0; color: #222; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: #f4f6f9; border-bottom: 1px solid #dde; }
+  header h1 { font-size: 16px; margin: 0; }
+  .badge { padding: 4px 12px; border-radius: 14px; color: #fff; font-weight: 700; font-size: 13px; }
+  select, button { padding: 5px 8px; font-size: 13px; }
+  .meta { font-size: 13px; color: #555; }
+  main { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: 1fr 220px; height: calc(100vh - 52px); }
+  #map { grid-row: 1 / 3; }
+  #side { padding: 12px; border-left: 1px solid #dde; overflow: auto; }
+  #trend { grid-column: 1; padding: 8px 12px; border-top: 1px solid #dde; }
+  .controls { display: flex; gap: 10px; align-items: center; padding: 6px 12px; background: #fafbfc; border-bottom: 1px solid #eee; }
+  .hint { color: #888; font-size: 12px; }
+  .err { color: #c62828; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰️ 교량 InSAR 위성 변위 분석</h1>
+  <select id="bridgeSel"></select>
+  <span id="warnBadge" class="badge" style="background:#888">—</span>
+  <span id="summary" class="meta"></span>
+  <span id="err" class="err"></span>
+</header>
+
+<div class="controls">
+  지표:
+  <select id="metricSel">
+    <option value="los">LOS 변위</option>
+    <option value="longitudinal">종방향 변위</option>
+  </select>
+  색상:
+  <select id="colorSel">
+    <option value="cri">CRI(공명위험)</option>
+    <option value="value">변위 크기</option>
+  </select>
+  시점: <input type="range" id="dateSlider" min="0" value="0" step="1" />
+  <span id="dateLabel" class="meta"></span>
+</div>
+
+<main>
+  <div id="map"></div>
+  <div id="side">
+    <div class="hint">지도의 측점을 클릭하면 해당 점의 시계열이 여기 표시됩니다.</div>
+    <h3 id="ptTitle" style="display:none"></h3>
+    <canvas id="ptChart" height="220"></canvas>
+    <div id="ptMeta" class="meta"></div>
+  </div>
+  <div id="trend"><canvas id="criChart"></canvas></div>
+</main>
+
+<script type="module">
+import { InframonClient, WARNING_COLORS, criColor } from "./inframon-client.js";
+
+// ── 설정: 실제 환경에 맞게 수정 ────────────────────────────────
+const API_BASE = "http://127.0.0.1:8000";   // inframon --serve-api 주소
+// ───────────────────────────────────────────────────────────────
+
+const api = new InframonClient(API_BASE);
+const $ = (id) => document.getElementById(id);
+const showErr = (e) => { $("err").textContent = e ? `⚠ ${e.message ?? e}` : ""; };
+
+const map = L.map("map", { center: [36.5, 127.8], zoom: 7 });
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  { attribution: "© OpenStreetMap" }).addTo(map);
+let ptLayer = L.layerGroup().addTo(map);
+let ptChart, criChart, state = { bridgeId: null, dates: [], dateIndex: 0 };
+
+async function init() {
+  try {
+    const bridges = await api.listBridges();
+    const sel = $("bridgeSel");
+    sel.innerHTML = "";
+    bridges.filter(b => b.has_insar).forEach(b => {
+      const o = document.createElement("option");
+      o.value = b.bridge_id; o.textContent = `${b.name} (${b.warning_level ?? "—"})`;
+      sel.appendChild(o);
+    });
+    if (!sel.value) { showErr({ message: "InSAR 산출물이 있는 교량이 없습니다." }); return; }
+    sel.onchange = () => loadBridge(sel.value);
+    $("metricSel").onchange = () => refreshPoints();
+    $("colorSel").onchange = () => refreshPoints();
+    $("dateSlider").oninput = (e) => { state.dateIndex = +e.target.value; refreshPoints(); };
+    await loadBridge(sel.value);
+  } catch (e) { showErr(e); }
+}
+
+async function loadBridge(bridgeId) {
+  showErr(null);
+  state.bridgeId = bridgeId;
+  try {
+    const [summary, cri] = await Promise.all([api.summary(bridgeId), api.cri(bridgeId)]);
+    // 헤더 요약 + 경보 배지
+    const w = summary.warning?.level ?? "—";
+    $("warnBadge").textContent = w;
+    $("warnBadge").style.background = WARNING_COLORS[w] ?? "#888";
+    $("summary").textContent =
+      `측점 ${summary.n_points} · 시점 ${summary.n_dates} · 기간 ${summary.date_range.join(" ~ ")}` +
+      ` · 최대CRI ${summary.cri_global_max ?? "-"} · 평균 coherence ${summary.coherence_mean}`;
+    // 시점 슬라이더
+    state.dates = cri.dates;
+    state.dateIndex = cri.dates.length - 1;
+    const slider = $("dateSlider");
+    slider.max = cri.dates.length - 1; slider.value = state.dateIndex;
+    // CRI 추세 차트
+    drawCri(cri);
+    await refreshPoints();
+  } catch (e) { showErr(e); }
+}
+
+async function refreshPoints() {
+  const { bridgeId, dateIndex } = state;
+  $("dateLabel").textContent = state.dates[dateIndex] ?? "";
+  try {
+    const data = await api.points(bridgeId, { metric: $("metricSel").value, date: dateIndex });
+    const colorBy = $("colorSel").value;
+    const vmax = Math.max(1e-6, ...data.points.map(p => Math.abs(p.value_mm)));
+    ptLayer.clearLayers();
+    const valid = [];
+    data.points.forEach(p => {
+      if (!(p.lat >= -90 && p.lat <= 90 && p.lon >= -180 && p.lon <= 180)) return; // 데모 좌표 방어
+      const color = colorBy === "cri" ? criColor(p.cri) : criColor(Math.abs(p.value_mm) / vmax);
+      const m = L.circleMarker([p.lat, p.lon],
+        { radius: 5, color, fillColor: color, fillOpacity: 0.85, weight: 1 });
+      m.bindTooltip(`#${p.point_id} ${p.member}<br>변위 ${p.value_mm} mm · CRI ${p.cri ?? "-"}`);
+      m.on("click", () => loadSeries(p.point_id));
+      m.addTo(ptLayer); valid.push([p.lat, p.lon]);
+    });
+    if (valid.length) map.fitBounds(L.latLngBounds(valid).pad(0.2));
+    else showErr({ message: "측점 좌표가 위경도 범위를 벗어남(데모용 임의 좌표일 수 있음). 실데이터·올바른 SRS에서 정상 표시됩니다." });
+  } catch (e) { showErr(e); }
+}
+
+async function loadSeries(pointId) {
+  try {
+    const s = await api.series(state.bridgeId, pointId);
+    $("ptTitle").style.display = "block";
+    $("ptTitle").textContent = `측점 #${pointId} (${s.member})`;
+    const ds = [
+      { label: "LOS (mm)", data: s.los_mm, borderColor: "#1565c0", tension: 0.2 },
+      { label: "종방향 (mm)", data: s.longitudinal_mm, borderColor: "#6a1b9a", tension: 0.2 },
+    ];
+    if (s.vertical_mm) ds.push({ label: "연직 (mm)", data: s.vertical_mm, borderColor: "#2e7d32", tension: 0.2 });
+    if (s.cri) ds.push({ label: "CRI", data: s.cri, borderColor: "#c62828", yAxisID: "y1", tension: 0.2 });
+    ptChart?.destroy();
+    ptChart = new Chart($("ptChart"), {
+      type: "line",
+      data: { labels: s.dates, datasets: ds },
+      options: { responsive: true, interaction: { mode: "index" },
+        scales: { y: { title: { display: true, text: "변위(mm)" } },
+                  y1: { position: "right", min: 0, max: 1, title: { display: true, text: "CRI" }, grid: { drawOnChartArea: false } } } },
+    });
+    $("ptMeta").textContent = s.EI != null ? `절대 강성 EI ≈ ${s.EI.toExponential(2)} · 열팽창계수 α ≈ ${s.alpha?.toExponential(2)}` : "";
+  } catch (e) { showErr(e); }
+}
+
+function drawCri(cri) {
+  criChart?.destroy();
+  criChart = new Chart($("criChart"), {
+    type: "line",
+    data: { labels: cri.dates, datasets: [{ label: "시점별 최대 CRI", data: cri.cri_max_series,
+      borderColor: "#c62828", backgroundColor: "rgba(198,40,40,.1)", fill: true, tension: 0.2 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { y: { min: 0, max: 1 } }, plugins: { title: { display: true, text: "CRI 추세(전체 측점 최대)" } } },
+  });
+}
+
+init();
+</script>
+</body>
+</html>

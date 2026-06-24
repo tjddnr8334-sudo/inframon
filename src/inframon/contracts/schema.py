@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 
 # 계약 스키마 버전. major 가 바뀌면 옛 project.h5 와 호환되지 않는다(읽을 때 raise).
 # 하위호환되는 Optional 필드 추가는 minor 만 올린다.
-SCHEMA_VERSION = "1.0"
+# 1.1: InSAROutput.vertical_ds 추가(asc+desc 융합 연직 성분, Optional — 1.0 파일과 호환).
+SCHEMA_VERSION = "1.1"
 
 # 부재 종류 (CV → InSAR → PINN → FRAM 전체에서 공유하는 표준 라벨)
 MEMBER_TYPES = ("deck", "pier", "abutment", "bearing")
@@ -62,9 +63,12 @@ class InSAROutput(BaseModel):
     coherence_ds: str         # [N]
     l_from_fixed_ds: str      # [N] 고정단까지 거리 (열팽창용)
     los_ds: str               # [N,M] LOS 변위
-    longitudinal_ds: str      # [N,M] 종방향 분해 변위
+    longitudinal_ds: str      # [N,M] 종방향 분해 변위(열팽창 등 수평 축방향)
     dates_ds: str             # [M] (epoch days)
     temporal_coherence_ds: str  # [N]
+    # 연직 변위 [N,M] — asc+desc 융합 시에만 채워진다(처짐·침하). 단일 궤도면 None.
+    # PINN 이 있으면 처짐/침하 분리에 쓰고, Bmaps 가 연직 레이어로 노출한다.
+    vertical_ds: str | None = None
 
 
 # ───────────────────────────── 모듈 2: PINN ────────────────────────────

@@ -40,7 +40,15 @@ def main() -> None:
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
     p.add_argument("--serve", action="store_true",
                    help="--out 의 FRAM 결과를 FastAPI 로 실시간 서빙(읽기전용). --port 로 포트")
-    p.add_argument("--port", type=int, default=8000, help="--serve 포트 (기본 8000)")
+    p.add_argument("--port", type=int, default=8000, help="--serve/--serve-api 포트 (기본 8000)")
+    p.add_argument("--serve-api", action="store_true",
+                   help="Bmaps 연동 다중 교량 InSAR API 서빙(읽기전용). --registry 로 교량 목록 지정")
+    p.add_argument("--registry", default=None, metavar="JSON",
+                   help="--serve-api 의 bridge_registry.json. 없으면 --out 을 단일 교량으로 노출")
+    p.add_argument("--srs", default="wgs84", choices=["wgs84", "5179"],
+                   help="--serve-api 좌표계: wgs84(기본, 재투영) | 5179(Bmaps 가 5179 타일일 때 재투영 생략)")
+    p.add_argument("--cors-origin", action="append", default=[], metavar="URL",
+                   help="--serve-api CORS 허용 출처(반복 가능). 미지정 시 전체 허용(*)")
     p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
                    help="--out 모니터링(PINN+FRAM 재계산·경보)을 SECONDS 간격 Prefect 스케줄 실행")
     p.add_argument(
@@ -103,6 +111,29 @@ def main() -> None:
         print(f"FRAM 실시간 모니터: http://127.0.0.1:{args.port}  (project: {args.out})")
         print("  GET /health · /status · /cri · /function-network   (Ctrl+C 종료)")
         serve(args.out, port=args.port)
+        return
+
+    if args.serve_api:
+        try:
+            from .api.app import serve_api
+            from .api.registry import BridgeRegistry, RegistryError
+            from .api.transform import SRC_CRS, WGS84
+        except ImportError:
+            p.error("Bmaps API 서빙에는 fastapi·uvicorn 이 필요합니다: `pip install -e .[serve]`")
+        if args.registry:
+            try:
+                reg = BridgeRegistry.from_file(args.registry)
+            except RegistryError as exc:
+                p.error(str(exc))
+            print(f"Bmaps InSAR API: http://127.0.0.1:{args.port}  ({len(reg)}개 교량, {args.registry})")
+        else:
+            # 레지스트리 없으면 --out 을 단일 교량으로 노출(기존 단일교량 흐름 호환).
+            reg = BridgeRegistry.single("default", "default", args.out)
+            print(f"Bmaps InSAR API: http://127.0.0.1:{args.port}  (단일 교량: {args.out})")
+        print("  GET /api/v1/health · /bridges · /bridges/{id}/insar/{summary,points,cri,...}  (Ctrl+C 종료)")
+        to_crs = SRC_CRS if args.srs == "5179" else WGS84
+        origins = tuple(args.cors_origin) if args.cors_origin else ("*",)
+        serve_api(reg, port=args.port, to_crs=to_crs, allow_origins=origins)
         return
 
     if args.custom_pinn:

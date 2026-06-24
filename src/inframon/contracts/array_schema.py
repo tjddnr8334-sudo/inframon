@@ -47,6 +47,7 @@ ARRAY_SPECS: dict[str, dict[str, tuple[tuple, frozenset]]] = {
         "longitudinal_ds": (("N", "M"), _FLOAT),
         "dates_ds": (("M",), _FLOAT),
         "temporal_coherence_ds": (("N",), _FLOAT),
+        "vertical_ds": (("N", "M"), _FLOAT),  # 선택(asc+desc 융합) — None 이면 검증 생략
     },
     "pinn": {
         "comp_thermal_ds": (("N", "M"), _FLOAT),
