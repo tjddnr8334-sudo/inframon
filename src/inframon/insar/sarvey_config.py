@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .bridge_profile import profile_for
 from .recipe import (
     BridgeTarget,
     MasterSelection,
@@ -72,6 +73,7 @@ def build_processing_manifest(b: RecipeBundle) -> dict:
     """상류 SLC 스택 생성(ISCE2/MiaplPy)을 위한 매니페스트."""
     b.require()
     t, trk, crit, mst = b.target, b.track, b.criteria, b.master
+    prof = profile_for(t)
     return {
         "_README": "ISCE2 stackSentinel + MiaplPy 스택 생성 파라미터. SARvey 실행 전 단계.",
         "aoi": {
@@ -82,6 +84,21 @@ def build_processing_manifest(b: RecipeBundle) -> dict:
             "bbox_lonlat": list(t.bbox),
             "osm": t.osm_url,
             "length_m": t.length_m,
+            "buffer_deg": prof.aoi_buffer_deg,   # 교량 규모·해상 여부로 유도(기본 0.05 대체)
+        },
+        # ── 교량특화: 형식·수계 기반 마스킹/기준점 ──
+        "bridge_profile": {
+            "class": prof.bridge_class, "class_ko": prof.bridge_class_ko,
+            "water_context": prof.water_context, "scale": prof.scale,
+        },
+        "mask": {
+            "water_mask": prof.water_mask,
+            "deck_buffer_m": prof.deck_buffer_m,
+            "deck_geometry_hint": {
+                "osm_type": t.osm_type, "osm_id": t.osm_id, "osm": t.osm_url,
+                "note": "정확한 데크 마스크는 이 OSM way 지오메트리를 deck_buffer_m 로 버퍼링해 생성",
+            },
+            "reference_point_hint": prof.reference_hint,
         },
         "stack": {
             "mission": "SENTINEL-1",
@@ -113,18 +130,20 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
     """SARvey MTI 시계열 추정 config(JSON). 버전별 키 차이는 _README 참조."""
     b.require()
     trk, crit = b.track, b.criteria
+    prof = profile_for(b.target)
     max_tbase = int(crit.temporal_baseline_max_days) if crit.temporal_baseline_max_days else 100
     return {
         "_README": (
             "inframon 레시피에서 생성. 트랙/편파/master/공간baseline 은 processing_manifest.json"
-            "(상류 스택 생성)에서 처리됩니다. 키 이름은 본인 SARvey 버전의 `sarvey -g` 템플릿과"
-            " 대조해 조정하세요."
+            "(상류 스택 생성)에서 처리됩니다. consistency_check/densification 값은 교량 형식·제원"
+            f"({prof.bridge_class_ko}·{prof.scale}·{prof.water_context})으로 유도됨 — bridge_profile 참조."
+            " 키 이름은 본인 SARvey 버전의 `sarvey -g` 템플릿과 대조해 조정하세요."
         ),
         "general": {
             "input_path": "inputs/",       # MiaplPy 산출(slcStack.h5, geometryRadar.h5)
             "output_path": "outputs/",
             "num_cores": 5,
-            "num_patches": 1,
+            "num_patches": 1,              # 교량은 작은 AOI → 1 패치
             "logging_level": "INFO",
         },
         "preparation": {
@@ -133,30 +152,37 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
             "ifg_network_type": "sb",      # small baseline
             "num_ifgs": 3,
             "max_tbase": max_tbase,         # 시간 baseline 상한 [일]
-            "filter_wdw_size": 9,
+            "filter_wdw_size": 7,           # 작은 구조물 → 필터창 축소(과평활 방지)
         },
         "consistency_check": {
-            "coherence_p1": 0.9,
-            "grid_size": 200,
+            "coherence_p1": prof.coherence_p1,
+            "grid_size": prof.grid_size_m,            # 교량 길이 유도(도시용 200m 대체)
             "num_nearest_neighbours": 30,
-            "velocity_bound": 0.1,
+            "velocity_bound": prof.velocity_bound_m_yr,  # 열팽창/진동 고려 확대
             "dem_error_bound": 100.0,
-            "arc_unwrapping_coherence_threshold": 0.6,
+            "arc_unwrapping_coherence_threshold": prof.arc_unwrap_coh,
         },
         "unwrapping": {
             "use_arcs_from_temporal_unwrapping": True,
             "spatial_unwrapping_method": "puma",
         },
         "filtering": {
-            "coherence_p2": 0.8,
+            "coherence_p2": prof.coherence_p2,
             "apply_aps_filtering": True,
             "interpolation_method": "kriging",
         },
         "densification": {
-            "coherence_threshold": 0.5,
-            "num_connections_to_p1": 5,
-            "max_distance_to_p1": 2000.0,
+            "coherence_threshold": prof.densification_coherence,  # 강반사체 → 하향 조밀화
+            "num_connections_to_p1": prof.num_connections_to_p1,
+            "max_distance_to_p1": float(prof.max_distance_to_p1_m),  # 교량 안에서만 연결
         },
+        # SARvey 버전이 계절/온도 회귀를 지원하면 활성화(미지원 시 velocity_bound 확대로 완화).
+        "temporal_model": {
+            "_note": ("교량은 열팽창이 지배적이라 선형속도 모델만으론 계절 거동을 노이즈로 버린다. "
+                      "SARvey 버전이 계절/온도 회귀 항을 지원하면 켜라."),
+            "seasonal_recommended": prof.seasonal_model,
+        },
+        "bridge_profile": prof.to_dict(),   # 교량특화 산출 근거(참고)
     }
 
 

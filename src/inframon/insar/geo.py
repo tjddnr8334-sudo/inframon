@@ -13,7 +13,8 @@ import numpy as np
 # 픽셀↔world 아핀 원시함수는 CV·InSAR 공용 → 중립 모듈에서 가져와 재노출.
 from ..geotransform import GeoTransform, pixel_to_world, world_to_pixel
 
-__all__ = ["GeoTransform", "pixel_to_world", "world_to_pixel", "axial_from_fixed", "reproject"]
+__all__ = ["GeoTransform", "pixel_to_world", "world_to_pixel", "axial_from_fixed", "reproject",
+           "los_axial_factor", "los_to_axial"]
 
 
 def axial_from_fixed(
@@ -42,6 +43,42 @@ def axial_from_fixed(
     else:
         s_fixed = float(s.min())
     return np.abs(s - s_fixed)
+
+
+def los_axial_factor(inc_deg, axis_sat_azimuth_deg) -> np.ndarray:
+    """LOS→교량 종축 변환 기하 계수 g = sin(θ)·cos(Δ).
+
+    수평 종축 변위 가정(열팽창 거동) 하에서 LOS 변위와 종축 변위의 관계::
+
+        d_los = d_axial · g,   즉   d_axial = d_los / g
+
+      θ = 입사각(연직 기준, deg) — 클수록 LOS 가 수평에 가까워 수평 변위 민감도↑.
+      Δ = 종축과 LOS 지상투영의 수평 방위각 차(deg) — 0 이면 축이 LOS 방향과 평행(민감 최대),
+          90°면 축이 LOS 에 수직(종축 민감도 0).
+
+    기존 `los·cos(Δ)`(투영)는 sin(θ) 인자가 빠져 실제 종축 변위를 복원하지 못한다.
+    `inc_deg`·`azimuth` 는 스칼라 또는 [N] (브로드캐스트).
+    """
+    inc = np.deg2rad(np.asarray(inc_deg, dtype=np.float64))
+    dlt = np.deg2rad(np.asarray(axis_sat_azimuth_deg, dtype=np.float64))
+    return np.sin(inc) * np.cos(dlt)
+
+
+def los_to_axial(los: np.ndarray, factor, min_abs_factor: float = 0.2):
+    """los[N,M] 를 종축 변위로 deprojection: d_axial = los / factor[N].
+
+    |factor| < min_abs_factor 인 점은 종축 민감도가 낮아 deprojection 이 불안정하므로
+    `valid=False` 로 표시하고 그 행을 NaN 으로 둔다(호출 측이 투영 폴백으로 대체).
+    반환: (axial[N,M] float32, valid[N] bool).
+    """
+    los = np.asarray(los, dtype=np.float64)
+    factor = np.asarray(factor, dtype=np.float64)
+    if factor.ndim == 0:
+        factor = np.full(los.shape[0], float(factor))
+    valid = np.abs(factor) >= float(min_abs_factor)
+    safe = np.where(valid, factor, np.nan)
+    axial = (los / safe[:, None]).astype(np.float32)
+    return axial, valid
 
 
 def reproject(xy: np.ndarray, src_crs: str | None, dst_crs: str | None) -> np.ndarray:

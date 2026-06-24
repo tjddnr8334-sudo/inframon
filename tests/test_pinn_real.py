@@ -94,6 +94,27 @@ def _insar_for_pinn(tmp_path, n_points=25, n_dates=12, epochs=120):
     return cfg, store, insar
 
 
+def test_pinn_uses_vertical_channel(tmp_path):
+    """InSAR 에 vertical_ds 가 있으면 PINN 이 연직 채널로 처짐/침하를 분리한다."""
+    cfg, store, insar = _insar_for_pinn(tmp_path)
+    N, M = insar.n_points, insar.n_dates
+    # 합성 연직 변위([N,M]) 적재 + 계약 필드 연결(융합 산출 모사)
+    rng = np.random.default_rng(0)
+    vert = (rng.normal(0, 1.0, size=(N, M)) - np.linspace(0, 3, M)).astype(np.float32)  # 침하 추세
+    store.write_array("/insar/vertical", vert)
+    insar.vertical_ds = "/insar/vertical"
+    try:
+        out = run_pinn_real(store, insar, cfg)
+        inp = store.read_json_attr("pinn", "inputs")
+        defl = store.read_array(out.deflection_ds)
+        settle = store.read_array(out.comp_settle_ds)
+    finally:
+        store.__exit__(None, None, None)
+    assert inp["vertical_observed"] is True
+    assert defl.shape == (N, M) and np.isfinite(defl).all()
+    assert settle.shape == (N, M) and np.isfinite(settle).all()
+
+
 def test_pinn_profile_scales_response(tmp_path):
     """단면 깊이 2배 → 변형률 2배(같은 곡률, 프로파일이 응답 스케일만 바꿈, 결정론)."""
     cfg1, s1, ins1 = _insar_for_pinn(tmp_path / "a")

@@ -37,7 +37,10 @@ class PipelineConfig:
     engines: dict[str, str] = field(default_factory=_default_engines)
 
     # InSAR real 엔진이 소비할 처리 결과 H5 (Track export). insar=stub 면 무시.
+    # insar_source_h5 = 기준(주) 궤도. insar_source_desc_h5 가 있으면 asc+desc 융합을
+    # 시도하고(연직+종축 분리), 융합 불가 시 자동으로 단일 궤도 처리로 폴백한다.
     insar_source_h5: str | None = None
+    insar_source_desc_h5: str | None = None
 
     # 계약 강건화 (Phase 1 고도화)
     validate_contracts: bool = True   # 각 단계 출력의 배열 형상/dtype/심볼 검증

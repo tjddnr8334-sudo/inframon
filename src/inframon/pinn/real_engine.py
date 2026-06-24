@@ -96,11 +96,19 @@ def _identify_EI_from_pde(
 def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) -> PINNOutput:
     import torch
 
-    los = store.read_array(insar.longitudinal_ds).astype(np.float64)   # [N,M] (mm)
+    los = store.read_array(insar.longitudinal_ds).astype(np.float64)   # [N,M] 종축 수평(mm)
     dates = store.read_array(insar.dates_ds).astype(np.float64)        # [M]
     l_fixed = store.read_array(insar.l_from_fixed_ds).astype(np.float64)  # [N]
     xyz = store.read_array(insar.xyz_ds).astype(np.float64)
     N, M = los.shape
+
+    # 연직 성분(asc+desc 융합 시) — 있으면 처짐/침하(물리적으로 연직)를 이 채널에 피팅.
+    vert = None
+    if getattr(insar, "vertical_ds", None):
+        v = store.read_array(insar.vertical_ds).astype(np.float64)     # [N,M] 연직(mm)
+        if v.shape == los.shape:
+            vert = v
+    use_vertical = vert is not None
 
     # 교량 구조 프로파일(제원) — 하드코딩 가정 대신 교량별 E/단면/질량/자중/스팬
     from ..structure import resolve_profile
@@ -124,7 +132,11 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     sin_s = np.sin(2 * np.pi * t_year)
     cos_s = np.cos(2 * np.pi * t_year)
     los_scale = np.abs(los).max() + 1e-9
-    y = torch.tensor(los / los_scale, dtype=torch.float32)            # [N,M] 정규화 관측
+    y = torch.tensor(los / los_scale, dtype=torch.float32)            # [N,M] 정규화 관측(종축)
+    # 연직 관측(있으면) — 처짐/침하 채널. 자체 스케일로 정규화(종축과 진폭이 다를 수 있음).
+    vert_scale = (np.abs(vert).max() + 1e-9) if use_vertical else los_scale
+    y_v = torch.tensor(vert / vert_scale, dtype=torch.float32) if use_vertical else None
+    w_scale_used = vert_scale if use_vertical else los_scale          # 처짐/침하 환산 스케일
 
     tx = torch.tensor(xn, dtype=torch.float32)
     tt = torch.tensor((dates - dates[0]) / (np.ptp(dates) + 1e-9), dtype=torch.float32)
@@ -194,8 +206,13 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         anom = a_net(feat(grid_x, grid_t)).reshape(N, M)
         thermal = thermal_field()                        # 온도 구동(있으면)
         settle = s_rate[:, None] * ty
-        total = thermal + settle + w + anom
-        loss_data = torch.mean((total - y) ** 2)
+        if use_vertical:
+            # 종축(수평) 채널: 열팽창 + 수평 이상 ≈ longitudinal(y)
+            # 연직 채널: 처짐(w) + 침하(settle) ≈ vertical(y_v) — 물리적으로 올바른 분리
+            loss_data = torch.mean((thermal + anom - y) ** 2) + torch.mean((w + settle - y_v) ** 2)
+        else:
+            total = thermal + settle + w + anom
+            loss_data = torch.mean((total - y) ** 2)
 
         # 형식별 지배 PDE 잔차(거더=w'''', 사장교=+탄성지지, 아치·현수=+축력) x-분산 패널티
         loss_pde = pde_loss(w_net, xc0, t_sub, n_col, p2_pde, p0_pde, prof.bridge_type, torch)
@@ -224,13 +241,15 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
 
     with torch.no_grad():
         w_raw = w_net(feat(grid_x, grid_t)).reshape(N, M)
-        w_load = load_field(w_raw).numpy() * los_scale
+        # 처짐·침하·곡률은 연직 채널 스케일(w_scale_used), 열팽창·이상은 종축 스케일(los_scale)
+        w_load = load_field(w_raw).numpy() * w_scale_used
         anom = a_net(feat(grid_x, grid_t)).reshape(N, M).numpy() * los_scale
         thermal = thermal_field().numpy() * los_scale
-        settle = (s_rate[:, None] * ty).numpy() * los_scale
-        curvature = wxx.reshape(N, M).detach().numpy() * los_scale     # ∂²w/∂x²
-        # 절대 EI: 비차원 PDE 균형 EI·∂⁴w/∂x⁴=q (프로파일 자중), 처짐 스케일 los_scale[mm]→m
-        EI_global = _identify_EI_from_pde(d4_hat, L_m, prof.load_per_len, los_scale * 1e-3)
+        settle = (s_rate[:, None] * ty).numpy() * w_scale_used
+        curvature = wxx.reshape(N, M).detach().numpy() * w_scale_used   # ∂²w/∂x²
+        # 절대 EI: 비차원 PDE 균형 EI·∂⁴w/∂x⁴=q (프로파일 자중), 처짐 스케일[mm]→m.
+        # 연직 관측이 있으면 실측 처짐으로부터 EI 식별(더 정확).
+        EI_global = _identify_EI_from_pde(d4_hat, L_m, prof.load_per_len, w_scale_used * 1e-3)
 
     comp_thermal, comp_load = thermal, w_load
     comp_settle, comp_anomaly = settle, anom
@@ -310,6 +329,7 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "span_m": L_m, "youngs_Pa": prof.youngs(), "load_per_len": prof.load_per_len,
         "profile_source": prof.source,
         "temperature_driven": bool(use_temp), "traffic_driven": bool(use_traffic),
+        "vertical_observed": bool(use_vertical),   # 연직 채널로 처짐/침하 분리 여부
         "EI_global": EI_global,
         "pde_form": prof.bridge_type,
         "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),

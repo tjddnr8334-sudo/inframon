@@ -82,3 +82,70 @@ def test_requires_target_and_track(tmp_path):
     # 빈 디렉터리 → 필수 레시피 없음
     with pytest.raises(FileNotFoundError):
         write_sarvey_bundle(tmp_path)
+
+
+# ───────────────────────── 교량 형식별 특화 ─────────────────────────
+from inframon.insar.bridge_profile import (  # noqa: E402
+    CABLE_STAYED, GIRDER, classify_bridge, profile_for, water_context_for,
+)
+
+
+def test_classify_from_osm_tags():
+    assert classify_bridge({"bridge:structure": "cable-stayed"}) == CABLE_STAYED
+    assert classify_bridge({"bridge:structure": "suspension"}) == "suspension"
+    assert classify_bridge({"bridge:structure": "arch"}) == "arch"
+    assert classify_bridge({"bridge:structure": "beam"}) == GIRDER
+    # 태그 불충분 → 길이 폴백: 초장대는 케이블계 추정
+    assert classify_bridge({"bridge": "yes"}, length_m=1500) == CABLE_STAYED
+    assert classify_bridge({"bridge": "yes"}, length_m=110) == GIRDER
+
+
+def test_water_context_marine_vs_river():
+    assert water_context_for(CABLE_STAYED, 1500) == "marine"
+    assert water_context_for(GIRDER, 110) == "river"
+    assert water_context_for(GIRDER, 2500) == "marine"   # 초장대 거더 → 해상
+
+
+def test_cable_bridge_profile_specializes():
+    target = BridgeTarget(
+        name="대교", selected_lat=35.0, selected_lon=129.0, osm_type="way", osm_id=1,
+        bbox=(129.0, 35.0, 129.02, 35.01), length_m=1800.0,
+        tags={"bridge:structure": "cable-stayed"})
+    p = profile_for(target)
+    assert p.bridge_class == CABLE_STAYED and p.water_context == "marine"
+    assert p.velocity_bound_m_yr == 0.30          # 케이블계 → 넓은 속도 한계
+    assert p.coherence_p1 == 0.90                 # 해상 → P1 엄격
+    assert p.water_mask["strength"] == "strong"
+    assert "주탑" in p.reference_hint
+
+
+def test_river_girder_profile_specializes():
+    target = BridgeTarget(
+        name="정자교", selected_lat=37.36, selected_lon=127.10, osm_type="way", osm_id=2,
+        bbox=(127.108, 37.368, 127.110, 37.369), length_m=110.5, tags={"bridge": "yes"})
+    p = profile_for(target)
+    assert p.bridge_class == GIRDER and p.water_context == "river"
+    assert p.velocity_bound_m_yr == 0.18
+    assert p.coherence_p1 == 0.85                 # 하천 → 조밀화 위해 완화
+    assert p.water_mask["context"] == "river"
+    assert "교대" in p.reference_hint
+
+
+def test_config_grid_is_bridge_scaled(tmp_path):
+    _seed_recipes(tmp_path)                        # 정자교 110.5m
+    cfg = build_sarvey_config(RecipeBundle(tmp_path))
+    # 도시용 200m 가 아니라 교량 길이 유도값(15~60m)
+    assert 15 <= cfg["consistency_check"]["grid_size"] <= 60
+    assert cfg["consistency_check"]["velocity_bound"] == 0.18
+    assert cfg["densification"]["max_distance_to_p1"] <= 1000.0
+    assert cfg["bridge_profile"]["water_context"] == "river"
+
+
+def test_manifest_carries_water_mask(tmp_path):
+    _seed_recipes(tmp_path)
+    paths = write_sarvey_bundle(tmp_path)
+    man = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    assert man["mask"]["water_mask"]["apply"] is True
+    assert man["mask"]["water_mask"]["context"] == "river"
+    assert man["mask"]["deck_buffer_m"] == 30
+    assert man["bridge_profile"]["class_ko"] == "거더교"

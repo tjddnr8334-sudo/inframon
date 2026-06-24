@@ -58,7 +58,9 @@ def main() -> None:
         metavar="NAME=MODE",
         help="엔진 구현 선택 (예: --engine insar=real). 반복 지정 가능. 기본 전부 stub.",
     )
-    p.add_argument("--insar-source", default=None, help="insar=real 이 소비할 Track 결과 H5")
+    p.add_argument("--insar-source", default=None, help="insar=real 이 소비할 Track 결과 H5(기준/주 궤도)")
+    p.add_argument("--insar-source-desc", default=None,
+                   help="asc+desc 융합용 반대 궤도 Track H5. 있으면 연직+종축 분리, 불가 시 단일 폴백")
     p.add_argument("--resume", action="store_true",
                    help="기존 --out 에서 입력이 안 바뀐 단계는 재계산 생략(증분 재개)")
     p.add_argument("--force-stage", action="append", default=[], metavar="STAGE",
@@ -86,6 +88,8 @@ def main() -> None:
         cfg.engines[name] = mode
     if args.insar_source is not None:
         cfg.insar_source_h5 = args.insar_source
+    if args.insar_source_desc is not None:
+        cfg.insar_source_desc_h5 = args.insar_source_desc
     cfg.resume = args.resume
     cfg.force_stages = tuple(args.force_stage)
     try:

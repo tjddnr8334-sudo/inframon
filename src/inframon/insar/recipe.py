@@ -93,31 +93,41 @@ class TrackSelection(BaseModel):
 
 
 class SceneWeather(BaseModel):
-    """master 후보 1개의 점수 구성요소 (baseline + 대기)."""
+    """master 후보 1개의 점수 구성요소 (baseline + 대기: 강수·습도·온도)."""
 
     date: str               # YYYYMMDD
     precip_mm: float        # 그날 총 강수 [mm]
     humidity_pct: float     # 그날 평균 상대습도 [%]
+    temp_c: float | None = None   # 그날 평균 기온 [°C] (ERA5 2m), 데이터 없으면 None
     rho: float = 0.0        # baseline 기대 coherence (다른 장면들과의 시·공간 baseline 기반)
-    dry_score: float = 0.0  # 건조도 (강수·습도, 높을수록 건조)
-    combined: float = 0.0   # 최종 = norm(rho) × dry_score, 높을수록 master 적합
+    dry_score: float = 0.0  # 대기 안정도 = (1-강수)(1-습도)(1-온도), 높을수록 수증기 적음
+    combined: float = 0.0   # 최종 = rho × dry_score, 높을수록 master 적합
+    excluded: bool = False  # 임계 초과(과도한 강수/습도/온도)로 master 후보에서 소거됨
+    exclude_reason: str = ""  # 소거 사유(예: "강수 5.0>3mm; 기온 31.2>30°C")
 
 
 class MasterSelection(BaseModel):
-    """E 산출물 — baseline(기대 coherence) × ERA5(강수·습도)로 고른 SARvey master.
+    """E 산출물 — baseline(기대 coherence) × ERA5(강수·습도·온도)로 고른 SARvey master.
 
     `selected_master` 키는 insar/inventory.py 가 읽는 master_selection_era5.json 형식과 호환.
-    종합 점수: combined = norm(rho) × dry_score (rho=시·공간 baseline 기대 coherence).
+    종합 점수: combined = rho × dry_score, dry_score=(1-강수)(1-습도)(1-온도).
+    과도한 강수/습도/온도 장면은 `*_max`/`temp_min_c` 임계로 후보에서 소거할 수 있다.
     """
 
     selected_master: str            # master 취득일 YYYYMMDD
     master_scene: str | None = None
     lat: float
     lon: float
-    source: str = "baseline(expected coherence) × ERA5(precip,humidity)"
+    source: str = "baseline(expected coherence) × ERA5(precip,humidity,temp)"
     used_baseline: bool = False     # 수직 baseline 사용 여부(없으면 시간 baseline 만)
     temporal_crit_days: float = 365.0
     perp_crit_m: float = 300.0
+    # 소거 임계(None=미적용). 평균/총량 기준 초과(또는 temp_min_c 미만) 장면을 master 후보에서 제외.
+    precip_max_mm: float | None = None
+    humidity_max_pct: float | None = None
+    temp_max_c: float | None = None
+    temp_min_c: float | None = None
+    n_excluded: int = 0             # 소거된 장면 수
     scenes: list[SceneWeather] = Field(default_factory=list)
 
 

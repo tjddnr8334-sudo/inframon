@@ -34,6 +34,8 @@ class TrackData:
     date_labels: np.ndarray  # [M] S8 (YYYYMMDD)
     coherence: np.ndarray    # [N] float32
     height: np.ndarray | None = None  # [N] float32 (m) — 점별 고도, 없으면 None
+    incidence: np.ndarray | None = None  # [N] float32 (deg) — LOS 입사각, 종축 분해용. 없으면 None
+    heading: float | None = None         # 위성 heading(deg) — 기록용. 없으면 None
     attrs: dict = field(default_factory=dict)
 
 
@@ -50,6 +52,26 @@ def _read_optional_dataset(f: h5py.File, names: tuple[str, ...]) -> np.ndarray |
         if name in f:
             return f[name][()]
     return None
+
+
+def _scalar_from_attrs(attrs, names: tuple[str, ...]) -> float | None:
+    """attr 후보 중 처음으로 float 변환되는 스칼라(없으면 None). 대소문자 무시."""
+    lower = {str(k).lower(): v for k, v in attrs.items()}
+    for name in names:
+        if name.lower() in lower:
+            try:
+                return float(lower[name.lower()])
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+# LOS 기하 데이터셋/attr 이름 후보(MintPy/ISCE/HyP3 관례).
+_INC_DATASETS = ("incidenceAngle", "los_inc_angle", "inc_angle", "incidence", "incidenceMap")
+_INC_ATTRS = ("incidence_angle", "incidenceAngle", "INCIDENCE_ANGLE", "CENTER_INCIDENCE_ANGLE",
+              "inc_angle", "centerIncidenceAngle")
+_HEAD_DATASETS = ("headingAngle", "heading", "sat_heading", "los_az_angle", "azimuthAngle")
+_HEAD_ATTRS = ("heading", "HEADING", "headingAngle", "sat_heading", "ORBIT_HEADING")
 
 
 def _decode_epochs(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -73,6 +95,10 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
         coherence = _read_first_dataset(f, ("coh", "temp_coh")).astype(np.float32)
         height_raw = _read_optional_dataset(f, ("height", "hgt", "dem", "elevation"))
         height = None if height_raw is None else np.asarray(height_raw).astype(np.float32)
+        inc_raw = _read_optional_dataset(f, _INC_DATASETS)
+        inc_attr = _scalar_from_attrs(f.attrs, _INC_ATTRS)
+        head_raw = _read_optional_dataset(f, _HEAD_DATASETS)
+        head_attr = _scalar_from_attrs(f.attrs, _HEAD_ATTRS)
         attrs = {str(k): str(v) for k, v in f.attrs.items()}
 
     if lonlat.ndim != 2 or lonlat.shape[1] != 2:
@@ -93,8 +119,29 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
     if len(dates) != n_dates:
         raise ValueError(f"epoch count {len(dates)} != los date count {n_dates}")
 
+    # 입사각: 데이터셋(점별 [N] 또는 스칼라) 우선, 없으면 attr 스칼라 → [N] 브로드캐스트.
+    incidence: np.ndarray | None = None
+    if inc_raw is not None:
+        inc = np.ravel(np.asarray(inc_raw).astype(np.float32))
+        if inc.size == 1:
+            incidence = np.full(n_points, float(inc[0]), dtype=np.float32)
+        elif inc.size == n_points:
+            incidence = inc
+        else:
+            raise ValueError(f"incidence count {inc.size} != point count {n_points}")
+    elif inc_attr is not None:
+        incidence = np.full(n_points, float(inc_attr), dtype=np.float32)
+
+    # heading: 데이터셋이면 중앙값 스칼라, 없으면 attr.
+    heading: float | None = None
+    if head_raw is not None:
+        heading = float(np.nanmedian(np.asarray(head_raw, dtype=np.float64)))
+    elif head_attr is not None:
+        heading = float(head_attr)
+
     return TrackData(lonlat=lonlat, los=los, dates=dates, date_labels=date_labels,
-                     coherence=coherence, height=height, attrs=attrs)
+                     coherence=coherence, height=height, incidence=incidence,
+                     heading=heading, attrs=attrs)
 
 
 def write_insar_contract(
@@ -108,8 +155,13 @@ def write_insar_contract(
     longitudinal: np.ndarray,
     dates: np.ndarray,
     date_labels: np.ndarray | None = None,
+    vertical: np.ndarray | None = None,
 ) -> InSAROutput:
-    """표준 /insar 데이터셋 + InSAROutput 메타를 적재한다(출처 attr 은 호출 측에서)."""
+    """표준 /insar 데이터셋 + InSAROutput 메타를 적재한다(출처 attr 은 호출 측에서).
+
+    `vertical`([N,M], asc+desc 융합 연직 성분)을 주면 /insar/vertical 에 쓰고
+    계약 필드 vertical_ds 를 채운다(단일 궤도면 None → 미적재).
+    """
     n_points, n_dates = los.shape
     g = "/insar"
     store.write_array(f"{g}/point_id", np.arange(n_points, dtype=np.int64))
@@ -123,6 +175,9 @@ def write_insar_contract(
     if date_labels is not None:
         store.write_array(f"{g}/date_labels", date_labels)
     store.write_array(f"{g}/temporal_coherence", coherence)
+    vertical_ds = None
+    if vertical is not None:
+        vertical_ds = store.write_array(f"{g}/vertical", vertical)
 
     out = InSAROutput(
         n_points=n_points,
@@ -136,6 +191,7 @@ def write_insar_contract(
         longitudinal_ds=f"{g}/longitudinal",
         dates_ds=f"{g}/dates",
         temporal_coherence_ds=f"{g}/temporal_coherence",
+        vertical_ds=vertical_ds,
     )
     store.write_meta("insar", out)
     return out

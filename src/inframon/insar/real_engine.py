@@ -34,6 +34,24 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
         )
 
     td = read_track_h5(cfg.insar_source_h5)
+
+    # ── asc+desc 융합(가능하면) → 연직+종축 분리. 불가 시 단일 궤도 폴백. ──
+    fused_axial = None      # [N_src, M] 융합 종축(longitudinal). None 이면 단일 처리.
+    fused_vertical = None   # [N_src, M] 융합 연직(U). 계약 외 추가 데이터셋으로 저장.
+    fusion_meta: dict | None = None
+    desc_h5 = getattr(cfg, "insar_source_desc_h5", None)
+    if desc_h5:
+        from .fusion import FusionError, fuse_asc_desc
+        try:
+            res = fuse_asc_desc(td, read_track_h5(desc_h5))
+            td = res.track                       # asc 기준 융합 점·공통시점
+            fused_axial = res.longitudinal
+            fused_vertical = res.vertical
+            fusion_meta = res.meta
+        except FusionError as exc:               # 융합 불가 → 단일 궤도로 진행
+            fusion_meta = {"ok": False, "attempted": True, "reason": str(exc),
+                           "desc_source": str(desc_h5)}
+
     H, W = cv.image_shape
     n_src = td.los.shape[0]
 
@@ -59,10 +77,27 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
     roi = store.read_array(cv.roi_mask_ds)
     keep = in_frame.copy()
     keep[in_frame] &= roi[row[in_frame], col[in_frame]] > 0
+
+    # ── 레이더 음영/겹침 필터: CV 가 제공하면 신뢰불가 점 제거(없으면 무시) ──
+    # 음영(shadow)=신호 없음(이진), 겹침(layover)=혼신(이진 또는 분율>0.5).
+    def _drop_where(ds_path: str, thresh: float) -> int:
+        arr = store.read_array(ds_path)
+        idx = np.where(keep)[0]                 # 현재 유지 점(프레임 안 → row/col 유효)
+        bad = arr[row[idx], col[idx]] > thresh
+        keep[idx[bad]] = False
+        return int(bad.sum())
+
+    n_dropped_shadow = n_dropped_layover = 0
+    if cv.shadow_ds and store.has_array(cv.shadow_ds):
+        n_dropped_shadow = _drop_where(cv.shadow_ds, 0.0)
+    if cv.layover_ds and store.has_array(cv.layover_ds):
+        n_dropped_layover = _drop_where(cv.layover_ds, 0.5)
+
     if int(keep.sum()) < 2:
         raise ValueError(
-            f"ROI 안에 들어온 InSAR 점이 {int(keep.sum())}개뿐입니다(소스 {n_src}개). "
-            "좌표 프레임/ROI 정합을 확인하세요(1차 증분은 H5 좌표를 CV 픽셀로 간주)."
+            f"유효 InSAR 점이 {int(keep.sum())}개뿐입니다(소스 {n_src}개, "
+            f"음영 {n_dropped_shadow}·겹침 {n_dropped_layover} 제거). "
+            "좌표 프레임/ROI 정합·음영겹침 마스크를 확인하세요(1차 증분은 H5 좌표를 CV 픽셀로 간주)."
         )
 
     col_k, row_k = col[keep], row[keep]
@@ -80,8 +115,30 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
         member[mmask[row_k, col_k] == 1] = mi
 
     # ── 기하: LOS→종방향 분해 + 고정단까지 거리 + xyz ──
+    # 우선순위: ① asc+desc 융합(종축+연직) → ② 입사각 deprojection → ③ 투영 폴백.
     az = float(cv.geometry.azimuth_angle)
-    longitudinal = (los * np.cos(np.deg2rad(az))).astype(np.float32)
+    proj = (los * np.cos(np.deg2rad(az))).astype(np.float32)  # 폴백(투영, sinθ 누락)
+    vertical = None
+    if fused_axial is not None:
+        # 융합 경로: 종축은 2×2 역산 결과, 연직은 계약 외 /insar/vertical 로 저장.
+        longitudinal = fused_axial[keep].astype(np.float32)
+        vertical = fused_vertical[keep].astype(np.float32)
+        longitudinal_method = "asc_desc_fusion"
+        n_low_sens = 0
+        incidence_mean = float(np.mean(td.incidence[keep])) if td.incidence is not None else None
+    elif td.incidence is not None:
+        inc_k = td.incidence[keep]
+        factor = geo.los_axial_factor(inc_k, az)             # sinθ·cosΔ [n_points]
+        axial, valid = geo.los_to_axial(los, factor)
+        longitudinal = np.where(valid[:, None], axial, proj).astype(np.float32)
+        longitudinal_method = "deprojection_incidence"
+        n_low_sens = int((~valid).sum())
+        incidence_mean = float(np.mean(inc_k))
+    else:
+        longitudinal = proj
+        longitudinal_method = "projection_approx"
+        n_low_sens = 0
+        incidence_mean = None
     # z(고도): Track H5 가 점별 고도를 주면 사용, 없으면 0(DEM 미연계). 프레임 무관.
     z = td.height[keep].astype(float) if td.height is not None else np.zeros(n_points)
     z_source = "track_height" if td.height is not None else "zero"
@@ -103,6 +160,7 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
     out = write_insar_contract(
         store, xyz=xyz, member=member, coherence=coherence, l_from_fixed=l_from_fixed,
         los=los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
+        vertical=vertical,   # 융합 연직(있으면) → 계약 필드 vertical_ds
     )
     store.write_json_attr(
         "insar",
@@ -122,6 +180,11 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
             "n_kept": int(n_points),
             "n_dropped_outside_roi": int(n_src - n_points),
             "azimuth_angle_deg": az,
+            "longitudinal_method": longitudinal_method,
+            "n_low_axial_sensitivity": n_low_sens,
+            "incidence_mean_deg": incidence_mean,
+            "heading_deg": td.heading,
+            "fusion": fusion_meta,
             "date_labels_ds": "/insar/date_labels",
             "attrs": td.attrs,
         },

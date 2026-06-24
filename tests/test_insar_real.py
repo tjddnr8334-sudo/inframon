@@ -100,6 +100,82 @@ def test_real_insar_couples_to_cv(tmp_path):
     assert labels[0] == "20200101"
 
 
+def test_los_axial_factor_and_deprojection():
+    """기하 계수 g=sinθ·cosΔ + deprojection·저민감 마스크."""
+    from inframon.insar import geo
+
+    # θ=90°(수평 LOS), Δ=0 → g=1 → axial = los
+    assert geo.los_axial_factor(90.0, 0.0) == pytest.approx(1.0)
+    # θ=30°, Δ=0 → g=0.5 → axial = los/0.5 = 2·los
+    los = np.array([[1.0, -2.0]], dtype=np.float32)
+    axial, valid = geo.los_to_axial(los, np.array([geo.los_axial_factor(30.0, 0.0)]))
+    assert valid[0] and np.allclose(axial, los / 0.5)
+    # Δ=90°(축⊥LOS) → g≈0 → 저민감(valid=False, NaN)
+    bad, vbad = geo.los_to_axial(los, np.array([geo.los_axial_factor(40.0, 90.0)]),
+                                 min_abs_factor=0.2)
+    assert not vbad[0] and np.all(np.isnan(bad))
+
+
+def test_real_insar_incidence_deprojection(tmp_path):
+    """Track 에 입사각이 있으면 종방향이 deprojection(los/(sinθ·cosΔ))으로 채워진다."""
+    cfg, cv, store, _ = _cv_and_store(tmp_path)
+    try:
+        cv.geometry.azimuth_angle = 30.0   # Δ 고정(저민감 회피)
+        roi = store.read_array(cv.roi_mask_ds)
+        inside = np.argwhere(roi > 0)
+        sel = inside[np.random.default_rng(3).choice(len(inside), 5, replace=False)]
+        lonlat = np.column_stack([sel[:, 1], sel[:, 0]]).astype(float)
+
+        track = tmp_path / "inc_track.h5"
+        los_src, _ = _make_track_h5(track, lonlat, n_dates=4)
+        with h5py.File(track, "a") as f:
+            f.create_dataset("incidenceAngle", data=np.full(5, 38.0, dtype=np.float32))
+        cfg.insar_source_h5 = str(track)
+
+        out = run_insar_real(store, cv, cfg)
+        los = store.read_array(out.los_ds)
+        lon = store.read_array(out.longitudinal_ds)
+        src = store.read_json_attr("insar", "insar_source")
+    finally:
+        store.__exit__(None, None, None)
+
+    factor = np.sin(np.deg2rad(38.0)) * np.cos(np.deg2rad(30.0))  # ≈0.533 ≥ 0.2 → 전부 유효
+    assert src["longitudinal_method"] == "deprojection_incidence"
+    assert src["n_low_axial_sensitivity"] == 0
+    assert src["incidence_mean_deg"] == pytest.approx(38.0)
+    assert np.allclose(lon, los / factor, rtol=1e-4, atol=1e-4)
+    # 투영(los·cosΔ)과는 분명히 다른 값(= sinθ 인자 반영)
+    assert not np.allclose(lon, los * np.cos(np.deg2rad(30.0)), atol=1e-3)
+
+
+def test_track_reader_reads_incidence(tmp_path):
+    """입사각 데이터셋([N])·heading attr·스칼라 attr 입사각을 인식한다."""
+    from inframon.insar.track_reader import read_track_h5
+
+    lonlat = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    p = tmp_path / "inc.h5"
+    _make_track_h5(p, lonlat, n_dates=3)
+    with h5py.File(p, "a") as f:
+        f.create_dataset("incidenceAngle", data=np.array([38.0, 39.0, 40.0], dtype=np.float32))
+        f.attrs["heading"] = -12.0
+    td = read_track_h5(p)
+    assert td.incidence is not None and np.allclose(td.incidence, [38.0, 39.0, 40.0])
+    assert td.heading == pytest.approx(-12.0)
+
+    # 스칼라 attr 입사각 → [N] 브로드캐스트
+    p2 = tmp_path / "inc2.h5"
+    _make_track_h5(p2, lonlat, n_dates=3)
+    with h5py.File(p2, "a") as f:
+        f.attrs["incidence_angle"] = 37.5
+    td2 = read_track_h5(p2)
+    assert td2.incidence is not None and np.allclose(td2.incidence, 37.5)
+
+    # 입사각 없으면 None (기존 투영 폴백 경로)
+    p3 = tmp_path / "noinc.h5"
+    _make_track_h5(p3, lonlat, n_dates=3)
+    assert read_track_h5(p3).incidence is None
+
+
 def test_real_insar_rejects_all_outside_roi(tmp_path):
     cfg, cv, store, _ = _cv_and_store(tmp_path)
     try:
@@ -108,7 +184,7 @@ def test_real_insar_rejects_all_outside_roi(tmp_path):
         track = tmp_path / "bad.h5"
         _make_track_h5(track, lonlat, n_dates=3)
         cfg.insar_source_h5 = str(track)
-        with pytest.raises(ValueError, match="ROI 안에 들어온"):
+        with pytest.raises(ValueError, match="유효 InSAR 점이"):
             run_insar_real(store, cv, cfg)
     finally:
         store.__exit__(None, None, None)
