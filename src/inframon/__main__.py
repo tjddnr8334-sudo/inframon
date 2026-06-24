@@ -23,6 +23,17 @@ def main() -> None:
             stream.reconfigure(encoding="utf-8")
         except (AttributeError, ValueError):
             pass
+
+    # 내부 플래그: 데스크톱 런처가 서버 자식 프로세스를 띄울 때 사용(사용자용 아님).
+    from .desktop import RUN_SERVER_FLAG
+
+    if RUN_SERVER_FLAG in sys.argv:
+        from .desktop import _run_streamlit_server
+
+        idx = sys.argv.index(RUN_SERVER_FLAG)
+        port = int(sys.argv[idx + 1])
+        _run_streamlit_server(port)
+        return
     p = argparse.ArgumentParser(prog="inframon", description="인프라 모니터링 통합 파이프라인 (Phase 0)")
     p.add_argument("--demo", action="store_true", help="더미 데이터로 전체 파이프라인 실행")
     p.add_argument("--out", default="data/project.h5", help="결과 HDF5 경로")
@@ -38,6 +49,8 @@ def main() -> None:
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
+    p.add_argument("--app", action="store_true",
+                   help="대시보드를 전용 데스크톱 창에 띄운다(더블클릭 실행용). pywebview 필요")
     p.add_argument("--serve", action="store_true",
                    help="--out 의 FRAM 결과를 FastAPI 로 실시간 서빙(읽기전용). --port 로 포트")
     p.add_argument("--port", type=int, default=8000, help="--serve/--serve-api 포트 (기본 8000)")
@@ -106,6 +119,11 @@ def main() -> None:
         print("  매 사이클 PINN+FRAM 재계산 → 경보 에스컬레이션 (Ctrl+C 종료)")
         serve_schedule(args.out, interval_seconds=args.schedule)
         return
+
+    if args.app:
+        from .desktop import run_app
+
+        sys.exit(run_app())
 
     if args.serve:
         try:

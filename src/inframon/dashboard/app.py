@@ -10,6 +10,8 @@ FRAM 탭은 기능 공명 다이어그램(4기능 변동 레이더 + R_ij 결합
 
 from __future__ import annotations
 
+import shutil
+import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -27,6 +29,30 @@ from inframon.dashboard.data import (
 from inframon.dashboard.data import read_arrays as read
 
 DEFAULT_H5 = "data/project.h5"
+
+
+def default_project_path() -> str:
+    """기본 project.h5 경로.
+
+    소스 실행: 작업폴더의 `data/project.h5`.
+    frozen(.exe): exe 옆 `data/project.h5`(쓰기 가능). 없으면 번들에 동봉한 데모를
+    한 번 복사해 시드 → 더블클릭 첫 실행에서 바로 채워진 대시보드가 보인다.
+    """
+    if not getattr(sys, "frozen", False):
+        return DEFAULT_H5
+    data_dir = Path(sys.executable).parent / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    target = data_dir / "project.h5"
+    if not target.exists():
+        seed = Path(getattr(sys, "_MEIPASS", "")) / "data" / "project.h5"
+        if seed.exists():
+            try:
+                shutil.copyfile(seed, target)
+            except OSError:
+                pass
+    return str(target)
+
+
 LEVEL_STYLE = {  # 경보 등급 → (스트림릿 배너 함수명, 이모지)
     "정상": ("success", "🟢"),
     "주의": ("info", "🔵"),
@@ -291,7 +317,10 @@ def slc_search_section() -> None:
 
 
 def era5_master_section() -> None:
-    """E 단계 — 선별 트랙 취득일의 ERA5(강수·습도)로 SARvey master 선정."""
+    """E 단계 — 선별 트랙 취득일의 ERA5(강수·습도·온도)로 SARvey master 선정.
+
+    강수·습도·온도가 낮은(수증기 적은) 날을 선호하며, 과도한 값은 임계로 소거할 수 있다.
+    """
     from inframon.insar.recipe import (
         load_bridge_target,
         load_track_selection,
@@ -309,10 +338,23 @@ def era5_master_section() -> None:
     st.caption(f"대상: **{target.name}** @ {target.selected_lat:.4f}, {target.selected_lon:.4f} · "
                f"트랙 {track.flight_direction} path{track.path}/frame{track.frame} · "
                f"{track.n_scenes}장 ({track.first_date}~{track.last_date})")
-    st.caption("종합: combined = baseline 기대 coherence(rho) × 건조도(강수·습도). 최대가 master.")
+    st.caption("종합: combined = baseline 기대 coherence(rho) × 대기 안정도(강수·습도·온도). "
+               "강수·습도·온도가 낮을수록(수증기 적음) 좋다. 최대가 master.")
     use_baseline = st.checkbox("수직 baseline 포함 (ASF 조회, 네트워크)", value=True, key="era5_perp")
 
-    if st.button("🌧️ master 선정 (baseline × 강수·습도)", key="btn_era5"):
+    with st.expander("🚫 과도한 강수·습도·온도 장면 소거 (임계 초과 시 master 후보 제외)"):
+        use_excl = st.checkbox("소거 사용", value=False, key="era5_excl_on")
+        e1, e2, e3, e4 = st.columns(4)
+        precip_max = e1.number_input("강수 상한 (mm)", 0.0, 500.0, 10.0, 1.0,
+                                     key="era5_pmax", disabled=not use_excl)
+        hum_max = e2.number_input("습도 상한 (%)", 0.0, 100.0, 90.0, 1.0,
+                                  key="era5_hmax", disabled=not use_excl)
+        tmax = e3.number_input("기온 상한 (°C)", -50.0, 60.0, 30.0, 1.0,
+                               key="era5_tmax", disabled=not use_excl)
+        tmin = e4.number_input("기온 하한 (°C)", -50.0, 60.0, -20.0, 1.0,
+                               key="era5_tmin", disabled=not use_excl)
+
+    if st.button("🌧️ master 선정 (baseline × 강수·습도·온도)", key="btn_era5"):
         from inframon.insar.era5_master import select_master
         perp = None
         with st.spinner("ERA5(Open-Meteo) + baseline(ASF) 조회 중…"):
@@ -326,6 +368,10 @@ def era5_master_section() -> None:
                 st.session_state["era5_master"] = select_master(
                     target.selected_lat, target.selected_lon,
                     track.scene_dates, track.scene_names, perp_baselines=perp,
+                    precip_max_mm=precip_max if use_excl else None,
+                    humidity_max_pct=hum_max if use_excl else None,
+                    temp_max_c=tmax if use_excl else None,
+                    temp_min_c=tmin if use_excl else None,
                 )
             except Exception as exc:  # noqa: BLE001
                 st.session_state.pop("era5_master", None)
@@ -334,13 +380,18 @@ def era5_master_section() -> None:
     sel = st.session_state.get("era5_master")
     if not sel:
         return
-    rows = [{"선택": "⭐" if w.date == sel.selected_master else "", "취득일": w.date,
-             "강수(mm)": round(w.precip_mm, 2), "습도(%)": round(w.humidity_pct, 1),
-             "rho(baseline)": round(w.rho, 3), "건조도": round(w.dry_score, 3),
-             "combined": round(w.combined, 3)} for w in sel.scenes]
+    rows = [{"선택": "⭐" if w.date == sel.selected_master else ("🚫" if w.excluded else ""),
+             "취득일": w.date, "강수(mm)": round(w.precip_mm, 2),
+             "습도(%)": round(w.humidity_pct, 1),
+             "기온(°C)": (round(w.temp_c, 1) if w.temp_c is not None else None),
+             "rho(baseline)": round(w.rho, 3), "대기안정도": round(w.dry_score, 3),
+             "combined": round(w.combined, 3),
+             "소거사유": w.exclude_reason} for w in sel.scenes]
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    if sel.n_excluded:
+        st.caption(f"🚫 과도한 강수/습도/온도로 **{sel.n_excluded}개** 장면 소거됨.")
     st.success(f"선정 master: **{sel.selected_master}** "
-               f"(baseline {'포함' if sel.used_baseline else '시간만'} × 건조도, "
+               f"(baseline {'포함' if sel.used_baseline else '시간만'} × 대기 안정도, "
                f"combined {max(w.combined for w in sel.scenes):.3f})")
 
     if st.button("💾 master 저장 (레시피)", key="btn_save_master"):
@@ -664,12 +715,47 @@ def tab_fram(path: str, start: date) -> None:
                          use_container_width=True)
 
 
+# ──────────────────────────── 상태 헤더 ────────────────────────────
+def status_header(path: str) -> None:
+    """상단 '한눈에 보기' — 현재 프로젝트의 경보 등급·최대 CRI·규모를 카드로.
+
+    FRAM 결과가 있으면 경보 배너 + 지표, 없으면 안내. 어떤 경우에도 페이지를
+    중단시키지 않도록 방어적으로 처리한다(데모 전/손상 파일 등).
+    """
+    if not Path(path).exists():
+        st.info("📂 아직 분석 결과가 없습니다 — 왼쪽 사이드바의 **'데모 데이터 생성'** 으로 시작하세요.")
+        return
+    try:
+        d = fram_panel_data(path)
+    except Exception:  # noqa: BLE001 — 헤더는 부가정보, 실패해도 본문 탭은 살아야 함
+        st.caption(f"📄 {path}  ·  요약을 읽을 수 없습니다(분석 진행 전일 수 있음).")
+        return
+
+    warning = d.get("warning") or {}
+    level = warning.get("level", "—")
+    banner, emoji = LEVEL_STYLE.get(level, ("info", "⚪"))
+    cri = d.get("cri")
+    cri_max = d.get("cri_max")
+    n_points = "—" if cri is None else f"{cri.shape[0]:,}"
+    n_dates = "—" if cri is None else f"{cri.shape[1]:,}"
+
+    getattr(st, banner)(f"{emoji}  현재 경보 등급 : **{level}**"
+                        + (f"   ·   {', '.join(warning['critical_members'])}"
+                           if warning.get("critical_members") else ""))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("최대 공명위험 CRI", "—" if cri_max is None else f"{cri_max:.3f}")
+    c2.metric("측정점 수 N", n_points)
+    c3.metric("취득 시점 수 M", n_dates)
+    c4.metric("프로젝트", Path(path).name)
+
+
 # ───────────────────────────────── main ───────────────────────────────
 def main() -> None:
-    st.set_page_config(page_title="인프라 모니터링", layout="wide")
-    st.title("통합 인프라 모니터링 — InSAR → PINN → FRAM")
+    st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
+    st.title("🌉 inframon — 통합 인프라 모니터링")
+    st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
 
-    path = st.sidebar.text_input("project.h5 경로", DEFAULT_H5)
+    path = st.sidebar.text_input("project.h5 경로", default_project_path())
     with st.sidebar.expander("⚙️ 데모 데이터 생성", expanded=not Path(path).exists()):
         n_points = st.number_input("측정점 수 N", 2, 2000, 200, 10)
         n_dates = st.number_input("취득 시점 수 M", 2, 240, 36, 1)
@@ -685,6 +771,9 @@ def main() -> None:
             st.success("완료 — project.h5 갱신됨")
             st.rerun()
     start = st.sidebar.date_input("기준 시작일 (날짜축용)", value=date(2023, 1, 1))
+
+    status_header(path)
+    st.divider()
 
     tabs = st.tabs(["① InSAR", "② PINN", "③ FRAM"])
     with tabs[0]:
