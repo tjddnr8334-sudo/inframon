@@ -126,8 +126,8 @@ def test_points_and_series_expose_vertical(tmp_path):
     with ProjectStore(out, mode="a") as s:        # 융합 연직 적재 + 계약 메타 연결(모사)
         ins = s.read_meta("insar", InSAROutput)
         N, M = ins.n_points, ins.n_dates
-        s.write_array("/insar/vertical",
-                      np.linspace(-5e-3, 0, N * M).reshape(N, M).astype("float32"))
+        vert = np.linspace(-5.0, 0.0, N * M).reshape(N, M).astype("float32")  # mm 규약
+        s.write_array("/insar/vertical", vert)
         ins.vertical_ds = "/insar/vertical"
         s.write_meta("insar", ins)
     with ProjectStore(out, mode="r") as s:
@@ -136,6 +136,8 @@ def test_points_and_series_expose_vertical(tmp_path):
     assert pts["has_vertical"] is True
     assert pts["points"][0]["vertical_mm"] is not None
     assert ser["vertical_mm"] is not None and len(ser["vertical_mm"]) == N_DATES
+    # mm 통과(×1000 아님): 적재값 -5..0mm 범위를 그대로 노출
+    assert all(-5.001 <= v <= 0.001 for v in ser["vertical_mm"])
 
 
 def test_points_no_vertical_by_default(tmp_path):
@@ -145,6 +147,35 @@ def test_points_no_vertical_by_default(tmp_path):
         pts = transform.points(s, date="latest", to_crs=transform.SRC_CRS)
     assert pts["has_vertical"] is False
     assert pts["points"][0]["vertical_mm"] is None
+
+
+def test_displacement_unit_is_mm_passthrough(tmp_path):
+    """회귀: 변위는 계약상 mm — transform 이 ×1000(m→mm)하면 1000배 과대보고.
+
+    end-to-end 시연에서 발견한 버그(los_ds 가 mm 인데 API 가 ×1000 → value_mm 가
+    -26412mm 처럼 부풀려짐). value_mm/los_mm/성분이 원시 mm 값을 **그대로** 반영하는지
+    (환산 없음) 못박는다. 누군가 ×1000 을 되살리면 exact 비교가 깨진다.
+    """
+    import numpy as np
+
+    from inframon.contracts.schema import InSAROutput, PINNOutput
+    out = _project(tmp_path / "p.h5")
+    with ProjectStore(out, mode="r") as s:
+        ins = s.read_meta("insar", InSAROutput)
+        los = np.asarray(s.read_array(ins.los_ds))           # [N,M] mm
+        k = ins.n_dates - 1
+        pinn = s.read_meta("pinn", PINNOutput)
+        thermal = np.asarray(s.read_array(pinn.comp_thermal_ds))
+        pts = transform.points(s, metric="los", date="latest", to_crs=transform.SRC_CRS)
+        ser = transform.point_series(s, pts["points"][0]["point_id"])
+
+    # points.value_mm 과 series.los_mm 이 원시 los_ds 값과 동일(×1000 아님)
+    assert pts["points"][0]["value_mm"] == round(float(los[0, k]), 2)
+    assert ser["los_mm"][k] == round(float(los[0, k]), 3)
+    # PINN 성분도 mm 통과
+    assert ser["components"]["thermal_mm"][k] == round(float(thermal[0, k]), 3)
+    # 교량 변위는 mm 스케일 — ×1000 이면 수천~수만으로 튄다
+    assert max(abs(p["value_mm"]) for p in pts["points"]) < 1000.0
 
 
 def test_transform_missing_point(tmp_path):

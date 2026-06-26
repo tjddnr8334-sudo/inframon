@@ -2,7 +2,8 @@
 
 규약 변환을 한곳에 모은다(설계 §5):
   - 좌표 : EPSG:5179 (xyz) → WGS84 (lat, lon)        [insar/geo.reproject]
-  - 단위 : 내부 m → API mm                           (현장 가독성)
+  - 단위 : 변위(los/longitudinal/vertical·PINN 성분)는 계약상 **이미 mm** — 그대로 통과.
+           (생산자 전부 mm: 합성 엔진·import_track_h5 의 los_mm·real_engine 융합. ×1000 금지.)
   - 날짜 : epoch days (dates_ds) → ISO "YYYY-MM-DD"
   - 부재 : 정수 라벨 → 문자열 ("deck|pier|abutment|bearing")
 
@@ -158,8 +159,8 @@ def points(store: ProjectStore, *, metric: str = "los", date: Any = "latest",
             "elev": round(float(latlon[i, 2]), 2),
             "member": member_label(member[i]),
             "coherence": round(float(coh[i]), 3),
-            "value_mm": round(float(disp[i, k]) * 1000.0, 2),
-            "vertical_mm": (round(float(vert[i, k]) * 1000.0, 2) if vert is not None else None),
+            "value_mm": round(float(disp[i, k]), 2),
+            "vertical_mm": (round(float(vert[i, k]), 2) if vert is not None else None),
             "cri": (round(float(cri[i, k]), 3) if cri is not None else None),
         })
     return {"dates": dates, "metric": metric, "date_index": k,
@@ -193,8 +194,8 @@ def point_series(store: ProjectStore, point_id: int) -> dict[str, Any]:
 
     member = store.read_array(ins.member_ds)
     dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
-    los = store.read_array(ins.los_ds)[i] * 1000.0
-    lon_disp = store.read_array(ins.longitudinal_ds)[i] * 1000.0
+    los = store.read_array(ins.los_ds)[i]
+    lon_disp = store.read_array(ins.longitudinal_ds)[i]
 
     out: dict[str, Any] = {
         "point_id": int(point_id),
@@ -210,15 +211,15 @@ def point_series(store: ProjectStore, point_id: int) -> dict[str, Any]:
     }
     # 연직 변위(asc+desc 융합 시) — 처짐·침하.
     if ins.vertical_ds:
-        out["vertical_mm"] = [round(float(v) * 1000.0, 3) for v in store.read_array(ins.vertical_ds)[i]]
+        out["vertical_mm"] = [round(float(v), 3) for v in store.read_array(ins.vertical_ds)[i]]
 
     pinn = _pinn(store)
     if pinn is not None:
         out["components"] = {
-            "thermal_mm": [round(float(v) * 1000.0, 3) for v in store.read_array(pinn.comp_thermal_ds)[i]],
-            "load_mm": [round(float(v) * 1000.0, 3) for v in store.read_array(pinn.comp_load_ds)[i]],
-            "settle_mm": [round(float(v) * 1000.0, 3) for v in store.read_array(pinn.comp_settle_ds)[i]],
-            "anomaly_mm": [round(float(v) * 1000.0, 3) for v in store.read_array(pinn.comp_anomaly_ds)[i]],
+            "thermal_mm": [round(float(v), 3) for v in store.read_array(pinn.comp_thermal_ds)[i]],
+            "load_mm": [round(float(v), 3) for v in store.read_array(pinn.comp_load_ds)[i]],
+            "settle_mm": [round(float(v), 3) for v in store.read_array(pinn.comp_settle_ds)[i]],
+            "anomaly_mm": [round(float(v), 3) for v in store.read_array(pinn.comp_anomaly_ds)[i]],
         }
         out["EI"] = float(store.read_array(pinn.EI_ds)[i])
         out["alpha"] = float(store.read_array(pinn.alpha_ds)[i])

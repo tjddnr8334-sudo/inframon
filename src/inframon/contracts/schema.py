@@ -61,12 +61,15 @@ class InSAROutput(BaseModel):
     xyz_ds: str               # [N,3] EPSG:5179
     member_ds: str            # [N] 정수 라벨 (MEMBER_TYPES 인덱스)
     coherence_ds: str         # [N]
-    l_from_fixed_ds: str      # [N] 고정단까지 거리 (열팽창용)
-    los_ds: str               # [N,M] LOS 변위
-    longitudinal_ds: str      # [N,M] 종방향 분해 변위(열팽창 등 수평 축방향)
+    l_from_fixed_ds: str      # [N] 고정단까지 거리 (m, 열팽창용)
+    # ★ 변위 단위 규약: los/longitudinal/vertical 모두 **밀리미터(mm)**.
+    #   생산자 전부 mm(합성 엔진·import_track_h5 의 los_mm·real_engine 융합)이고
+    #   소비자(PINN 성분·Bmaps API)도 mm 로 다룬다 — 추가 환산(×1000) 금지.
+    los_ds: str               # [N,M] LOS 변위 (mm)
+    longitudinal_ds: str      # [N,M] 종방향 분해 변위 (mm, 열팽창 등 수평 축방향)
     dates_ds: str             # [M] (epoch days)
     temporal_coherence_ds: str  # [N]
-    # 연직 변위 [N,M] — asc+desc 융합 시에만 채워진다(처짐·침하). 단일 궤도면 None.
+    # 연직 변위 [N,M] (mm) — asc+desc 융합 시에만 채워진다(처짐·침하). 단일 궤도면 None.
     # PINN 이 있으면 처짐/침하 분리에 쓰고, Bmaps 가 연직 레이어로 노출한다.
     vertical_ds: str | None = None
 
