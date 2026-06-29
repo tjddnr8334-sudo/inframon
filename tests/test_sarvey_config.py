@@ -149,3 +149,14 @@ def test_manifest_carries_water_mask(tmp_path):
     assert man["mask"]["water_mask"]["context"] == "river"
     assert man["mask"]["deck_buffer_m"] == 30
     assert man["bridge_profile"]["class_ko"] == "거더교"
+
+
+def test_manifest_carries_insar_conditions(tmp_path):
+    """번들 매니페스트가 교량 InSAR 신뢰성 조건 리포트를 담는다(처리 전 준비도)."""
+    _seed_recipes(tmp_path)
+    paths = write_sarvey_bundle(tmp_path)
+    man = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    cond = man["bridge_insar_conditions"]
+    assert "ready" in cond and "counts" in cond
+    ids = {c["id"] for c in cond["conditions"]}
+    assert {"G1", "G2", "T1", "S1"} <= ids       # 기하·시간·산란체 조건 포함

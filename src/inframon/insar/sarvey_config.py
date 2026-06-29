@@ -74,6 +74,8 @@ def build_processing_manifest(b: RecipeBundle) -> dict:
     b.require()
     t, trk, crit, mst = b.target, b.track, b.criteria, b.master
     prof = profile_for(t)
+    from .bridge_conditions import conditions_report
+    conditions = conditions_report(t, trk, crit, prof)
     return {
         "_README": "ISCE2 stackSentinel + MiaplPy 스택 생성 파라미터. SARvey 실행 전 단계.",
         "aoi": {
@@ -91,6 +93,8 @@ def build_processing_manifest(b: RecipeBundle) -> dict:
             "class": prof.bridge_class, "class_ko": prof.bridge_class_ko,
             "water_context": prof.water_context, "scale": prof.scale,
         },
+        # ── 교량 InSAR 신뢰성 조건(기하·시간샘플링·산란체·처리) — 처리 전 준비도 게이팅 ──
+        "bridge_insar_conditions": conditions,
         "mask": {
             "water_mask": prof.water_mask,
             "deck_buffer_m": prof.deck_buffer_m,
