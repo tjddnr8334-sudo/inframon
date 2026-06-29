@@ -48,7 +48,13 @@ def main() -> None:
                    help="--out 의 project.h5 를 KAIA 변위 CSV(점×시점 롱포맷)로 내보내고 종료. "
                         "--bridge-id 로 교량ID, --srs 로 좌표계 지정.")
     p.add_argument("--bridge-id", default="", metavar="ID",
-                   help="--export-csv 의 bridge_id 컬럼값(Bmaps 교량관리번호). 기본 빈값.")
+                   help="--export-csv/--export-vlm 의 bridge_id(Bmaps 교량관리번호). 기본 빈값.")
+    p.add_argument("--export-vlm", default=None, metavar="DIR",
+                   help="--out 의 project.h5 를 VLM 입력 패키지 폴더(manifest·csv·summary·"
+                        "narrative·figures)로 내보내고 종료. --bridge-id/--srs/--zip/--no-figures.")
+    p.add_argument("--zip", action="store_true", help="--export-vlm 패키지를 .zip 으로도 묶는다.")
+    p.add_argument("--no-figures", action="store_true",
+                   help="--export-vlm 에서 figures PNG 생성을 생략(matplotlib 불필요).")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
@@ -311,6 +317,33 @@ def main() -> None:
         print(f"  행/측점/시점    : {summ['rows']} 행 (N={summ['n_points']} × M={summ['n_dates']})")
         print(f"  포함 산출물     : 연직={'O' if summ['has_vertical'] else 'X'} · "
               f"PINN(EI/α)={'O' if summ['has_pinn'] else 'X'} · CRI={'O' if summ['has_fram'] else 'X'}")
+        print("=" * 56)
+        return
+
+    if args.export_vlm:
+        from .vlm_package import export_vlm_package
+
+        srs = getattr(args, "srs", "wgs84")
+        to_crs = "EPSG:5179" if srs == "5179" else "EPSG:4326"
+        try:
+            r = export_vlm_package(args.out, args.export_vlm, bridge_id=args.bridge_id,
+                                   to_crs=to_crs, with_figures=not args.no_figures,
+                                   zip_it=args.zip)
+        except FileNotFoundError:
+            p.error(f"project.h5 가 없습니다: {args.out} (먼저 --demo 등으로 생성하세요)")
+        ch = r["channels"]
+        print("=" * 56)
+        print("  VLM 입력 패키지 내보내기 완료")
+        print("=" * 56)
+        print(f"  입력 project.h5 : {args.out}")
+        print(f"  패키지 폴더     : {r['dir']}")
+        if r["zip"]:
+            print(f"  ZIP            : {r['zip']}")
+        print(f"  파일            : {', '.join(r['files'][:4])}"
+              + (f" (+figures {len(r['figures'])})" if r["figures"] else ""))
+        print(f"  변위 CSV        : {r['rows']} 행 (N={r['n_points']} × M={r['n_dates']})")
+        print(f"  채널            : 연직={'O' if ch['vertical_fused'] else 'X'} · "
+              f"PINN={'O' if ch['pinn'] else 'X'} · CRI(참고)={'O' if ch['fram_cri'] else 'X'}")
         print("=" * 56)
         return
 
