@@ -109,6 +109,39 @@ def test_figures_rendered_when_enabled(tmp_path):
     assert len(r["figures"]) == 4
 
 
+def test_insar_only_project_graceful(tmp_path):
+    """InSAR 만(PINN/FRAM 없음, --import-track-h5 산출) 프로젝트도 우아하게 패키징.
+
+    pinn/risk_reference=None, 핫스팟 채널=los, figures 는 PINN/CRI 의존분 생략(2종).
+    """
+    pytest.importorskip("matplotlib")
+    import h5py
+
+    from inframon.contracts.io import ProjectStore
+    from inframon.insar.track_reader import import_track_h5
+
+    # 최소 Track H5 → InSAR 만 적재
+    N, M = 10, 6
+    track = tmp_path / "t.h5"
+    with h5py.File(track, "w") as f:
+        f.create_dataset("pixel_lonlat", data=np.random.default_rng(0).random((N, 2)) * 5 + 1)
+        f.create_dataset("epochs", data=np.array([20240101 + i for i in range(M)], dtype=np.int64))
+        f.create_dataset("los_mm", data=np.random.default_rng(1).normal(0, 3, (N, M)).astype("float32"))
+        f.create_dataset("coh", data=np.full(N, 0.8, "float32"))
+    out = tmp_path / "insar_only.h5"
+    with ProjectStore(out, mode="a") as s:
+        import_track_h5(s, track)
+
+    r = export_vlm_package(out, tmp_path / "pkg", bridge_id="IO", with_figures=True)
+    summ = json.loads((tmp_path / "pkg" / "summary.json").read_text(encoding="utf-8"))
+    assert summ["pinn"] is None and summ["risk_reference"] is None
+    assert summ["channels_present"] == {"vertical_fused": False, "pinn": False, "fram_cri": False}
+    assert summ["settlement_hotspots"][0]["channel"] == "los"
+    # CRI/PINN 없으니 figures 는 변위맵·핫스팟시계열 2종만
+    figs = {p.name for p in (tmp_path / "pkg" / "figures").glob("*.png")}
+    assert figs == {"displacement_map.png", "hotspot_timeseries.png"}
+
+
 def test_cli_export_vlm_smoke(tmp_path):
     import subprocess
     import sys
