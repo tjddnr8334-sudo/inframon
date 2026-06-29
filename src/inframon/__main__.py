@@ -44,6 +44,9 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--insar-conditions", default=None, metavar="RECIPE_DIR",
+                   help="교량 InSAR 신뢰성 조건(기하·시간샘플링·산란체·처리)을 레시피로 평가 후 종료. "
+                        "SARvey 교량 맞춤의 전제조건 게이팅(--check-track 의 입력측 짝).")
     p.add_argument("--export-csv", default=None, metavar="CSV",
                    help="--out 의 project.h5 를 KAIA 변위 CSV(점×시점 롱포맷)로 내보내고 종료. "
                         "--bridge-id 로 교량ID, --srs 로 좌표계 지정.")
@@ -299,6 +302,39 @@ def main() -> None:
         print(f"  판정            : {'✅ 투입 가능' if rep.is_ready else '❌ 투입 불가'}")
         print("=" * 56)
         sys.exit(0 if rep.is_ready else 1)
+
+    if args.insar_conditions:
+        from .insar.bridge_conditions import conditions_report
+        from .insar.bridge_profile import profile_for
+        from .insar.sarvey_config import RecipeBundle
+
+        b = RecipeBundle(args.insar_conditions)
+        if b.target is None:
+            p.error(f"bridge_target.json 이 없습니다: {args.insar_conditions} (교량 타깃을 먼저 저장)")
+        prof = profile_for(b.target)
+        rep = conditions_report(b.target, b.track, b.criteria, prof)
+        _ICON = {"pass": "✅", "warn": "⚠️ ", "fail": "❌", "unknown": "❔"}
+        print("=" * 64)
+        print(f"  교량 InSAR 신뢰성 조건 — {b.target.name_ko or b.target.name}"
+              f" ({prof.bridge_class_ko}·{prof.scale})")
+        print("=" * 64)
+        cat_ko = {"geometry": "기하", "temporal": "시간샘플링", "scatterer": "산란체",
+                  "processing": "처리", "atmosphere": "대기"}
+        last_cat = None
+        for c in rep["conditions"]:
+            if c["category"] != last_cat:
+                print(f"\n[{cat_ko.get(c['category'], c['category'])}]")
+                last_cat = c["category"]
+            print(f"  {_ICON[c['status']]} {c['id']} {c['title']} — {c['detail']}")
+            if c["status"] in ("warn", "fail"):
+                print(f"       → {c['fix']}")
+        cnt = rep["counts"]
+        print("\n" + "-" * 64)
+        print(f"  집계: ✅{cnt['pass']} ⚠️{cnt['warn']} ❌{cnt['fail']} ❔{cnt['unknown']}"
+              f"  (조건 {rep['n_conditions']}개)")
+        print(f"  게이트: {'✅ 진행 가능' if rep['ready'] else '❌ 차단(blocker)'}")
+        print("=" * 64)
+        sys.exit(0 if rep["ready"] else 1)
 
     if args.export_csv:
         from .export import export_csv
