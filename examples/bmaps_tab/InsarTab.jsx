@@ -47,6 +47,17 @@ export default function InsarTab({ apiBase, bridgeId, renderMap }) {
     api.series(bridgeId, pointId).then(setSeries).catch((e) => setError(e.message));
   }, [api, bridgeId]);
 
+  // KAIA 핸드오프: VLM 패키지 ZIP 을 Blob 으로 받아 브라우저 다운로드 트리거.
+  const downloadVlm = useCallback(async () => {
+    try {
+      const blob = await api.vlmPackageBlob(bridgeId, { figures: true });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${bridgeId}_vlm_package.zip`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e) { setError(e.message); }
+  }, [api, bridgeId]);
+
   if (!bridgeId) return <div>교량을 선택하세요.</div>;
   const level = summary?.warning?.level ?? "—";
 
@@ -76,6 +87,12 @@ export default function InsarTab({ apiBase, bridgeId, renderMap }) {
             <span>{cri.dates[dateIndex]}</span>
           </>
         )}
+        {/* KAIA 핸드오프 다운로드 — InSAR+PINN 통일 데이터 → VLM 입력 */}
+        <span style={{ flex: 1 }} />
+        <a href={api.exportCsvUrl(bridgeId)} download
+           style={{ fontSize: 13 }}>변위 CSV</a>
+        <button type="button" onClick={downloadVlm}
+          style={{ fontSize: 13 }}>VLM 패키지(.zip)</button>
       </div>
 
       {/* 지도 — Bmaps 기존 GIS 라이브러리에 위임 */}

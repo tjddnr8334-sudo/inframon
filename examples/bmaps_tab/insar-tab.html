@@ -46,6 +46,9 @@
   </select>
   시점: <input type="range" id="dateSlider" min="0" value="0" step="1" />
   <span id="dateLabel" class="meta"></span>
+  <span style="flex:1"></span>
+  <a id="csvLink" href="#" download>변위 CSV</a>
+  <button id="vlmBtn" type="button">VLM 패키지(.zip)</button>
 </div>
 
 <main>
@@ -98,6 +101,17 @@ async function init() {
 async function loadBridge(bridgeId) {
   showErr(null);
   state.bridgeId = bridgeId;
+  // KAIA 핸드오프 다운로드 링크/버튼을 현재 교량에 맞춘다.
+  $("csvLink").href = api.exportCsvUrl(bridgeId);
+  $("vlmBtn").onclick = async () => {
+    try {
+      const blob = await api.vlmPackageBlob(bridgeId, { figures: true });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${bridgeId}_vlm_package.zip`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { showErr(e); }
+  };
   try {
     const [summary, cri] = await Promise.all([api.summary(bridgeId), api.cri(bridgeId)]);
     // 헤더 요약 + 경보 배지
