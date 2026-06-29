@@ -44,6 +44,11 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--export-csv", default=None, metavar="CSV",
+                   help="--out 의 project.h5 를 KAIA 변위 CSV(점×시점 롱포맷)로 내보내고 종료. "
+                        "--bridge-id 로 교량ID, --srs 로 좌표계 지정.")
+    p.add_argument("--bridge-id", default="", metavar="ID",
+                   help="--export-csv 의 bridge_id 컬럼값(Bmaps 교량관리번호). 기본 빈값.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
@@ -288,6 +293,26 @@ def main() -> None:
         print(f"  판정            : {'✅ 투입 가능' if rep.is_ready else '❌ 투입 불가'}")
         print("=" * 56)
         sys.exit(0 if rep.is_ready else 1)
+
+    if args.export_csv:
+        from .export import export_csv
+
+        srs = getattr(args, "srs", "wgs84")
+        to_crs = "EPSG:5179" if srs == "5179" else "EPSG:4326"
+        try:
+            summ = export_csv(args.out, args.export_csv, bridge_id=args.bridge_id, to_crs=to_crs)
+        except FileNotFoundError:
+            p.error(f"project.h5 가 없습니다: {args.out} (먼저 --demo 등으로 생성하세요)")
+        print("=" * 56)
+        print("  KAIA 변위 CSV 내보내기 완료")
+        print("=" * 56)
+        print(f"  입력 project.h5 : {args.out}")
+        print(f"  결과 CSV        : {summ['csv']}")
+        print(f"  행/측점/시점    : {summ['rows']} 행 (N={summ['n_points']} × M={summ['n_dates']})")
+        print(f"  포함 산출물     : 연직={'O' if summ['has_vertical'] else 'X'} · "
+              f"PINN(EI/α)={'O' if summ['has_pinn'] else 'X'} · CRI={'O' if summ['has_fram'] else 'X'}")
+        print("=" * 56)
+        return
 
     if args.import_track_h5:
         from .contracts.io import ProjectStore
