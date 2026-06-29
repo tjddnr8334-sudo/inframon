@@ -9,6 +9,8 @@
   GET /bridges/{bridge_id}/insar/points/{point_id}/series
   GET /bridges/{bridge_id}/insar/cri
   GET /bridges/{bridge_id}/insar/function-network
+  GET /bridges/{bridge_id}/insar/export.csv            (KAIA 변위 CSV 다운로드)
+  GET /bridges/{bridge_id}/insar/vlm-package.zip       (VLM 입력 패키지 ZIP, ?figures=)
 
 오류 규약: 404=교량/산출물 없음, 409=schema_version 불일치, 503=project.h5 읽기 실패.
 매 요청마다 project.h5 를 새로 읽어 최신 상태 반영(파이프라인 갱신 즉시 반영).
@@ -32,7 +34,7 @@ def create_app(registry: BridgeRegistry, *, to_crs: str = WGS84,
     """FastAPI 앱 생성. to_crs=transform.SRC_CRS 면 좌표 재투영 생략(Bmaps 가 5179 타일일 때)."""
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, Response
 
     app = FastAPI(title="inframon — Bmaps InSAR 변위 분석 API", version="1.0")
     app.add_middleware(
@@ -150,6 +152,43 @@ def create_app(registry: BridgeRegistry, *, to_crs: str = WGS84,
     def function_network(bridge_id: str, k: int | None = None) -> dict[str, Any]:
         with _store(bridge_id) as s:
             return transform.function_network(s, k)
+
+    # ── KAIA 핸드오프: 변위 CSV / VLM 입력 패키지 다운로드 ──
+    @app.get("/api/v1/bridges/{bridge_id}/insar/export.csv")
+    def export_csv_endpoint(bridge_id: str):
+        import csv
+        import io
+
+        from .. import export
+        e = _entry(bridge_id)
+        with _store(bridge_id) as s:
+            rows = export.build_rows(s, bridge_id=e.bridge_id, to_crs=to_crs)
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=export.COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+        return Response(
+            content=buf.getvalue(), media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{bridge_id}_displacement.csv"'},
+        )
+
+    @app.get("/api/v1/bridges/{bridge_id}/insar/vlm-package.zip")
+    def vlm_package_endpoint(bridge_id: str, figures: bool = True):
+        import tempfile
+        from pathlib import Path
+
+        from ..vlm_package import export_vlm_package
+        e = _entry(bridge_id)
+        if not e.project_h5.exists():
+            raise HTTPException(status_code=404, detail=f"project.h5 없음: {e.project_h5}")
+        with tempfile.TemporaryDirectory() as td:
+            r = export_vlm_package(e.project_h5, Path(td) / "pkg", bridge_id=e.bridge_id,
+                                   to_crs=to_crs, with_figures=figures, zip_it=True)
+            data = Path(r["zip"]).read_bytes()
+        return Response(
+            content=data, media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{bridge_id}_vlm_package.zip"'},
+        )
 
     return app
 

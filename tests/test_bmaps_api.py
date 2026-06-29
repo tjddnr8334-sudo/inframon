@@ -225,6 +225,40 @@ def test_endpoint_errors(tmp_path):
     assert client.get("/api/v1/bridges/B1/insar/points?metric=bogus").status_code == 400
 
 
+def test_export_csv_endpoint(tmp_path):
+    """변위 CSV 다운로드 — text/csv, attachment, KAIA 컬럼 헤더."""
+    import csv
+    import io
+
+    from inframon.export import COLUMNS
+    client = _client(tmp_path)
+    r = client.get("/api/v1/bridges/B1/insar/export.csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    assert list(rows[0].keys()) == COLUMNS
+    assert rows[0]["bridge_id"] == "B1"
+    # 없는 교량 → 404
+    assert client.get("/api/v1/bridges/NOPE/insar/export.csv").status_code == 404
+
+
+def test_vlm_package_endpoint(tmp_path):
+    """VLM 패키지 ZIP 다운로드 — application/zip, manifest/summary 포함."""
+    import io
+    import zipfile
+
+    client = _client(tmp_path)
+    r = client.get("/api/v1/bridges/B1/insar/vlm-package.zip?figures=false")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+        names = zf.namelist()
+    assert "manifest.json" in names and "summary.json" in names and "displacement.csv" in names
+    # 없는 교량 → 404
+    assert client.get("/api/v1/bridges/NOPE/insar/vlm-package.zip").status_code == 404
+
+
 def test_error_envelope_is_uniform(tmp_path):
     """모든 오류가 문서 §3 규약 {"error":{"code","message"}} 로 통일(detail 형 금지)."""
     client = _client(tmp_path)

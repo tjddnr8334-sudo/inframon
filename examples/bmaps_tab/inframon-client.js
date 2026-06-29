@@ -74,6 +74,25 @@ export class InframonClient {
     const q = k == null ? "" : `?k=${k}`;
     return this._get(`/bridges/${encodeURIComponent(bridgeId)}/insar/function-network${q}`);
   }
+
+  // ── KAIA 핸드오프 다운로드(InSAR+PINN 통일 데이터 → VLM 입력) ──
+
+  /** 변위 CSV(점×시점) URL. <a download> 또는 window.open 으로 바로 받게 한다. */
+  exportCsvUrl(bridgeId) {
+    return `${this.base}/bridges/${encodeURIComponent(bridgeId)}/insar/export.csv`;
+  }
+
+  /** VLM 입력 패키지(ZIP) URL. figures=false 면 그림 없이 가볍게. */
+  vlmPackageUrl(bridgeId, { figures = true } = {}) {
+    return `${this.base}/bridges/${encodeURIComponent(bridgeId)}/insar/vlm-package.zip?figures=${figures}`;
+  }
+
+  /** ZIP 패키지를 Blob 으로 받아온다(브라우저 다운로드 트리거용). */
+  async vlmPackageBlob(bridgeId, { figures = true } = {}) {
+    const res = await fetch(this.vlmPackageUrl(bridgeId, { figures }));
+    if (!res.ok) throw new InframonApiError(res.status, "http_error", res.statusText);
+    return res.blob();
+  }
 }
 
 // ── 표시용 헬퍼(탭 공통 색/스케일) ─────────────────────────────

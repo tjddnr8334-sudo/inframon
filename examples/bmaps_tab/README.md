@@ -109,5 +109,10 @@ python -m inframon --serve-api --registry data/bridge_registry.json `
 | GET | `/bridges/{id}/insar/points/{pid}/series` | 측점 시계열(변위·성분·CRI·EI) |
 | GET | `/bridges/{id}/insar/cri` | CRI 추세(시점별 최대) |
 | GET | `/bridges/{id}/insar/function-network` | 4기능 공명·결합행렬 |
+| GET | `/bridges/{id}/insar/export.csv` | KAIA 변위 CSV(점×시점, text/csv 다운로드) |
+| GET | `/bridges/{id}/insar/vlm-package.zip?figures=true\|false` | VLM 입력 패키지(manifest·csv·summary·narrative·figures) ZIP |
 
 오류: 404(교량/산출물 없음) · 409(schema 불일치) · 400(파라미터 오류) · 503(파일 읽기 실패).
+
+> KAIA 핸드오프: `export.csv`/`vlm-package.zip` 은 InSAR 수직변위 + PINN 가상센싱을 단위통일
+> 패키지로 내려 VLM(타 팀) 입력으로 쓴다. 탭에 "CSV/VLM 패키지 다운로드" 버튼으로 연결.
