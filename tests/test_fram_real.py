@@ -99,3 +99,83 @@ def test_pipeline_pinn_real_fram_real(tmp_path):
                        n_points=20, n_dates=8, pinn_epochs=50)
     assert isinstance(fram, FRAMOutput)
     assert 0.0 <= fram.cri_global_max <= 1.0
+
+
+def _inject_vertical_settlement(tmp_path):
+    """stub 프로젝트에 '전 점 동일 종축 열팽창 + 한 클러스터 연직 가속 침하'를 주입.
+
+    종축(longitudinal)은 균일 열팽창이라 종축항만으로는 침하 클러스터가 안 드러나고,
+    침하는 연직(vertical_ds)에만 실린다 → FRAM 이 vertical 을 소비할 때만 국소화돼야 한다.
+    asc+desc 융합 결과(longitudinal=H, vertical=U)를 그대로 모사. (out, cfg, cluster) 반환.
+    """
+    from inframon.contracts.schema import InSAROutput
+    from inframon.orchestrator.pipeline import run_pipeline
+    cfg = PipelineConfig(n_points=60, n_dates=20,
+                         engines={"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    out = tmp_path / "p.h5"
+    run_pipeline(out, cfg)
+    rng = np.random.default_rng(3)
+    with ProjectStore(out, mode="a") as s:
+        ins = s.read_meta("insar", InSAROutput)
+        N, M = ins.n_points, ins.n_dates
+        dates = np.asarray(s.read_array(ins.dates_ds), float)
+        t = (dates - dates[0]) / max(dates[-1] - dates[0], 1.0)        # 0..1
+        cluster = np.zeros(N, bool)
+        cluster[N // 2 - 6 : N // 2 + 6] = True
+        # 종축: 전 점 공통 열팽창(계절) + 소량 점별 노이즈 → 균일(비국소)
+        lon = 3.0 * np.sin(2 * np.pi * t)[None, :] + rng.normal(0, 0.2, (N, M))
+        # 연직: 클러스터만 가속 침하(mm)
+        vert = np.zeros((N, M), np.float32)
+        vert[cluster] = (-30.0 * t**2).astype(np.float32)[None, :]
+        s.write_array(ins.longitudinal_ds, lon.astype(np.float32))
+        s.write_array("/insar/vertical", vert)
+        ins.vertical_ds = "/insar/vertical"
+        s.write_meta("insar", ins)
+    return out, cfg, cluster
+
+
+def _fram_cri(out, cfg, use_vertical):
+    from inframon.contracts.schema import InSAROutput, PINNOutput
+    cfg.fram_use_vertical = use_vertical
+    with ProjectStore(out, mode="a") as s:
+        ins = s.read_meta("insar", InSAROutput)
+        pinn = s.read_meta("pinn", PINNOutput)
+        run_fram_real(s, ins, pinn, cfg)
+        cri = np.asarray(s.read_array("/fram/CRI"))[:, -1]
+        vert = np.abs(np.asarray(s.read_array(ins.vertical_ds))[:, -1]) if ins.vertical_ds else None
+        used = s.read_json_attr("fram", "vertical_term")["used"]
+    return cri, vert, used
+
+
+def test_fram_consumes_vertical_localizes_settlement(tmp_path):
+    """opt-in 연직 융합: vertical_ds 가 있으면 FRAM 이 침하 클러스터에 CRI 를 집중시킨다.
+
+    국소화 진단(단일궤도 deprojection·강계절이 종축 CRI 의 침하 국소화를 흐림)에 대한 보완.
+    실 융합 데모에서 '침하 vs CRI 상관 -0.08 → +0.52' 로 확인된 효과를 못박는다.
+    """
+    out, cfg, cluster = _inject_vertical_settlement(tmp_path)
+    cri_off, vert, used_off = _fram_cri(out, cfg, use_vertical=False)
+    cri_on, _, used_on = _fram_cri(out, cfg, use_vertical=True)
+
+    assert used_off is False and used_on is True               # 관측 플래그
+    r_off = np.corrcoef(vert, cri_off)[0, 1]
+    r_on = np.corrcoef(vert, cri_on)[0, 1]
+    # 핵심: 침하(|U|)와 CRI 의 상관이 연직 소비로 뚜렷이 개선
+    assert r_on > r_off + 0.2 and r_on > 0.3
+    # 국소화 대비(클러스터−비클러스터)가 연직 소비로 개선
+    contrast_off = cri_off[cluster].mean() - cri_off[~cluster].mean()
+    contrast_on = cri_on[cluster].mean() - cri_on[~cluster].mean()
+    assert contrast_on > contrast_off + 0.03
+    # 연직은 침하 클러스터를 비클러스터보다 더 많이 올린다(경계점은 공간전파로 약간 오름)
+    assert (cri_on[cluster] - cri_off[cluster]).mean() > (cri_on[~cluster] - cri_off[~cluster]).mean()
+
+
+def test_fram_vertical_absent_is_identical(tmp_path):
+    """vertical_ds 없으면 fram_use_vertical 켜고 끔이 CRI 에 무영향(Morandi·골든 게이트 안전)."""
+    _build(tmp_path, {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    cfg = PipelineConfig(engines={"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    out = tmp_path / "p.h5"
+    cri_off, vert, used = _fram_cri(out, cfg, use_vertical=False)
+    cri_on, _, _ = _fram_cri(out, cfg, use_vertical=True)
+    assert used is False and vert is None                       # 적재된 연직 없음
+    assert np.array_equal(cri_off, cri_on)                      # 완전 동일

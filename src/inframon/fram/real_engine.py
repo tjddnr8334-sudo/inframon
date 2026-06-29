@@ -151,7 +151,12 @@ def _forecast_residual(series: np.ndarray, dates: np.ndarray, win: int = 6) -> n
 def run_fram_real(
     store: ProjectStore, insar: InSAROutput, pinn: PINNOutput, cfg: PipelineConfig
 ) -> FRAMOutput:
-    los = store.read_array(insar.longitudinal_ds)            # [N,M] mm
+    los = store.read_array(insar.longitudinal_ds)            # [N,M] mm (종축)
+    # (opt-in) asc+desc 융합 연직(vertical_ds, mm)이 있으면 연직 침하를 CRI 에 직접 반영.
+    # 단일궤도 deprojection 은 수평 종축을 가정해 연직 침하 패턴을 왜곡하고, 종축항만으로는
+    # 연직우세 손상(침하·처짐)을 못 짚는다. vertical_ds 없으면 None → 경로 불변(게이트 안전).
+    use_vert = bool(getattr(cfg, "fram_use_vertical", True)) and insar.vertical_ds is not None
+    vert = store.read_array(insar.vertical_ds) if use_vert else None
     xyz = store.read_array(insar.xyz_ds)
     member = store.read_array(insar.member_ds)
     dates = store.read_array(insar.dates_ds).astype(float)   # [M] days
@@ -196,6 +201,17 @@ def run_fram_real(
 
     # [공명4] 예측 발산 — 롤링 선형예측 잔차(관측이 선형 외삽에서 발산하는 정도) 절대 보정
     R_div = _sat(_forecast_residual(los, dates, win), fore_scale)
+
+    # [opt-in] 연직 융합 — 연직 침하의 속도/공간기울기/발산을 동일 절대 스케일로 평가해
+    # 종축항과 max 결합(점이 종축·연직 어느 쪽으로든 위험하면 포착). 가중치·[0,1] 스케일
+    # 불변이라 보수적. vertical_ds 없으면 이 블록은 건너뜀.
+    if vert is not None:
+        rate_v = ddt(vert)
+        A = np.maximum(A, _sat(np.abs(rate_v), vel_scale))
+        sp_v = np.zeros_like(rate_v)
+        sp_v[order] = np.abs(np.gradient(rate_v[order], axis=0))
+        R_spatial = np.maximum(R_spatial, _sat(sp_v, grad_scale))
+        R_div = np.maximum(R_div, _sat(_forecast_residual(vert, dates, win), fore_scale))
 
     # 시스템 수준 공명 행렬 [4,4,M] + 함수망 공명 강도 [M] (N-K 결합)
     R_ij = _windowed_corr(V_func, win)
@@ -253,6 +269,10 @@ def run_fram_real(
     from .network import function_network
     store.write_json_attr("fram", "function_network",
                           function_network(R_ij, list(FRAM_FUNCTIONS)))
+    # 관측: 연직 융합이 CRI 에 반영됐는지(운영자가 경보 근거를 추적할 수 있게).
+    store.write_json_attr("fram", "vertical_term",
+                          {"used": vert is not None,
+                           "source": insar.vertical_ds if vert is not None else None})
 
     out = FRAMOutput(
         n_points=N, n_dates=M,

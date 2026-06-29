@@ -33,6 +33,11 @@ class PipelineConfig:
     # 경보 임계값 (정상/주의/경고/위험)
     cri_thresholds: tuple[float, float, float] = (0.3, 0.6, 0.85)
 
+    # FRAM 이 asc+desc 융합 연직(InSAROutput.vertical_ds)을 CRI 에 반영할지.
+    # 연직 침하 속도/공간기울기/발산을 종축항과 max 결합 → 연직우세 손상(침하·처짐) 직접 포착.
+    # vertical_ds 가 없으면(단일궤도·합성·Morandi) 무영향 → 켜도 검증 게이트 안전.
+    fram_use_vertical: bool = True
+
     # 엔진별 구현 선택 (핫스왑 스위치). 기본 전부 "stub".
     engines: dict[str, str] = field(default_factory=_default_engines)
 
