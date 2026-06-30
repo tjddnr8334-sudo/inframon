@@ -17,8 +17,33 @@ A~E 선별 → 레시피 4종  ──복사──▶  10 다운로드 → 20 ISC
 ```
 
 레시피 번들(`data/insar_recipe/`)에서 F 가 쓰는 두 파일:
-- **`processing_manifest.json`** — 상류 스택 생성용(궤도방향·track·frame·VV·**reference_date=master**·장면목록·bbox·공간 baseline)
-- **`sarvey_config.json`** — SARvey MTI 시계열 추정 파라미터(분석 기간·시간 baseline 네트워크 등)
+- **`processing_manifest.json`** — 상류 스택 생성용(궤도방향·track·frame·VV·**reference_date=master**·장면목록·bbox·공간 baseline). **`bridge_insar_conditions`**(신뢰성 조건 14개 게이팅)도 동봉.
+- **`sarvey_config.json`** — SARvey MTI 시계열 추정 파라미터(분석 기간·시간 baseline 네트워크 등). `consistency_check`·`densification`·`dem_error_bound` 등은 **교량 형식별로 유도**(`bridge_profile`).
+
+## 교량 맞춤 — 처리 전 조건 점검 (Windows, `--insar-conditions`)
+
+SARvey 를 교량에 완벽히 맞추려면 파라미터 유도(`bridge_profile`)만으론 부족하고, **궤도-축선
+기하·시간 샘플링·산란체·처리** 조건이 먼저 성립해야 한다. 번들 생성 전에 게이팅한다:
+
+```bash
+python -m inframon --insar-conditions data/insar_recipe   # ready=0 / not=1
+```
+
+- **궤도-축선 기하(G1)**: 단일궤도 종축(열팽창) 민감도 `g = sinθ·|cos(축선−look)|`. 축선은 **OSM
+  way 절점 폴리라인 PCA**로 정밀 산정(bbox 종횡비 근사보다 정확 — 대각 축도 잡음). 실 정자교
+  예: 축선 29° → 상승궤도 g=0.41(관측 가능). 축선이 LOS 에 수직이면 g↓ → 반대 궤도 권고.
+- **연직 분리(G2)**: 처짐·침하(연직)는 asc+desc 둘 다 있어야 분리. 단일궤도면 종축만.
+- **시간 샘플링**: 기간 ≥ 1년(계절/열팽창 분리)·장면 ≥ 25(SBAS)·월 커버리지·재방문·공간 baseline.
+
+### 형식별 SARvey 세분 (`bridge_profile`)
+
+| 형식 | P1 | dem_error | layover | 특이 |
+|---|---|---|---|---|
+| 거더 | 0.85 | 100m | low | 기준 |
+| 트러스 | 0.88 | 150m | high | 격자 레이오버·다중반사 → 엄격·고도분리 |
+| 아치 | 0.85 | 120m | moderate | 리브/데크 분리, 받침부 기준 |
+| 가동/캔틸레버 | 0.85 | 120m | moderate | 신축이음 불연속 → 세그먼트 |
+| 사장/현수 | 0.90 | 150m | high | 주탑·케이블 상부구조 레이오버 |
 
 ## 0. 사전 준비
 
