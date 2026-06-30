@@ -69,6 +69,21 @@ def test_summary_digest_structure(tmp_path):
     assert len(summ["pinn"]["natural_frequencies_hz"]) >= 1
 
 
+def test_observational_caveats_reflect_channels(tmp_path):
+    """관측 한계: 단일궤도는 '연직 직접 측정 안 됨' 경고, 융합은 '연직 분리됨' (VLM 과대해석 방지)."""
+    out_s = _project(tmp_path / "s", with_vertical=False)
+    out_v = _project(tmp_path / "v", with_vertical=True)
+    with ProjectStore(out_s, mode="r") as s:
+        cav_s = build_summary(s, bridge_id="B")["observational_caveats"]
+    with ProjectStore(out_v, mode="r") as s:
+        cav_v = build_summary(s, bridge_id="B")["observational_caveats"]
+    assert any("직접 측정되지 않음" in c for c in cav_s)      # 단일궤도 경고
+    assert any("연직 변위" in c and "분리" in c for c in cav_v)  # 융합 신뢰
+    assert not any("직접 측정되지 않음" in c for c in cav_v)
+    # InSAR 본질 한계는 항상 포함
+    assert any("산란체" in c for c in cav_s) and any("LOS" in c for c in cav_s)
+
+
 def test_vertical_channel_selected_when_fused(tmp_path):
     out_v = _project(tmp_path / "v", with_vertical=True)
     out_s = _project(tmp_path / "s", with_vertical=False)

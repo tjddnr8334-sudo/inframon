@@ -52,6 +52,27 @@ def _rate_mm_per_yr(series: np.ndarray, days: np.ndarray) -> float:
     return slope * 365.0
 
 
+def _caveats(has_vertical: bool, has_pinn: bool, has_fram: bool) -> list[str]:
+    """관측 한계 — VLM 이 안전성 판단 시 과대해석을 피하도록 채널 가용성을 해석지침으로 번역.
+
+    InSAR 의 본질적 한계(LOS 1성분·부호규약)와 이 산출물의 가용성(연직/PINN/CRI)을 명시한다.
+    """
+    cav = [
+        "LOS 변위는 위성-지표 시선방향 1성분이다(부호: 음수=위성에서 멀어짐, 통상 침하 경향).",
+    ]
+    if has_vertical:
+        cav.append("asc+desc 융합으로 연직 변위(처짐·침하)가 직접 분리됨 — 연직 해석 신뢰 가능.")
+    else:
+        cav.append("단일 궤도 — 연직 변위(처짐·침하)는 **직접 측정되지 않음**. LOS·종축만 제공되며, "
+                   "처짐/침하 판단은 종축 deprojection 추정에 의존하므로 보수적으로 해석할 것.")
+    if not has_pinn:
+        cav.append("PINN 구조해석 없음 — 절대 강성(EI)·성분분해(열팽창/하중/침하/이상) 미제공.")
+    if not has_fram:
+        cav.append("CRI 위험지표 없음 — 위험 정량은 외부(시방서) 평가에 의존.")
+    cav.append("InSAR 측점은 강반사 산란체(PS/DS)에 한정 — 교량 전 영역을 균일 표본하지 않음.")
+    return cav
+
+
 def build_summary(store: ProjectStore, *, bridge_id: str = "", to_crs: str = WGS84) -> dict[str, Any]:
     """VLM 이 바로 읽는 구조화 다이제스트."""
     ins = transform._insar(store)
@@ -122,6 +143,7 @@ def build_summary(store: ProjectStore, *, bridge_id: str = "", to_crs: str = WGS
         "pinn": None, "risk_reference": None,
         "channels_present": {"vertical_fused": vert is not None,
                              "pinn": pinn is not None, "fram_cri": cri is not None},
+        "observational_caveats": _caveats(vert is not None, pinn is not None, cri is not None),
     }
 
     if pinn is not None:
@@ -202,6 +224,9 @@ def build_narrative(summary: dict[str, Any]) -> str:
                   f"- 내부 CRI 최대 {r['cri_global_max']}, 경보 '{r['warning_level']}'. "
                   f"위험 부재: {r['critical_members']}.",
                   f"- ⚠️ {r['note']}"]
+    if summary.get("observational_caveats"):
+        lines += ["", "## 관측 한계 (해석 시 유의)"]
+        lines += [f"- {c}" for c in summary["observational_caveats"]]
     return "\n".join(lines) + "\n"
 
 
