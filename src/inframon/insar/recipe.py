@@ -27,6 +27,9 @@ class BridgeTarget(BaseModel):
     length_m: float | None = None
     distance_m: float | None = None          # 선택 지점 ↔ 교량 거리(확인 신뢰도)
     tags: dict[str, str] = Field(default_factory=dict)
+    # OSM way 절점 폴리라인 [(lat, lon), ...] — 교량 축선(PCA) 정밀 산정용(궤도-축선 기하 조건).
+    # 없으면(옛 레시피·수동) bbox 종횡비로 축선 근사. 하위호환 위해 선택 필드.
+    geometry: list[tuple[float, float]] = Field(default_factory=list)
     confirmed: bool = True
 
     @property
@@ -46,6 +49,7 @@ class BridgeTarget(BaseModel):
             length_m=bridge.length_m,
             distance_m=bridge.distance_m,
             tags=bridge.tags,
+            geometry=list(bridge.geometry),
             confirmed=True,
         )
 

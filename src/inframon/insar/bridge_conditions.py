@@ -55,6 +55,26 @@ def _axis_azimuth_from_bbox(bbox, lat: float) -> tuple[float, str]:
     return 0.0, "남북 우세(bbox 종횡비 근사)"          # N-S
 
 
+def axis_azimuth_from_polyline(geometry_latlon) -> float | None:
+    """OSM way 절점 폴리라인 [(lat,lon),...] → 주축(PC1) 방위각[deg, 북기준 시계, 0~180).
+
+    bbox 종횡비 근사와 달리 대각·곡선 축도 정확히 잡는다(국소 ENU 미터로 PCA). 축선은 방향
+    무관(열팽창은 ±) → [0,180) 로 정규화. 점 < 2 면 None.
+    """
+    pts = [(float(la), float(lo)) for la, lo in (geometry_latlon or [])]
+    if len(pts) < 2:
+        return None
+    lat = np.array([p[0] for p in pts]); lon = np.array([p[1] for p in pts])
+    lat0 = float(lat.mean())
+    e = (lon - lon.mean()) * 111320.0 * np.cos(np.deg2rad(lat0))    # 동쪽[m]
+    n = (lat - lat0) * 110540.0                                     # 북쪽[m]
+    en = np.column_stack([e, n])
+    en -= en.mean(axis=0)
+    _, vecs = np.linalg.eigh(en.T @ en)
+    e1, n1 = vecs[0, -1], vecs[1, -1]                               # PC1 (E, N)
+    return float(np.rad2deg(np.arctan2(e1, n1)) % 180.0)
+
+
 def longitudinal_sensitivity(axis_az_deg: float, look_az_deg: float,
                              inc_deg: float = INC_MID_DEG) -> float:
     """종축(수평 열팽창) LOS 민감도 g = sin(θ)·|cos(A−L)| ∈ [0,1]."""
@@ -94,8 +114,14 @@ def evaluate_conditions(target, track, criteria, profile, *,
     flight = (getattr(track, "flight_direction", "") or "").upper() if track else ""
 
     # ───────── 기하(geometry) ─────────
+    # 축선: OSM way 폴리라인(PCA, 정밀) 우선, 없으면 bbox 종횡비 근사.
+    geom = getattr(target, "geometry", None)
+    axis_precise = axis_azimuth_from_polyline(geom)
     if bbox and flight in LOOK_AZ:
-        axis_az, axis_note = _axis_azimuth_from_bbox(bbox, lat)
+        if axis_precise is not None:
+            axis_az, axis_note = axis_precise, "OSM way 지오메트리(PCA 정밀)"
+        else:
+            axis_az, axis_note = _axis_azimuth_from_bbox(bbox, lat)
         g = longitudinal_sensitivity(axis_az, LOOK_AZ[flight])
         st = "pass" if g >= MIN_LONGITUDINAL_SENS else "warn"
         out.append(_C(

@@ -6,6 +6,7 @@ import numpy as np
 
 from inframon.insar.bridge_conditions import (
     LOOK_AZ,
+    axis_azimuth_from_polyline,
     conditions_report,
     evaluate_conditions,
     longitudinal_sensitivity,
@@ -42,6 +43,34 @@ def test_longitudinal_sensitivity_geometry():
     assert g_ew > 0.5 and g_ns < 0.2
     # 민감도는 [0,1]
     assert 0 <= g_ns <= 1 and 0 <= g_ew <= 1
+
+
+def test_axis_azimuth_from_polyline_pca():
+    """폴리라인 PCA 축선 — bbox 근사가 못 잡는 대각·연속 방위를 정확히."""
+    ew = [(37.32, 127.10 + 0.001 * i) for i in range(6)]     # 동서 → 90°
+    ns = [(37.32 + 0.001 * i, 127.10) for i in range(6)]     # 남북 → 0/180
+    ne = [(37.32 + 0.0007 * i, 127.10 + 0.0009 * i) for i in range(6)]  # 대각 → ~45°
+    assert abs(axis_azimuth_from_polyline(ew) - 90.0) < 2
+    assert axis_azimuth_from_polyline(ns) % 180 < 2 or axis_azimuth_from_polyline(ns) > 178
+    assert 35 < axis_azimuth_from_polyline(ne) < 55
+    assert axis_azimuth_from_polyline([(37.0, 127.0)]) is None     # 점<2
+    assert axis_azimuth_from_polyline([]) is None
+
+
+def test_precise_axis_overrides_bbox_in_g1():
+    """geometry 있으면 G1 이 폴리라인 PCA 축선을 쓴다(bbox 근사보다 정확).
+
+    실 정자교 재현: bbox 근사는 축선≈0°(N-S)로 보고 상승 g=0.13(warn)인데, 실제 절점은
+    축선≈29° 라 상승 g≈0.41(pass). 정밀 축선이 잘못된 warn 을 바로잡는다.
+    """
+    # 축선 ~29° 폴리라인(정자교 유사) — bbox 종횡비는 남북 우세로 보임
+    geom = [(37.3215 + 0.0009 * i, 127.108 + 0.0005 * i) for i in range(8)]
+    t = _target(ew=False)                       # bbox 는 N-S 우세
+    t.geometry = geom
+    crit = SelectionCriteria(perp_baseline_max_m=120.0)
+    c = {x.id: x for x in evaluate_conditions(t, _track("ASCENDING"), crit, profile_for(t))}
+    assert "PCA 정밀" in c["G1"].detail
+    assert c["G1"].status == "pass"             # 정밀 축선으로 pass(근사면 warn 이었을 것)
 
 
 def _conds(target, track):
