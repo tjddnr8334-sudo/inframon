@@ -47,6 +47,11 @@ def main() -> None:
     p.add_argument("--insar-conditions", default=None, metavar="RECIPE_DIR",
                    help="교량 InSAR 신뢰성 조건(기하·시간샘플링·산란체·처리)을 레시피로 평가 후 종료. "
                         "SARvey 교량 맞춤의 전제조건 게이팅(--check-track 의 입력측 짝).")
+    p.add_argument("--insar-progress", default=None, metavar="WORK_DIR",
+                   help="WSL2 InSAR 처리(SLC→ISCE2→MiaplPy→SARvey) 진행판을 시각화 후 종료. "
+                        "--recipe 로 기대 장면수, --watch N 으로 N초마다 실시간 갱신.")
+    p.add_argument("--watch", type=int, default=None, metavar="SEC",
+                   help="--insar-progress 를 SEC 초마다 갱신(Ctrl+C 종료).")
     p.add_argument("--export-csv", default=None, metavar="CSV",
                    help="--out 의 project.h5 를 KAIA 변위 CSV(점×시점 롱포맷)로 내보내고 종료. "
                         "--bridge-id 로 교량ID, --srs 로 좌표계 지정.")
@@ -302,6 +307,38 @@ def main() -> None:
         print(f"  판정            : {'✅ 투입 가능' if rep.is_ready else '❌ 투입 불가'}")
         print("=" * 56)
         sys.exit(0 if rep.is_ready else 1)
+
+    if args.insar_progress:
+        import time
+
+        from .insar.progress import render_board, scan_progress
+
+        recipe = args.recipe or args.insar_progress  # work 안에 레시피가 있을 수도
+        title = ""
+        try:
+            from .insar.sarvey_config import RecipeBundle
+            rb = RecipeBundle(recipe)
+            if rb.target is not None:
+                title = rb.target.name_ko or rb.target.name
+        except Exception:  # noqa: BLE001
+            recipe = None
+        while True:
+            from datetime import datetime
+            prog = scan_progress(args.insar_progress, recipe)
+            board = render_board(prog, title=title, now=datetime.now().strftime("%H:%M:%S"))
+            if args.watch:
+                print("\033[2J\033[H" + board, flush=True)   # 화면 지우고 재출력
+                if prog["overall"] >= 1.0:
+                    print("  ✅ 전 단계 완료 — track.h5 준비됨.")
+                    break
+                try:
+                    time.sleep(max(1, args.watch))
+                except KeyboardInterrupt:
+                    break
+            else:
+                print(board)
+                break
+        return
 
     if args.insar_conditions:
         from .insar.bridge_conditions import conditions_report
