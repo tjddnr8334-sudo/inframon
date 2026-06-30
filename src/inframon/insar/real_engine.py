@@ -139,9 +139,26 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
         longitudinal_method = "projection_approx"
         n_low_sens = 0
         incidence_mean = None
-    # z(고도): Track H5 가 점별 고도를 주면 사용, 없으면 0(DEM 미연계). 프레임 무관.
-    z = td.height[keep].astype(float) if td.height is not None else np.zeros(n_points)
-    z_source = "track_height" if td.height is not None else "zero"
+    # z(고도): ① Track H5 점별 고도 → ② DEM GeoTIFF 샘플(world 좌표 필요) → ③ 0.
+    # 고도는 트러스 상·하현/아치 리브·데크/케이블 주탑·데크를 분리하는 형식별 해석에 쓰인다.
+    dem_meta = None
+    if td.height is not None:
+        z = td.height[keep].astype(float)
+        z_source = "track_height"
+    elif getattr(cfg, "insar_dem_geotiff", None) and world is not None:
+        from .dem import DemError, sample_dem
+        try:
+            ds = sample_dem(world[keep][:, :2], cv.geometry.crs, cfg.insar_dem_geotiff)
+            z = ds.z.astype(float)
+            z_source = "dem_raster"
+            dem_meta = ds.meta
+        except DemError as exc:                  # DEM 실패 → z=0 폴백(파이프라인 계속)
+            z = np.zeros(n_points)
+            z_source = "zero"
+            dem_meta = {"ok": False, "reason": str(exc), "path": str(cfg.insar_dem_geotiff)}
+    else:
+        z = np.zeros(n_points)
+        z_source = "zero"
     if world is not None:
         # geo 경로: xyz 는 world 좌표(cv.crs, 예: EPSG:5179), 단위 미터.
         xy2d = world[keep][:, :2]
@@ -175,6 +192,7 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
             "l_unit": l_unit,
             "l_ref": l_ref,
             "z_source": z_source,
+            "dem": dem_meta,
             "unit": "mm",
             "n_source_points": int(n_src),
             "n_kept": int(n_points),

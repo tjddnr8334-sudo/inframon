@@ -46,6 +46,9 @@ class PipelineConfig:
     # 시도하고(연직+종축 분리), 융합 불가 시 자동으로 단일 궤도 처리로 폴백한다.
     insar_source_h5: str | None = None
     insar_source_desc_h5: str | None = None
+    # Track 결과에 점별 고도가 없을 때, 이 DEM GeoTIFF(WSL2 1단계의 ISCE2용 DEM 등)에서
+    # world 좌표로 z 를 샘플링한다. 없으면 z=0. 점별 고도가 있으면 이 값은 무시.
+    insar_dem_geotiff: str | None = None
 
     # 계약 강건화 (Phase 1 고도화)
     validate_contracts: bool = True   # 각 단계 출력의 배열 형상/dtype/심볼 검증
