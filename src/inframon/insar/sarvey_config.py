@@ -163,7 +163,7 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
             "grid_size": prof.grid_size_m,            # 교량 길이 유도(도시용 200m 대체)
             "num_nearest_neighbours": 30,
             "velocity_bound": prof.velocity_bound_m_yr,  # 열팽창/진동 고려 확대
-            "dem_error_bound": 100.0,
+            "dem_error_bound": prof.dem_error_bound_m,   # 형식별(트러스/케이블 상부구조 → 확대)
             "arc_unwrapping_coherence_threshold": prof.arc_unwrap_coh,
         },
         "unwrapping": {

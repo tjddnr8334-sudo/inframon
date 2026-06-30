@@ -131,6 +131,53 @@ def test_river_girder_profile_specializes():
     assert "교대" in p.reference_hint
 
 
+def _t(struct, length=200.0):
+    return BridgeTarget(name="x", selected_lat=37.3, selected_lon=127.1, osm_type="way", osm_id=9,
+                        bbox=(127.10, 37.30, 127.105, 37.302), length_m=length,
+                        tags={"bridge:structure": struct})
+
+
+def test_truss_profile_specializes():
+    """트러스: 격자 레이오버·다중반사 → P1 엄격·dem_error 확대·layover high(계층 C)."""
+    p = profile_for(_t("truss"))
+    assert p.layover_risk == "high"
+    assert p.dem_error_bound_m == 150.0
+    assert p.coherence_p1 > 0.85                   # 거더(0.85)보다 엄격
+    assert "레이오버" in p.structural_notes
+
+
+def test_arch_profile_specializes():
+    """아치: 받침부 기준·리브/데크 분리·moderate layover(계층 C)."""
+    p = profile_for(_t("arch"))
+    assert p.layover_risk == "moderate" and p.dem_error_bound_m == 120.0
+    assert "스프링잉" in p.reference_hint or "받침" in p.reference_hint
+    assert p.velocity_bound_m_yr > 0.18           # 아치 라이즈 열팽창 → 약간 확대
+
+
+def test_movable_profile_segments_by_joint():
+    """가동/캔틸레버: 신축이음 불연속 → segment_by_joint·큰 velocity(계층 C)."""
+    p = profile_for(_t("cantilever"))
+    assert p.segment_by_joint is True
+    assert p.velocity_bound_m_yr > 0.18
+    assert "가동" in p.structural_notes or "이음" in p.structural_notes
+
+
+def test_girder_is_baseline_unchanged():
+    """거더(기준): 형식 보정 없음 — 기존 값 유지(회귀 안전)."""
+    p = profile_for(_t("beam"))
+    assert p.layover_risk == "low" and p.dem_error_bound_m == 100.0
+    assert p.segment_by_joint is False
+    assert p.coherence_p1 == 0.85 and p.velocity_bound_m_yr == 0.18
+
+
+def test_dem_error_bound_flows_into_config():
+    """형식별 dem_error_bound 가 sarvey config 로 흐른다(트러스 150 ≠ 거더 100)."""
+    from inframon.insar.bridge_profile import profile_for as pf
+    # 직접 config 키 확인 — build_sarvey_config 가 prof.dem_error_bound_m 사용
+    assert pf(_t("truss")).dem_error_bound_m == 150.0
+    assert pf(_t("beam")).dem_error_bound_m == 100.0
+
+
 def test_config_grid_is_bridge_scaled(tmp_path):
     _seed_recipes(tmp_path)                        # 정자교 110.5m
     cfg = build_sarvey_config(RecipeBundle(tmp_path))

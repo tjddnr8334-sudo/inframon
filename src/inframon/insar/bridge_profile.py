@@ -127,10 +127,49 @@ class BridgeProfile:
     deck_buffer_m: int               # 데크 중심선 버퍼(이 안의 점만 유효)
     reference_hint: str              # 기준점 위치 힌트
     water_mask: dict
-    rationale: str
+
+    # ── 형식별 구조 특성(계층 C) ──
+    dem_error_bound_m: float = 100.0  # 높이 모호성 한계(트러스 격자/상부구조 높으면 확대)
+    layover_risk: str = "low"         # low | moderate | high (격자/상부구조 → 레이오버·다중반사)
+    segment_by_joint: bool = False    # 가동부·신축이음으로 시계열을 세그먼트해야 하는가
+    structural_notes: str = ""        # 형식별 InSAR 해석 유의점(데크/리브 분리, 가동경간 등)
+    rationale: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def _class_tuning(cls: str) -> dict:
+    """형식별 구조 특성 → SARvey/해석 보정(계층 C).
+
+    형식마다 InSAR 산란·거동이 달라 일률 파라미터로는 부정확하다:
+      - 트러스: 강재 격자 → 레이오버·다중(이면각)반사로 높이 모호성↑ → P1 엄격·dem_error 확대.
+      - 아치: 아치 리브와 데크가 다르게 거동(추력·아치 라이즈 열팽창) → 받침부 기준, 리브/데크 분리.
+      - 가동(bascule/swing)·캔틸레버·특수: 가동부·신축이음 불연속 → 이음부로 세그먼트, 가동경간 제외.
+      - 사장/현수: 대형·고탑 상부구조 → 케이블/주탑 레이오버, dem_error 확대.
+      - 거더: 기준(연속보, 추가 보정 없음).
+    """
+    if cls == TRUSS:
+        return {"dem_error_bound_m": 150.0, "layover_risk": "high",
+                "p1_delta": 0.03, "vbound_scale": 1.0,
+                "notes": "강재 트러스 격자 → 레이오버·이면각 다중반사로 높이 모호성↑. "
+                         "P1 엄격·dem_error 확대. 상현/하현 점이 섞일 수 있어 고도(z)로 분리 권장."}
+    if cls == ARCH:
+        return {"dem_error_bound_m": 120.0, "layover_risk": "moderate",
+                "p1_delta": 0.0, "vbound_scale": 1.1, "ref_override": "교대·아치 스프링잉(받침부)",
+                "notes": "아치 리브와 데크가 다르게 거동(수평 추력·아치 라이즈 열팽창). "
+                         "기준점은 받침부(스프링잉), 리브/데크 점을 고도로 분리해 해석."}
+    if cls == SPECIAL:        # 가동(bascule/swing)·캔틸레버·특수
+        return {"dem_error_bound_m": 120.0, "layover_risk": "moderate", "segment_by_joint": True,
+                "p1_delta": 0.0, "vbound_scale": 1.4,
+                "notes": "가동교/캔틸레버 — 가동부·신축이음에서 변위 불연속. 가동 경간은 선형 모델에서 "
+                         "제외하고 이음부 기준으로 세그먼트. 경첩/받침 거동을 별도 관심."}
+    if cls in _CABLE_CLASSES:  # 사장/현수 — 대형 고탑 상부구조
+        return {"dem_error_bound_m": 150.0, "layover_risk": "high", "p1_delta": 0.0,
+                "vbound_scale": 1.0,
+                "notes": "케이블 지지계 — 주탑·케이블 상부구조가 높아 레이오버↑(dem_error 확대). "
+                         "데크/주탑/케이블 점을 고도로 분리, 기준점은 육상 정착부(주탑·앵커리지)."}
+    return {}                 # 거더(기준)
 
 
 def profile_for(target) -> BridgeProfile:
@@ -159,10 +198,21 @@ def profile_for(target) -> BridgeProfile:
     deck_buf = 60 if cable else 30
     ref = "주탑·앵커리지(육상 정착부)" if cable else "교대(abutment, 고정단)"
 
+    # ── 형식별 구조 보정(계층 C) — 거더 외 형식의 산란/거동 특성 반영 ──
+    tune = _class_tuning(cls)
+    p1 = _clamp(p1 + tune.get("p1_delta", 0.0), 0.5, 0.97)      # 트러스 등 모호 산란 → 엄격
+    vbound *= tune.get("vbound_scale", 1.0)                     # 가동부 등 큰 변위 허용
+    dem_err = float(tune.get("dem_error_bound_m", 100.0))
+    layover = tune.get("layover_risk", "low")
+    seg_joint = bool(tune.get("segment_by_joint", False))
+    ref = tune.get("ref_override", ref)
+    notes = tune.get("notes", "연속 거더 — 추가 형식 보정 없음(기준).")
+
     rationale = (
         f"{CLASS_KO.get(cls, cls)}·{scale}({length:.0f}m)·{wc} → "
-        f"격자 {grid}m·densification {maxd}m({nconn}연결)·velocity {vbound}m/yr"
-        f"{'·계절항 권장' if True else ''}; "
+        f"격자 {grid}m·densification {maxd}m({nconn}연결)·velocity {vbound:.2f}m/yr"
+        f"·dem_err {dem_err:.0f}m·layover {layover}"
+        f"{'·이음세그먼트' if seg_joint else ''}; "
         f"{'해상 강 water mask' if marine else '하천 water mask'}, 기준점 {ref}."
     )
 
@@ -170,8 +220,10 @@ def profile_for(target) -> BridgeProfile:
         bridge_class=cls, bridge_class_ko=CLASS_KO.get(cls, cls),
         water_context=wc, scale=scale, length_m=length,
         grid_size_m=grid, max_distance_to_p1_m=maxd, num_connections_to_p1=nconn,
-        coherence_p1=p1, coherence_p2=p2, densification_coherence=dens,
-        velocity_bound_m_yr=vbound, seasonal_model=True, arc_unwrap_coh=arc,
+        coherence_p1=round(p1, 3), coherence_p2=p2, densification_coherence=dens,
+        velocity_bound_m_yr=round(vbound, 3), seasonal_model=True, arc_unwrap_coh=arc,
         aoi_buffer_deg=aoi_buf, deck_buffer_m=deck_buf, reference_hint=ref,
-        water_mask=_water_mask(wc), rationale=rationale,
+        water_mask=_water_mask(wc),
+        dem_error_bound_m=dem_err, layover_risk=layover, segment_by_joint=seg_joint,
+        structural_notes=notes, rationale=rationale,
     )
