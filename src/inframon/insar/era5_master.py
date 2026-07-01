@@ -73,6 +73,28 @@ def _daily_aggregate(hourly: dict) -> dict[str, tuple[float, float, float]]:
             for d, (psum, hs, ts) in buckets.items()}
 
 
+def fetch_temperature(lat: float, lon: float, date_labels) -> list[float]:
+    """취득일(YYYYMMDD)별 평균 기온[°C] 리스트 (Open-Meteo ERA5). 열팽창 보정용.
+
+    PINN real 의 `cfg.pinn_temperature` 로 넣으면 thermal(x,t)=α·L·ΔT 분리에 사용된다.
+    결측일은 이웃 보간, 전부 결측이면 15°C.
+    """
+    import math
+
+    labels = [str(int(d)) for d in date_labels]
+    hourly = _fetch_era5_archive(lat, lon, _ymd_to_iso(min(labels)), _ymd_to_iso(max(labels)))
+    agg = _daily_aggregate(hourly.get("hourly", {}))
+    temps = [agg.get(d, (0.0, 0.0, float("nan")))[2] for d in labels]
+    idx_ok = [i for i, t in enumerate(temps) if not math.isnan(t)]
+    if not idx_ok:
+        return [15.0] * len(temps)
+    for i, t in enumerate(temps):                      # 이웃 보간
+        if math.isnan(t):
+            j = min(idx_ok, key=lambda k: abs(k - i))
+            temps[i] = temps[j]
+    return temps
+
+
 def _exclude_reasons(
     precip_mm: float, humidity_pct: float, temp_c: float, *,
     precip_max_mm: float | None, humidity_max_pct: float | None,

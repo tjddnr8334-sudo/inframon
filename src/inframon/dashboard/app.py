@@ -15,6 +15,7 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -72,7 +73,9 @@ def to_datetimes(dates: np.ndarray, labels, start: date) -> list[datetime]:
     - 없으면(데모) 기준 시작일 + epoch days 오프셋으로 합성한다.
     """
     if labels is not None:
-        return [datetime.strptime(str(s), "%Y%m%d") for s in labels]
+        def _s(x):  # S8(bytes)·np.bytes_·str 모두 'YYYYMMDD' 문자열로
+            return x.decode() if isinstance(x, (bytes, np.bytes_)) else str(x)
+        return [datetime.strptime(_s(s).strip(), "%Y%m%d") for s in labels]
     base = datetime(start.year, start.month, start.day)
     return [base + timedelta(days=float(d)) for d in dates]
 
@@ -140,7 +143,11 @@ def bridge_target_section() -> None:
     if existing:
         mn_lon, mn_lat, mx_lon, mx_lat = existing.bbox
         folium.Rectangle([[mn_lat, mn_lon], [mx_lat, mx_lon]], color="blue", weight=3,
-                         tooltip=f"저장된 타깃: {existing.name}").add_to(m)
+                         tooltip=f"점 추출 AOI: {existing.name} (buffer {existing.aoi_buffer_m:.0f}m)").add_to(m)
+        if existing.bridge_bbox:
+            bn_lon, bn_lat, bx_lon, bx_lat = existing.bridge_bbox
+            folium.Rectangle([[bn_lat, bn_lon], [bx_lat, bx_lon]], color="orange", weight=2,
+                             tooltip="교량 자체 extent").add_to(m)
 
     state = st_folium(m, height=420, key="bridge_map")
     if state and state.get("last_clicked"):
@@ -175,11 +182,19 @@ def bridge_target_section() -> None:
         sel = cands[i]
         st.success(f"✅ 교량 확인: **{sel.name}** "
                    f"({sel.tags.get('bridge', 'bridge')}) — [{sel.osm_url}]({sel.osm_url})")
+        aoi_buffer = st.slider("🎯 주변 point 추출 반경 (buffer, m)", 50, 1000, 200, 50,
+                               key="aoi_buffer",
+                               help="교량 둘레로 이만큼 확장한 영역에서 점을 뽑습니다. 교량 자체(주황)는 "
+                                    "얇은 선이라, 주변 점을 얻으려면 buffer(파랑 AOI)가 필요합니다.")
         if click and st.button("💾 타깃으로 저장 (레시피)", key="btn_save_target"):
             from inframon.insar.recipe import BridgeTarget, save_bridge_target
-            tgt = BridgeTarget.from_bridge(sel, click["lat"], click["lng"])
+            tgt = BridgeTarget.from_bridge(sel, click["lat"], click["lng"], aoi_buffer_m=float(aoi_buffer))
             save_bridge_target(recipe_path, tgt)
-            st.success(f"저장됨 → `{recipe_path}` (SLC 검색 영역 bbox 포함)")
+            mn_lon, mn_lat, mx_lon, mx_lat = tgt.bbox
+            w_m = (mx_lon - mn_lon) * 111320 * 0.79
+            h_m = (mx_lat - mn_lat) * 111320
+            st.success(f"저장됨 → `{recipe_path}` · 점 추출 AOI ≈ {w_m:.0f}×{h_m:.0f} m "
+                       f"(buffer {aoi_buffer}m). 지도 다시 그리면 파랑=AOI·주황=교량.")
             st.json(tgt.model_dump())
     elif click:
         st.caption("‘교량 확인’을 눌러 이 위치가 교량인지 OSM 에서 조회하세요.")
@@ -236,6 +251,39 @@ def selection_criteria_section() -> None:
         save_selection_criteria(crit_path, crit)
         st.success(f"저장됨 → `{crit_path}`")
         st.json(crit.model_dump())
+
+
+def _win2wsl(p: str) -> str:
+    """Windows 경로 → WSL(/mnt/<drive>/...) 경로."""
+    p = str(Path(p).resolve())
+    if len(p) > 1 and p[1] == ":":
+        return "/mnt/" + p[0].lower() + p[2:].replace("\\", "/")
+    return p.replace("\\", "/")
+
+
+def wsl_status(target_dir: str = "~") -> dict:
+    """WSL2 가용성·도구·Earthdata 인증 + 다운로드 폴더 여유 용량(GB)을 점검."""
+    import re
+    import subprocess
+    out = {"wsl": False, "asf": False, "netrc": False, "free_gb": None, "detail": ""}
+    try:
+        r = subprocess.run(
+            ["wsl", "-e", "bash", "-lc",
+             "echo WSL_OK; python3 -c 'import asf_search' 2>/dev/null && echo ASF_OK; "
+             "grep -q urs.earthdata ~/.netrc 2>/dev/null && echo NETRC_OK; "
+             f"mkdir -p {target_dir} 2>/dev/null; "
+             f"echo FREEGB:$(df -BG --output=avail {target_dir} 2>/dev/null | tail -1 | tr -dc '0-9')"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        s = r.stdout or ""
+        out["wsl"] = "WSL_OK" in s
+        out["asf"] = "ASF_OK" in s
+        out["netrc"] = "NETRC_OK" in s
+        mfree = re.search(r"FREEGB:(\d+)", s)
+        out["free_gb"] = int(mfree.group(1)) if mfree and mfree.group(1) else None
+        out["detail"] = s.strip() or (r.stderr or "").strip()
+    except Exception as exc:  # noqa: BLE001 (wsl 미설치 등)
+        out["detail"] = str(exc)
+    return out
 
 
 def slc_search_section() -> None:
@@ -314,6 +362,125 @@ def slc_search_section() -> None:
         out = save_track_selection(f"{_recipe_dir()}/track_selection.json", sel)
         st.success(f"저장됨 → `{out}` (SARvey 처리 대상 {sel.n_scenes}장)")
         st.json(sel.model_dump())
+
+    # ── ⬇️ 실제 SLC 다운로드 (선택 트랙 장면) — WSL 우선 ──
+    st.markdown("**⬇️ 선택 트랙 SLC 다운로드** (실제 Sentinel-1 SLC, GB급)")
+    st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 WSL2 에서 하므로, SLC 도 WSL 에 받는 것이 정석입니다. "
+               "먼저 WSL 가용성을 확인합니다.")
+    if st.button("WSL 환경 확인", key="btn_wsl_check"):
+        with st.spinner("WSL2 점검 중…"):
+            st.session_state["wsl_status"] = wsl_status()
+    wsl = st.session_state.get("wsl_status")
+    if wsl is None:
+        st.info("‘WSL 환경 확인’을 눌러 WSL2·asf_search·Earthdata 인증 준비도를 점검하세요.")
+        return
+    free = wsl.get("free_gb")
+    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · asf_search {'✅' if wsl['asf'] else '❌'} · "
+             f"Earthdata(~/.netrc) {'✅' if wsl['netrc'] else '❌'} · "
+             f"여유 용량 {'❓' if free is None else f'{free} GB'}")
+
+    n_av = len(chosen)
+
+    def _scene_lbl(i):
+        s = chosen[i]
+        b = getattr(s, "perpendicular_baseline", None)
+        return f"{i:02d} · {s.date}" + (f" · B⊥{b:+.0f}m" if b is not None else "")
+
+    sel_mode = st.radio("장면 선택 방식", ["앞에서 N장", "직접 선택", "기간으로"],
+                        horizontal=True, key="slc_sel_mode")
+    if sel_mode == "앞에서 N장":
+        cap = st.number_input("장면 수", 1, n_av, min(20, n_av), 1, key="slc_cap")
+        sel_idx = list(range(int(cap)))
+    elif sel_mode == "직접 선택":
+        sel_idx = sorted(st.multiselect(
+            "다운로드할 장면 (날짜 · 수직baseline)", list(range(n_av)),
+            default=list(range(min(20, n_av))), format_func=_scene_lbl, key="slc_pick"))
+    else:  # 기간으로
+        from datetime import date as _date
+
+        def _pd(s):
+            return _date(int(s[:4]), int(s[4:6]), int(s[6:8]))
+        cc1, cc2 = st.columns(2)
+        d0 = cc1.date_input("시작", _pd(chosen[0].date), key="slc_d0")
+        d1 = cc2.date_input("끝", _pd(chosen[-1].date), key="slc_d1")
+        s0, s1 = d0.strftime("%Y%m%d"), d1.strftime("%Y%m%d")
+        sel_idx = [i for i, s in enumerate(chosen) if s0 <= s.date <= s1]
+
+    sel_scenes = [chosen[i] for i in sel_idx]
+    urls = [s.url for s in sel_scenes if getattr(s, "url", None)]
+    est_gb = float(len(sel_scenes)) * 4.0             # S1 IW SLC ≈ 4GB/장(보수적)
+    need_gb = est_gb + 5.0                            # 다운로드 + 여유 5GB
+    st.caption(f"선택 **{len(sel_scenes)}장** · 예상 ~{est_gb:.0f} GB · 여유분 포함 필요 ~{need_gb:.0f} GB")
+
+    # ── 용량 게이트: 여유 < 필요 면 다운로드 차단 ──
+    enough = (free is None) or (free >= need_gb)
+    if free is None:
+        st.warning("여유 용량을 확인 못 했습니다(‘WSL 환경 확인’ 재실행). 다운로드는 진행 가능하나 용량 주의.")
+    elif enough:
+        st.success(f"용량 충분: 여유 {free} GB ≥ 필요 ~{need_gb:.0f} GB → 다운로드 가능")
+    else:
+        st.error(f"⛔ 용량 부족: 여유 {free} GB < 필요 ~{need_gb:.0f} GB. "
+                 f"장면 수를 {max(1, int((free-5)//4))}장 이하로 줄이거나 공간을 확보하세요.")
+    st.caption("※ 다운로드 후 ISCE2 코레지·MiaplPy 처리엔 SLC 대비 추가 공간(대략 2~3배)이 더 필요합니다.")
+
+    if wsl["wsl"]:
+        # ── WSL 경로: WSL 의 asf_search + ~/.netrc 로 WSL 폴더에 다운로드(처리 위치) ──
+        wsl_dir = st.text_input("WSL 다운로드 폴더", "~/insar_dl/SLC", key="wsl_dl_dir")
+        ready = wsl["asf"] and wsl["netrc"] and enough and bool(urls)
+        if not (wsl["asf"] and wsl["netrc"]):
+            st.warning("WSL 에 asf_search 또는 Earthdata ~/.netrc 가 없습니다. "
+                       "`python3 -m pip install --user asf_search` + ~/.netrc(urs.earthdata) 설정 필요.")
+        if not urls:
+            st.info("다운로드할 장면을 선택하세요.")
+        if st.button(f"⬇️ WSL 로 {len(sel_scenes)}장 다운로드", key="btn_wsl_dl", type="primary", disabled=not ready):
+            import subprocess
+            urls_win = Path("data/_dl_urls.txt"); urls_win.parent.mkdir(parents=True, exist_ok=True)
+            urls_win.write_text("\n".join(urls), encoding="utf-8")
+            dl_py = _win2wsl(str(Path("scripts/wsl_sarvey/dl_urls.py")))
+            urls_wsl = _win2wsl(str(urls_win))
+            cmd = ["wsl", "-e", "bash", "-lc",
+                   f"python3 {dl_py} --urls {urls_wsl} --out {wsl_dir}"]
+            if not urls:
+                st.error("다운로드 URL이 없습니다(검색·선별 먼저).")
+            else:
+                with st.spinner(f"WSL 에서 {len(urls)}장 다운로드 중… (~{est_gb:.0f}GB, 시간 소요)"):
+                    try:
+                        r = subprocess.run(cmd, capture_output=True, text=True,
+                                           encoding="utf-8", errors="replace", timeout=7200)
+                        out = (r.stdout or "") + (r.stderr or "")
+                        tail = out.strip().splitlines()[-8:]
+                        if "DONE" in (r.stdout or ""):
+                            st.success(f"완료 → WSL `{wsl_dir}`")
+                        elif r.returncode != 0:
+                            st.warning(f"WSL 종료코드 {r.returncode} — 로그 확인:")
+                        else:
+                            st.warning("종료(완료 표식 없음) — 로그 확인:")
+                        st.code("\n".join(tail) or "(출력 없음)")
+                        st.caption("다음(WSL): `scripts/wsl_sarvey/20_stack_isce.sh` (ISCE2) → MiaplPy → SARvey.")
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"WSL 다운로드 실패: {exc}")
+    else:
+        st.warning("WSL2 가 없어 실 SAR 처리(ISCE2/SARvey)는 불가합니다. 임시로 Windows 에 받을 수는 있으나 "
+                   "처리하려면 결국 WSL2 가 필요합니다.")
+        with st.expander("Windows 로 받기(폴백, 토큰 필요)"):
+            dl_dir = st.text_input("다운로드 폴더", "data/slc", key="slc_dl_dir")
+            token = st.text_input("Earthdata 토큰", type="password", key="edl_token")
+            if st.button(f"⬇️ Windows 로 {len(sel_scenes)}장 다운로드", key="btn_slc_dl_win",
+                         disabled=not (enough and urls)):
+                import os
+
+                import asf_search as asf
+                Path(dl_dir).mkdir(parents=True, exist_ok=True)
+                with st.spinner(f"{len(urls)}장 다운로드 중…"):
+                    try:
+                        sess = asf.ASFSession()
+                        if token.strip():
+                            sess = sess.auth_with_token(token.strip())
+                        asf.download_urls(urls, path=dl_dir, session=sess, processes=2)
+                        st.success(f"완료 → `{dl_dir}` "
+                                   f"(zip {len([f for f in os.listdir(dl_dir) if f.endswith('.zip')])}개)")
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"실패: {exc} (토큰/EULA 확인)")
 
 
 def era5_master_section() -> None:
@@ -400,28 +567,290 @@ def era5_master_section() -> None:
         st.json(sel.model_dump())
 
 
+def accuracy_section(path: str, times) -> None:
+    """InSAR 정확도 보정 — 기준점 정합 + 온도회귀(열팽창 분리) → 순 변형속도."""
+    from inframon.insar.atmo import (
+        height_correlated_correction, most_stable_index, reference_correction, temporal_decompose,
+    )
+    los, xyz, coh = read(path, "/insar/los", "/insar/xyz", "/insar/coherence")
+    N, M = los.shape
+    days = np.array([(t - times[0]).days for t in times], dtype=float)
+    st.caption("기준점 대비 상대변위 + 온도회귀로 열팽창 분리 → **순 변형속도(mm/yr)**. "
+               "InSAR 절대·계절 편향을 줄입니다.")
+    auto = most_stable_index(los, coh)
+    ref = st.number_input(f"기준점 index (안정점 자동추천 #{auto})", 0, N - 1, int(auto), key="ref_idx")
+    use_T = st.checkbox("🌡️ 온도 회귀로 열팽창 분리", value=True, key="acc_T")
+    use_tropo = st.checkbox("🌫️ 고도상관 대기보정 (GACOS 대안)", value=False, key="acc_tropo")
+    if not st.button("🎯 정확도 보정 실행", key="btn_accuracy"):
+        st.caption("기준점·온도회귀·대기보정 옵션을 정하고 '실행'을 누르세요 (온도는 실행 시 수집).")
+        return
+    losr = reference_correction(los, ref)
+    T = None
+    if use_T:
+        lat = lon = None
+        tp = f"{_recipe_dir()}/bridge_target.json"
+        if Path(tp).exists():
+            try:
+                from inframon.insar.recipe import load_bridge_target
+                _t = load_bridge_target(tp); lat, lon = _t.selected_lat, _t.selected_lon
+            except Exception:  # noqa: BLE001
+                pass
+        if lat is None and float(np.abs(xyz[:, 0]).max()) <= 180:
+            lon, lat = float(np.median(xyz[:, 0])), float(np.median(xyz[:, 1]))
+        if lat is not None:
+            from inframon.insar.era5_master import fetch_temperature
+            try:
+                T = np.array(fetch_temperature(lat, lon, [t.strftime("%Y%m%d") for t in times]))
+            except Exception as e:  # noqa: BLE001
+                st.warning(f"온도 수집 실패(회귀 생략): {e}")
+
+    # 고도상관 대기보정(성층 대류권) — /insar/height 있을 때만
+    if use_tropo:
+        try:
+            hgt = read(path, "/insar/height")
+            if hgt is not None and np.ptp(hgt) > 1.0:
+                losr = height_correlated_correction(losr, hgt)["corrected"]
+                st.caption("고도-위상 선형상관 제거 적용됨.")
+            else:
+                st.caption("고도 정보 없음/평탄 — 대기보정 skip (Track H5 에 height 필요).")
+        except Exception:  # noqa: BLE001
+            st.caption("고도 정보 없음 — 대기보정 skip.")
+
+    dec = temporal_decompose(losr, days, T)
+    vel = dec["velocity_mm_yr"]
+    st.success(f"순 변형속도: 평균 {vel.mean():+.2f} · 범위 {vel.min():+.1f}~{vel.max():+.1f} mm/yr "
+               f"· 잔차 {dec['resid_std'].mean():.2f}mm"
+               + (f" · 열계수 {np.mean(dec['thermal_coef']):.2f} mm/°C" if dec["used_temperature"] else ""))
+    lon_c, lat_c = xyz[:, 0], xyz[:, 1]
+    if float(np.abs(lon_c).max()) <= 180:
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            m = folium.Map(location=[float(lat_c.mean()), float(lon_c.mean())], zoom_start=16,
+                           tiles="OpenStreetMap")
+            vmax = float(np.percentile(np.abs(vel), 95)) or 1.0
+            for i in range(len(lon_c)):
+                x = float(np.clip(vel[i] / vmax, -1, 1))
+                col = (f"#ff{int(255*(1+x)):02x}{int(255*(1+x)):02x}" if x < 0
+                       else f"#{int(255*(1-x)):02x}{int(255*(1-x)):02x}ff")
+                folium.CircleMarker([float(lat_c[i]), float(lon_c[i])], radius=3, weight=0, color=col,
+                                    fill=True, fill_color=col, fill_opacity=0.85,
+                                    tooltip=f"{vel[i]:+.2f} mm/yr").add_to(m)
+            st.markdown("**순 변형속도 지도** (열팽창 분리 후, 🔴침하·🔵융기)")
+            st_folium(m, height=420, key="acc_map")
+        except ImportError:
+            pass
+
+
+def portfolio_section():
+    """여러 교량 project.h5 를 목록·상태(CRI/경보)로 보여주고 선택 → 경로 반환."""
+    import glob
+    import json as _json
+    files = sorted(set(glob.glob("data/*.h5") + glob.glob("data/projects/*.h5")))
+    rows = []
+    for fp in files:
+        try:
+            with h5py.File(fp, "r") as f:
+                if "/fram" not in f:
+                    continue
+                fm = _json.loads(f["/fram"].attrs.get("meta", "{}"))
+                im = _json.loads(f["/insar"].attrs.get("meta", "{}")) if "/insar" in f else {}
+                rows.append({"파일": Path(fp).name,
+                             "점": im.get("n_points"), "시점": im.get("n_dates"),
+                             "최대CRI": round(float(fm.get("cri_global_max", 0)), 3),
+                             "경보": fm.get("warning", {}).get("level", "—"), "_path": fp})
+        except Exception:  # noqa: BLE001
+            continue
+    if not rows:
+        st.caption("등록된 교량 프로젝트 없음 (data/*.h5 중 /fram 포함).")
+        return None
+    st.dataframe(pd.DataFrame([{k: v for k, v in r.items() if k != "_path"} for r in rows]),
+                 hide_index=True, use_container_width=True)
+    names = [r["파일"] for r in rows]
+    pick = st.selectbox("교량(프로젝트) 선택", names, key="portfolio_pick")
+    st.caption("선택하면 아래 경로가 그 교량으로 바뀝니다. (여러 교량은 data/ 에 project_*.h5 로 저장)")
+    return next(r["_path"] for r in rows if r["파일"] == pick)
+
+
+def asc_desc_section() -> None:
+    """Asc+Desc 두 Track H5 → 연직(U)·종축(H) 분해 (fuse_asc_desc). LOS 모호성 해소."""
+    from inframon.insar.fusion import FusionError, fuse_asc_desc
+    from inframon.insar.track_reader import read_track_h5
+    st.caption("서로 다른 궤도(오름·내림) LOS 2개를 합쳐 **연직 변위 U**(교량 처짐의 핵심)와 종축 H 로 분해합니다. "
+               "두 Track H5 모두 **입사각(incidence)** 이 있어야 합니다.")
+    c1, c2 = st.columns(2)
+    asc_p = c1.text_input("Ascending Track H5", "data/sarvey_track.h5", key="ad_asc")
+    desc_p = c2.text_input("Descending Track H5", "data/sarvey_track_desc.h5", key="ad_desc")
+    out_p = st.text_input("융합 결과 저장", "data/fused_vertical.h5", key="ad_out")
+    if st.button("🔀 Asc+Desc 연직분해", key="btn_ad"):
+        if not (Path(asc_p).exists() and Path(desc_p).exists()):
+            st.error("두 Track H5 경로가 모두 존재해야 합니다. (descending 트랙도 다운→코레지→SARvey 로 준비)")
+            return
+        try:
+            asc, desc = read_track_h5(asc_p), read_track_h5(desc_p)
+            res = fuse_asc_desc(asc, desc)
+        except FusionError as e:
+            st.error(f"융합 불가: {e}")
+            st.caption("→ 두 Track H5 에 incidence/heading 이 필요합니다(SARvey export 시 geometry 포함). "
+                       "없으면 단일 궤도 LOS 로 진행하세요.")
+            return
+        except Exception as e:  # noqa: BLE001
+            st.error(f"실패: {e}"); return
+        U = res.vertical
+        import numpy as _np
+        tv = res.track.date_labels
+        try:
+            days = _np.array([int(str(int(d)) ) for d in tv])  # noqa
+        except Exception:  # noqa: BLE001
+            days = _np.arange(U.shape[1])
+        # 점별 연직 속도(mm/yr) 근사
+        st.success(f"연직분해 완료 — 정합점 {U.shape[0]}개 × 공통 {U.shape[1]}시점")
+        lon = res.track.lonlat[:, 0]; lat = res.track.lonlat[:, 1]
+        vU = U[:, -1] - U[:, 0]
+        st.caption(f"연직변위(말−초) 범위 {float(_np.nanmin(vU)):.1f} ~ {float(_np.nanmax(vU)):.1f} mm")
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            m = folium.Map(location=[float(_np.nanmean(lat)), float(_np.nanmean(lon))], zoom_start=16,
+                           tiles="OpenStreetMap")
+            vmax = float(_np.nanpercentile(_np.abs(vU), 95)) or 1.0
+            for i in range(len(lon)):
+                x = float(_np.clip(vU[i] / vmax, -1, 1))
+                col = (f"#ff{int(255*(1+x)):02x}{int(255*(1+x)):02x}" if x < 0
+                       else f"#{int(255*(1-x)):02x}{int(255*(1-x)):02x}ff")
+                folium.CircleMarker([float(lat[i]), float(lon[i])], radius=3, weight=0, color=col,
+                                    fill=True, fill_color=col, fill_opacity=0.85,
+                                    tooltip=f"연직 {vU[i]:.1f} mm").add_to(m)
+            st.markdown("**연직 변위 U 지도** (🔴침하·🔵융기)")
+            st_folium(m, height=420, key="ad_map")
+        except ImportError:
+            pass
+
+
+def aux_data_section() -> None:
+    """F 준비 — ISCE2/SARvey 보조데이터(궤도·DEM·AUX_CAL) 준비. 실 처리는 WSL2."""
+    import subprocess
+    st.caption("ISCE2 코레지에 필요: **궤도(POEORB)·DEM·AUX_CAL**. SLC 처럼 WSL 에 준비합니다. "
+               "(ERA5 온도·강수·습도는 🌧️ master 섹션 + PINN 🌡️ 열팽창에서 처리)")
+    if st.button("WSL 환경 확인", key="btn_wsl_aux"):
+        with st.spinner("WSL 점검 중…"):
+            st.session_state["wsl_status"] = wsl_status()
+    wsl = st.session_state.get("wsl_status")
+    if not wsl:
+        st.info("‘WSL 환경 확인’을 눌러 WSL2 준비도·여유 용량을 점검하세요.")
+        return
+    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · 여유 {wsl.get('free_gb', '?')} GB")
+    if not wsl["wsl"]:
+        st.warning("WSL2 가 없어 ISCE2 보조데이터 준비 불가.")
+        return
+
+    slc_dir = st.text_input("SLC 폴더(궤도 날짜 기준)", "~/insar_dl/SLC", key="aux_slc")
+    orbit_dir, dem_dir = "~/insar_dl/orbits", "~/insar_dl/DEM"
+
+    def _run(title, cmd):
+        with st.spinner(f"{title} 실행 중… (WSL)"):
+            try:
+                r = subprocess.run(["wsl", "-e", "bash", "-lc", cmd], capture_output=True,
+                                   text=True, encoding="utf-8", errors="replace", timeout=3600)
+                out = (r.stdout or "") + (r.stderr or "")
+                (st.success if r.returncode == 0 else st.warning)(f"{title} 종료코드 {r.returncode}")
+                st.code("\n".join(out.strip().splitlines()[-10:]) or "(출력 없음)")
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"{title} 실패: {exc}")
+
+    conda = "source ~/miniforge3/etc/profile.d/conda.sh; conda activate isce2_mintpy;"
+    c1, c2, c3 = st.columns(3)
+    if c1.button("🛰️ 궤도(EOF) 받기", key="btn_orbit"):
+        _run("궤도", f"{conda} mkdir -p {orbit_dir}; "
+                    f"eof --search-path {slc_dir} --save-dir {orbit_dir} 2>&1 | tail -4; "
+                    f"echo \"궤도 $(ls {orbit_dir}/*.EOF 2>/dev/null | wc -l)개\"")
+    tgt_path = f"{_recipe_dir()}/bridge_target.json"
+    if c2.button("🏔️ DEM(Copernicus) 받기", key="btn_dem"):
+        if not Path(tgt_path).exists():
+            st.error("🗺️ 교량 타깃(AOI bbox) 을 먼저 저장하세요.")
+        else:
+            from inframon.insar.recipe import load_bridge_target
+            b = load_bridge_target(tgt_path).bbox    # (min_lon,min_lat,max_lon,max_lat)
+            _run("DEM", f"{conda} mkdir -p {dem_dir}; cd {dem_dir}; "
+                        f"sardem --bbox {b[0]} {b[1]} {b[2]} {b[3]} --data COP --output dem.wgs84 2>&1 | tail -4; "
+                        f"(gdal2isce_xml.py -i dem.wgs84 >/dev/null 2>&1 && echo ISCE_XML_OK) "
+                        f"|| echo 'ISCE xml 별도 필요(재사용 권장)'; ls -la dem.wgs84* 2>/dev/null")
+    if c3.button("📡 AUX_CAL 확인", key="btn_aux"):
+        _run("AUX_CAL", "n=$(ls ~/insar_data/aux_cal 2>/dev/null | wc -l); "
+                        "echo \"기존 AUX_CAL $n개 (공개 ESA 보정파일)\"; "
+                        "[ $n -gt 0 ] && echo '재사용: stackSentinel -a ~/insar_data/aux_cal' "
+                        "|| echo 'ESA 에서 S1 AUX_CAL 다운 필요'")
+    st.caption("준비된 궤도·DEM·AUX_CAL 로 WSL 에서 stackSentinel 코레지 → MiaplPy → SARvey 로 이어집니다.")
+
+
+# coherence 임계 프리셋 — 교량에 PS/DS 점이 적을 때 완화 (native SARvey 1.3 키)
+SARVEY_PRESETS = {
+    "엄격 (점 적고 깨끗)":  {"coherence_p1": 0.9, "point_median_coherence": 0.7,
+                            "arc_unwrapping_coherence": 0.7, "coherence_p2": 0.8},
+    "균형 (권장)":         {"coherence_p1": 0.8, "point_median_coherence": 0.5,
+                            "arc_unwrapping_coherence": 0.6, "coherence_p2": 0.7},
+    "관대 (점 많이 — 점 부족 시)": {"coherence_p1": 0.7, "point_median_coherence": 0.4,
+                            "arc_unwrapping_coherence": 0.5, "coherence_p2": 0.6},
+}
+
+
 def sarvey_bundle_section() -> None:
     """F 준비 — 레시피 4종을 SARvey 처리 번들(매니페스트 + config)로 묶는다."""
+    import json as _json
+
     from inframon.insar.sarvey_config import write_sarvey_bundle
 
     recipe_dir = st.text_input("레시피 폴더", _recipe_dir(), key="bundle_dir")
     st.caption("교량 타깃·트랙 선별이 있어야 하며, master(ERA5)가 있으면 reference_date 로 들어갑니다.")
 
-    if st.button("🧩 SARvey 번들 생성", key="btn_bundle"):
+    # ── coherence 프리셋: 원하는 교량에 점이 안 나올 때 완화 ──
+    preset_name = st.radio(
+        "coherence 프리셋 (점 부족하면 '관대'로)", list(SARVEY_PRESETS), index=1,
+        horizontal=True, key="sarvey_preset",
+        help="교량에 PS/DS 점이 안 생기면 임계를 낮춰 점 수를 늘립니다(노이즈↑). 콘크리트/난간 등 "
+             "강반사체 많은 교량은 '엄격', 매끈하거나 작은 교량은 '관대'.")
+    pv = SARVEY_PRESETS[preset_name]
+    pc1, pc2, pc3, pc4 = st.columns(4)
+    pc1.metric("coherence_p1 (PS)", pv["coherence_p1"])
+    pc2.metric("coherence_p2 (DS)", pv["coherence_p2"])
+    pc3.metric("point_median", pv["point_median_coherence"])
+    pc4.metric("arc_unwrap", pv["arc_unwrapping_coherence"])
+
+    if st.button("🧩 SARvey 번들 생성 (프리셋 적용)", key="btn_bundle"):
         try:
             paths = write_sarvey_bundle(recipe_dir)
         except Exception as exc:  # noqa: BLE001
             st.error(f"생성 실패: {exc}")
             return
-        st.success(f"생성됨 → `{paths['manifest']}` · `{paths['config']}`")
-        import json as _json
+        # 생성된 config 에 프리셋 임계 주입
+        cfg_path = Path(paths["config"])
+        cfg = _json.loads(cfg_path.read_text(encoding="utf-8"))
+        cfg.setdefault("consistency_check", {})["coherence_p1"] = pv["coherence_p1"]
+        cfg["consistency_check"]["point_median_coherence"] = pv["point_median_coherence"]
+        cfg["consistency_check"]["arc_unwrapping_coherence_threshold"] = pv["arc_unwrapping_coherence"]
+        cfg.setdefault("filtering", {})["coherence_p2"] = pv["coherence_p2"]
+        cfg["_preset"] = preset_name
+        cfg_path.write_text(_json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        st.success(f"생성됨 (프리셋 **{preset_name}**) → `{paths['manifest']}` · `{paths['config']}`")
+
+        # WSL 의 실제 SARvey config.json 에 바로 적용할 명령(native 키)
+        sed = ("sed -i '"
+               f"s/coherence_p1: [0-9.]*/coherence_p1: {pv['coherence_p1']}/; "
+               f"s/coherence_p2: [0-9.]*/coherence_p2: {pv['coherence_p2']}/; "
+               f"s/point_median_coherence: [0-9.]*/point_median_coherence: {pv['point_median_coherence']}/; "
+               f"s/arc_unwrapping_coherence: [0-9.]*/arc_unwrapping_coherence: {pv['arc_unwrapping_coherence']}/"
+               "' config.json")
+        st.markdown("**WSL 에서 실제 SARvey `config.json` 에 프리셋 적용** (`sarvey -f config.json -g` 후):")
+        st.code(sed, language="bash")
+        st.caption("점이 여전히 부족하면 '관대' 프리셋 + (MiaplPy) phase-linking/densification 강화, "
+                   "그래도 없으면 asc+desc 결합 → 근본은 코너리플렉터/고해상도 SAR.")
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown("**processing_manifest.json** (상류 스택 생성)")
+            st.markdown("**processing_manifest.json** (상류 스택)")
             st.json(_json.loads(Path(paths["manifest"]).read_text(encoding="utf-8")))
         with c2:
-            st.markdown("**sarvey_config.json** (시계열 추정)")
-            st.json(_json.loads(Path(paths["config"]).read_text(encoding="utf-8")))
+            st.markdown("**sarvey_config.json** (프리셋 반영)")
+            st.json(cfg)
 
 
 def insar_process_section(path: str) -> None:
@@ -484,6 +913,12 @@ def tab_insar(path: str, start: date) -> None:
 
     with st.expander("🌧️ ERA5 master 선정 (강수·습도)  · E 단계", expanded=False):
         era5_master_section()
+
+    with st.expander("🌐 보조 데이터 준비 (궤도·DEM·AUX_CAL)  · F 준비", expanded=False):
+        aux_data_section()
+
+    with st.expander("🔀 Asc+Desc 연직변위 분해 (수직/종축)", expanded=False):
+        asc_desc_section()
 
     with st.expander("🧩 SARvey 번들 생성 (레시피 → config)  · F 준비", expanded=False):
         sarvey_bundle_section()
@@ -570,6 +1005,52 @@ def tab_insar(path: str, start: date) -> None:
         hist, edges = np.histogram(coh, bins=20, range=(0, 1))
         st.bar_chart(pd.DataFrame({"coherence": edges[:-1], "n": hist}).set_index("coherence"))
 
+    # ── 🛰️ LOS 속도 점군 지도 (SARvey PS/DS 점, 클릭 → 해당 점 시계열) ──
+    lon_c, lat_c = xyz[:, 0], xyz[:, 1]
+    if float(np.abs(lon_c).max()) <= 180 and float(np.abs(lat_c).max()) <= 90:
+        try:
+            import folium
+            from streamlit_folium import st_folium
+        except ImportError:
+            folium = None
+        if folium is not None:
+            st.markdown("**🛰️ LOS 속도 점군 지도** — SARvey PS/DS 점, **점 클릭 → 해당 점 변위 시계열**")
+            tv = np.array([(t - times[0]).days / 365.25 for t in times])   # 연 단위
+            vel = np.linalg.lstsq(np.vstack([tv, np.ones_like(tv)]).T, los.T, rcond=None)[0][0]
+            vmax = float(np.percentile(np.abs(vel), 95)) or 1.0
+
+            def _vcol(v):  # 🔴침하(음)·⚪0·🔵융기(양)
+                x = float(np.clip(v / vmax, -1, 1))
+                if x < 0:
+                    return f"#ff{int(255*(1+x)):02x}{int(255*(1+x)):02x}"
+                return f"#{int(255*(1-x)):02x}{int(255*(1-x)):02x}ff"
+
+            mc1, mc2 = st.columns([3, 2])
+            with mc1:
+                vmap = folium.Map(location=[float(lat_c.mean()), float(lon_c.mean())],
+                                  zoom_start=16, tiles="OpenStreetMap")
+                for i in range(len(lon_c)):
+                    col = _vcol(vel[i])
+                    folium.CircleMarker([float(lat_c[i]), float(lon_c[i])], radius=3, weight=0,
+                                        color=col, fill=True, fill_color=col, fill_opacity=0.85,
+                                        tooltip=f"#{i} · {vel[i]:.1f} mm/yr · coh {coh[i]:.2f}").add_to(vmap)
+                md = st_folium(vmap, height=430, key="insar_vel_map",
+                               returned_objects=["last_object_clicked"])
+            with mc2:
+                click = (md or {}).get("last_object_clicked")
+                if click:
+                    sel = int(np.argmin((lat_c - click["lat"]) ** 2 + (lon_c - click["lng"]) ** 2))
+                else:
+                    sel = int(np.clip(st.session_state.get("insar_pt", 0), 0, N - 1))
+                st.caption(f"선택 점 **#{sel}** · 속도 **{vel[sel]:.2f} mm/yr** · coh {float(coh[sel]):.2f}")
+                st.line_chart(pd.DataFrame({"날짜": times, "LOS": los[sel],
+                                            "종방향": lon[sel]}).set_index("날짜"))
+            st.caption(f"색 = LOS 속도(mm/yr): 🔴침하(음)·⚪0·🔵융기(양), 범위 ±{vmax:.1f}. "
+                       f"지도 점 클릭 → 오른쪽에 그 점의 변위 시계열. (미클릭 시 위 '측정점 index' 점)")
+
+    with st.expander("🎯 InSAR 정확도 보정 (기준점 · 온도회귀 · 대기보정)", expanded=False):
+        accuracy_section(path, times)
+
 
 # ───────────────────────────── ② PINN 탭 ──────────────────────────────
 def tab_pinn(path: str, start: date) -> None:
@@ -609,8 +1090,174 @@ def tab_pinn(path: str, start: date) -> None:
     EI, alpha, nat = read(path, "/pinn/EI", "/pinn/alpha", "/pinn/natural_freq")
     a, b, c = st.columns(3)
     a.metric("평균 EI", f"{float(np.mean(EI)):.2e}")
-    b.metric("평균 α", f"{float(np.mean(alpha)):.2e}")
+    b.metric("평균 α (열팽창계수)", f"{float(np.mean(alpha)):.2e} /°C")
     c.metric("고유진동수", ", ".join(f"{x:.1f}" for x in np.atleast_1d(nat)) + " Hz")
+
+    # ── 🔬 구조 검증 (SAP2000/MIDAS 없이 해석해로 PINN/FEM 교차검증) ──
+    with st.expander("🔬 구조 검증 (해석해 vs FEM · EI 복원)", expanded=False):
+        st.caption("상용 SW 없이: 단순지지 보 **고유진동수 닫힌해**와 내부 FEM 비교 + EI 복원 검증. "
+                   "(무료 대안: OpenSees·PyNite·anastruct 로도 동일 비교 가능)")
+        vc1, vc2, vc3 = st.columns(3)
+        EI_v = vc1.number_input("EI [N·m²]", 1e6, 1e14, float(np.mean(EI)) if EI is not None else 5e9,
+                                format="%.2e", key="val_EI")
+        rhoA_v = vc2.number_input("ρA [kg/m]", 1e2, 1e6, 1.0e4, format="%.1e", key="val_rhoA")
+        L_v = vc3.number_input("스팬 L [m]", 5.0, 5000.0, 110.0, 1.0, key="val_L")
+        if st.button("🔬 검증 실행", key="btn_validate"):
+            from inframon.pinn.benchmark import ei_recovery_benchmark, run_fem_benchmark
+            r = run_fem_benchmark(EI_v, rhoA_v, L_v, n_modes=3)
+            er = ei_recovery_benchmark(EI_v, rhoA_v, L_v)
+            st.dataframe(pd.DataFrame({
+                "모드": [1, 2, 3], "해석해(Hz)": [round(x, 4) for x in r["analytic_hz"]],
+                "FEM(Hz)": [round(x, 4) for x in r["fem_hz"]],
+                "오차(%)": [round(x, 3) for x in r["err_pct"]]}), hide_index=True)
+            ok_f = r["max_err_pct"] < 5.0
+            ok_e = er["err_pct"] < 5.0
+            st.success(f"{'✅' if ok_f else '⚠️'} FEM 모달 최대오차 {r['max_err_pct']:.2f}% "
+                       f"· {'✅' if ok_e else '⚠️'} EI 복원오차 {er['err_pct']:.2f}% "
+                       f"(EI {er['EI_recovered']:.2e} vs {er['EI_true']:.2e})")
+            st.caption("두 오차 모두 <5% 면 PINN 구조 코어(모달·EI 식별)가 물리적으로 타당. "
+                       "실교량 검증은 상시진동시험(AVT) 실측 진동수와 비교하세요.")
+
+    # ── 🌉 교량 특화: 제원 + 외생(온도 열팽창 · 교통량 하중) → 맞춤형 PINN ──
+    st.markdown("**🌉 교량 특화** — 제원(형식·재료·스팬) + 온도(열팽창 α·L·ΔT) + 교통량(하중 변조)")
+    thermal_bridge_section(path, times)
+
+
+def thermal_bridge_section(path: str, times) -> None:
+    """교량 제원 + 온도·교통량(CSV/Excel) → cfg 로 PINN real 재실행."""
+    from inframon.structure import BRIDGE_TYPES, MATERIAL_E, BridgeProfile
+    labels = [t.strftime("%Y%m%d") for t in times]
+    lat = lon = None
+    tgt_path = f"{_recipe_dir()}/bridge_target.json"
+    if Path(tgt_path).exists():
+        try:
+            from inframon.insar.recipe import load_bridge_target
+            _t = load_bridge_target(tgt_path); lat, lon = _t.selected_lat, _t.selected_lon
+        except Exception:  # noqa: BLE001
+            pass
+    if lat is None:
+        xyz = read(path, "/insar/xyz")
+        if float(np.abs(xyz[:, 0]).max()) <= 180:
+            lon, lat = float(np.median(xyz[:, 0])), float(np.median(xyz[:, 1]))
+
+    # ── 교량 제원 (폼 + CSV/Excel) ──
+    prof_path = f"{_recipe_dir()}/bridge_profile.json"
+    prof = BridgeProfile()
+    if Path(prof_path).exists():
+        try:
+            prof = BridgeProfile.model_validate_json(Path(prof_path).read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            pass
+    bnds = ["simply_supported", "continuous", "fixed"]
+    with st.expander("🏗️ 교량 제원 입력 / CSV·Excel 불러오기", expanded=False):
+        up = st.file_uploader("제원 파일(선택) — 열 `key,value` 또는 명명열", type=["csv", "xlsx", "xls"],
+                              key="prof_up")
+        if up is not None:
+            try:
+                df = (pd.read_excel(up) if up.name.lower().endswith(("xlsx", "xls"))
+                      else pd.read_csv(up))
+                if df.shape[1] >= 2 and str(df.columns[0]).lower() in ("key", "항목", "field", "name"):
+                    kv = dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1]))
+                else:
+                    kv = {str(c): df[c].iloc[0] for c in df.columns}
+
+                def _g(*names):
+                    for n in names:
+                        if n in kv and pd.notna(kv[n]):
+                            return kv[n]
+                    return None
+                upd = {"bridge_type": _g("bridge_type", "형식"), "material": _g("material", "재료"),
+                       "length_m": _g("length_m", "경간", "스팬", "length", "연장"),
+                       "section_depth_m": _g("section_depth_m", "단면높이", "형고"),
+                       "load_per_len": _g("load_per_len", "하중")}
+                prof = prof.model_copy(update={k: v for k, v in upd.items() if v is not None})
+                st.success(f"제원 불러옴: {up.name}")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"제원 파일 파싱 실패: {e}")
+        c1, c2, c3 = st.columns(3)
+        bt = c1.selectbox("형식", list(BRIDGE_TYPES),
+                          index=list(BRIDGE_TYPES).index(prof.bridge_type) if prof.bridge_type in BRIDGE_TYPES else 0,
+                          key="prof_bt")
+        mats = list(MATERIAL_E)
+        mat = c2.selectbox("재료", mats, index=mats.index(prof.material) if prof.material in mats else 0,
+                           key="prof_mat")
+        bnd = c3.selectbox("경계조건", bnds, index=bnds.index(prof.boundary) if prof.boundary in bnds else 0,
+                           key="prof_bnd")
+        c4, c5, c6 = st.columns(3)
+        L = c4.number_input("스팬 length_m (0=자동)", 0.0, 5000.0, float(prof.length_m or 0.0), 1.0, key="prof_L")
+        dep = c5.number_input("단면높이 m", 0.1, 50.0, float(prof.section_depth_m), 0.1, key="prof_dep")
+        q = c6.number_input("분포하중 N/m", 0.0, 1e6, float(prof.load_per_len), 1e3, key="prof_q")
+        prof = prof.model_copy(update={"bridge_type": bt, "material": mat, "boundary": bnd,
+                                       "length_m": (L or None), "section_depth_m": dep,
+                                       "load_per_len": q, "source": "manual"})
+        st.caption(f"E={prof.youngs():.2e} Pa · ρA={prof.rho_a():.2e} kg/m")
+        if st.button("💾 제원 저장", key="prof_save"):
+            Path(prof_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(prof_path).write_text(prof.model_dump_json(indent=2), encoding="utf-8")
+            st.success(f"저장 → `{prof_path}`")
+
+    # ── 외생: 온도(자동) + 교통량(CSV/Excel) ──
+    use_temp = st.checkbox("🌡️ 온도 열팽창 반영 (Open-Meteo ERA5)", value=True, key="use_temp",
+                          disabled=lat is None)
+    tf = st.file_uploader("🚗 교통량 CSV/Excel (열: date, traffic) — data.go.kr 등", type=["csv", "xlsx", "xls"],
+                          key="traffic_up")
+    traffic_arr = None
+    if tf is not None:
+        try:
+            tdf = (pd.read_excel(tf) if tf.name.lower().endswith(("xlsx", "xls")) else pd.read_csv(tf))
+            dcol = next((c for c in tdf.columns if str(c).lower() in ("date", "날짜", "일자", "ymd")),
+                        tdf.columns[0])
+            vcol = next((c for c in tdf.columns
+                         if str(c).lower() in ("traffic", "교통량", "count", "volume", "aadt")),
+                        tdf.columns[-1])
+            tmap = {}
+            for _, row in tdf.iterrows():
+                d = "".join(ch for ch in str(row[dcol]) if ch.isdigit())[:8]
+                try:
+                    tmap[d] = float(row[vcol])
+                except Exception:  # noqa: BLE001
+                    pass
+            keys = sorted(k for k in tmap if len(k) == 8)
+            if keys:
+                ki = np.array([int(k) for k in keys]); kv = np.array([tmap[k] for k in keys])
+                traffic_arr = [float(kv[int(np.argmin(np.abs(ki - int(x))))]) for x in labels]
+                st.success(f"교통량 불러옴: {tf.name} ({len(keys)}행) → {len(labels)}시점 정렬")
+                st.line_chart(pd.DataFrame({"교통량": traffic_arr}, index=pd.Index(times, name="날짜")))
+        except Exception as e:  # noqa: BLE001
+            st.error(f"교통량 파싱 실패: {e}")
+
+    if lat is not None:
+        st.caption(f"온도 위치 {lat:.4f}, {lon:.4f} · {len(times)}시점")
+    if st.button("🌉 교량특화 PINN 재실행 (제원+온도+교통량)", key="btn_custom_pinn", type="primary"):
+        from inframon.config import PipelineConfig
+        from inframon.contracts.io import ProjectStore
+        from inframon.contracts.schema import InSAROutput
+        from inframon.orchestrator.engines import resolve
+        cfg = PipelineConfig(); cfg.pinn_epochs = 250
+        cfg.bridge_profile = prof.model_dump()
+        used = [f"제원({prof.bridge_type}/{prof.material})"]
+        if use_temp and lat is not None:
+            from inframon.insar.era5_master import fetch_temperature
+            with st.spinner("Open-Meteo 온도 수집…"):
+                try:
+                    temps = fetch_temperature(lat, lon, labels)
+                    cfg.pinn_temperature = list(map(float, temps)); used.append("온도")
+                    st.line_chart(pd.DataFrame({"기온(°C)": temps}, index=pd.Index(times, name="날짜")))
+                except Exception as e:  # noqa: BLE001
+                    st.warning(f"온도 수집 실패(생략): {e}")
+        if traffic_arr is not None:
+            cfg.pinn_traffic = traffic_arr; used.append("교통량")
+        with st.spinner("교량특화 PINN real + FRAM 재실행…"):
+            with ProjectStore(path, mode="a") as s:
+                insar = s.read_meta("insar", InSAROutput)
+                pinn = resolve("pinn", "real")(s, insar, cfg)
+                fram = resolve("fram", "real")(s, insar, pinn, cfg)
+                al = float(np.mean(s.read_array(pinn.alpha_ds)))
+                ei = float(np.mean(s.read_array(pinn.EI_ds)))
+                nf = np.atleast_1d(s.read_array(pinn.natural_freq_ds))
+        st.success(f"완료 · {' + '.join(used)} → α {al:.2e}/°C · EI {ei:.2e} · "
+                   f"f₁ {nf[0]:.2f}Hz · CRI {fram.cri_global_max:.3f}")
+        st.rerun()
 
 
 # ───────────────────────────── ③ FRAM 탭 ──────────────────────────────
@@ -656,6 +1303,29 @@ def tab_fram(path: str, start: date) -> None:
         st.caption("기능 상태 — " + " · ".join(
             f"{_emoji.get(s, '⚪')} {f}: {s}" for f, s in fstates.items()))
 
+    # 📄 교량별 리포트(PDF)
+    rc1, rc2 = st.columns([1, 3])
+    if rc1.button("📄 리포트(PDF) 생성", key="btn_report"):
+        from inframon.dashboard.report import build_report
+        bname = None
+        tp = f"{_recipe_dir()}/bridge_target.json"
+        if Path(tp).exists():
+            try:
+                from inframon.insar.recipe import load_bridge_target
+                bname = load_bridge_target(tp).name
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            out = build_report(path, "data/report.pdf", bridge_name=bname)
+            st.session_state["report_pdf"] = str(out)
+            st.success("리포트 생성됨")
+        except Exception as e:  # noqa: BLE001
+            st.error(f"리포트 실패: {e}")
+    if st.session_state.get("report_pdf") and Path(st.session_state["report_pdf"]).exists():
+        with open(st.session_state["report_pdf"], "rb") as fh:
+            rc2.download_button("⬇️ PDF 다운로드", fh.read(), file_name="inframon_bridge_report.pdf",
+                                mime="application/pdf", key="dl_report")
+
     k = st.slider("시점 (t)", 0, M - 1, M - 1, key="fram_t")
     st.caption(f"선택 시점: **{times[k]:%Y-%m-%d}**")
     col1, col2 = st.columns(2)
@@ -670,6 +1340,41 @@ def tab_fram(path: str, start: date) -> None:
     st.markdown("**CRI 히트맵 (측정점 × 시점)**")
     st.image((cri / (cri.max() + 1e-9) * 255).astype(np.uint8),
              caption="밝을수록 위험", use_container_width=True)
+
+    # ── 🗺️ 위험 지점 지도 (실 경위도일 때만) ──
+    lon, lat = xyz[:, 0], xyz[:, 1]
+    if float(np.abs(lon).max()) <= 180 and float(np.abs(lat).max()) <= 90:
+        try:
+            import folium
+            from streamlit_folium import st_folium
+        except ImportError:
+            folium = None
+        if folium is not None:
+            # 붕괴확률(isotonic 보정)이 있으면 그걸로, 없으면 CRI 로 색칠
+            use_prob = cal is not None
+            val = np.asarray(cal) if use_prob else cri    # [N,M]
+            metric, lo, mid, hi = (("붕괴확률 P", 0.3, 0.5, 0.8) if use_prob
+                                   else ("CRI", 0.3, 0.6, 0.85))
+            from folium.plugins import HeatMap
+
+            val_k = val[:, k]                        # 선택 시점(슬라이더 연동)
+            n_hi = int((val_k >= hi).sum()); n_mid = int(((val_k >= mid) & (val_k < hi)).sum())
+            st.markdown(f"**🗺️ 위험 히트맵** — {metric} @ {times[k]:%Y-%m-%d} (슬라이더로 시간 이동) · "
+                        f"🔴위험 {n_hi} · 🟠경고 {n_mid} / 전체 {len(lon)}점")
+            fmap = folium.Map(location=[float(lat.mean()), float(lon.mean())],
+                              zoom_start=16, tiles="OpenStreetMap")
+            # 선택 시점 값을 가중치로 한 열지도(전 점 사용, 마커 없이 가벼움)
+            heat = [[float(lat[i]), float(lon[i]), float(np.clip(val_k[i], 0, 1))]
+                    for i in range(len(lon)) if val_k[i] > 0.05]
+            HeatMap(heat, radius=14, blur=10, min_opacity=0.3, max_zoom=18,
+                    gradient={0.3: "blue", 0.5: "lime", 0.7: "orange", 0.9: "red"}
+                    ).add_to(fmap)
+            st_folium(fmap, height=460, key="fram_danger_map")
+            cap = (f"열강도 = {metric}(선택 시점). 파랑(낮음)→초록→주황→빨강(높음). 전 {len(lon)}점 가중. "
+                   f"위험부재 {warning.get('critical_members', [])}. ")
+            cap += ("붕괴확률 = isotonic 캘리브(합성 Morandi 라벨) — 슬라이더로 위험 발달을 보세요."
+                    if use_prob else "isotonic 캘리브 적용 시 붕괴확률로 표시됩니다.")
+            st.caption(cap)
 
     # ── 함수망 공명(N-K) S(t): FRAM real 이 있을 때만 ──
     if net is not None:
@@ -755,7 +1460,9 @@ def main() -> None:
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
 
-    path = st.sidebar.text_input("project.h5 경로", default_project_path())
+    with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
+        picked = portfolio_section()
+    path = st.sidebar.text_input("project.h5 경로", picked or default_project_path())
     with st.sidebar.expander("⚙️ 데모 데이터 생성", expanded=not Path(path).exists()):
         n_points = st.number_input("측정점 수 N", 2, 2000, 200, 10)
         n_dates = st.number_input("취득 시점 수 M", 2, 240, 36, 1)

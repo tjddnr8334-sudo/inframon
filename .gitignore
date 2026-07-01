@@ -19,3 +19,6 @@ data/
 
 # 로컬 설정 (개인 환경)
 .claude/settings.local.json
+
+# 로컬 Claude 세션·잡 데이터 전체
+.claude/

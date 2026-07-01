@@ -5,14 +5,29 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "inframon"
 version = "0.0.1"
-description = "InSAR · PINN · CV · FRAM 통합 인프라 모니터링 플랫폼"
+description = "SARvey 기반 InSAR + PINN + FRAM 교량 인프라 모니터링 플랫폼"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "inframon contributors" }]
+keywords = ["InSAR", "Sentinel-1", "bridge-monitoring", "PINN", "FRAM", "SARvey"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+
 # Phase 0 코어 의존성 (가벼움 — pip install -e . 만으로 데모 실행 가능)
 dependencies = [
     "numpy>=1.26",
     "h5py>=3.10",
     "pydantic>=2.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tjddnr8334-sudo/inframon"
+Repository = "https://github.com/tjddnr8334-sudo/inframon"
 
 [project.optional-dependencies]
 # 모듈별 무거운 의존성은 Phase 1+ 에서 설치 (conda 권장)

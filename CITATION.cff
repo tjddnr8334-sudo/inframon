@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "inframon 을 사용하시면 아래 소프트웨어와 기반 InSAR 도구(SARvey·MiaplPy·MintPy·ISCE2)를 함께 인용해 주세요."
+title: "inframon — SARvey 기반 교량 인프라 모니터링 플랫폼"
+abstract: >-
+  Sentinel-1 InSAR(SARvey/ISCE2/MiaplPy) 로 추출한 교량 변위에 물리기반 신경망(PINN,
+  Euler-Bernoulli PDE + FEM 모달)과 기능공명분석(FRAM, 공명위험지수 CRI)을 결합한
+  교량 안전 모니터링 파이프라인·대시보드.
+type: software
+authors:
+  - name: "inframon contributors"
+version: "0.0.1"
+license: GPL-3.0-or-later
+repository-code: "https://github.com/tjddnr8334-sudo/inframon"
+keywords:
+  - InSAR
+  - Sentinel-1
+  - bridge monitoring
+  - PINN
+  - FRAM
+  - SARvey
+references:
+  - type: software
+    title: "SARvey"
+    notes: "PS/DS 다중시기 InSAR 시계열 (inframon 의 InSAR 처리 엔진)"
+    repository-code: "https://github.com/luhipi/sarvey"
+    license: GPL-3.0-only
+  - type: software
+    title: "MiaplPy"
+    notes: "위상연결(phase linking)·SLC 스택 로딩"
+    repository-code: "https://github.com/insarlab/MiaplPy"
+  - type: software
+    title: "MintPy"
+    notes: "InSAR 시계열 처리 라이브러리"
+    repository-code: "https://github.com/insarlab/MintPy"
+  - type: software
+    title: "ISCE2"
+    notes: "Sentinel-1 topsStack 코레지스트레이션"
+    repository-code: "https://github.com/isce-framework/isce2"

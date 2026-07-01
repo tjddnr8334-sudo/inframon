@@ -105,6 +105,9 @@ def main() -> None:
                    help="InSAR 처리 파이프라인(F) 실행. demo=합성으로 어디서나, real=Linux/WSL plan")
     p.add_argument("--recipe", default="data/insar_recipe", help="--insar-process 의 레시피 폴더")
     p.add_argument("--work", default="data/insar_work", help="--insar-process real 의 작업 폴더")
+    p.add_argument("--fuse-tracks", nargs="+", default=None, metavar="TRACK_H5",
+                   help="여러 방법-트랙(A/B/C/D) Track H5 를 CS 합의 융합 → --out 에 융합 Track H5 저장 "
+                        "후 종료. 트랙 간 일치도(검증) 리포트 출력.")
     args = p.parse_args()
 
     cfg = PipelineConfig()
@@ -422,6 +425,30 @@ def main() -> None:
         print(f"  채널            : 연직={'O' if ch['vertical_fused'] else 'X'} · "
               f"PINN={'O' if ch['pinn'] else 'X'} · CRI(참고)={'O' if ch['fram_cri'] else 'X'}")
         print("=" * 56)
+        return
+
+    if args.fuse_tracks:
+        from .insar.track_fusion import fuse_tracks, fusion_report, write_fused_track_h5
+        from .insar.track_reader import read_track_h5
+
+        if len(args.fuse_tracks) < 2:
+            p.error("--fuse-tracks 에는 트랙 H5 가 2개 이상 필요합니다.")
+        tracks = [read_track_h5(h) for h in args.fuse_tracks]
+        result = fuse_tracks(tracks)
+        write_fused_track_h5(result, args.out)
+        rep = fusion_report(result)
+        print("=" * 56)
+        print("  4-Track CS 융합 완료 (방법 합의 + 트랙 간 검증)")
+        print("=" * 56)
+        print(f"  입력 트랙       : {len(tracks)}개")
+        print(f"  결과 파일       : {args.out}")
+        print(f"  융합 점/시점    : N={result.los_mm.shape[0]}, M={result.los_mm.shape[1]}")
+        print(f"  트랙 일치도(MAD): 중앙 {rep['agreement_mm_median']:.2f}mm / "
+              f"p90 {rep['agreement_mm_p90']:.2f}mm")
+        print(f"  신뢰(>0.6) 비율 : {rep['confident_frac'] * 100:.0f}%")
+        print(f"  점당 평균 트랙  : {rep['mean_tracks_per_point']:.2f}")
+        print("=" * 56)
+        print(f"  다음: python -m inframon --import-track-h5 {args.out} --out data/project.h5")
         return
 
     if args.import_track_h5:

@@ -94,3 +94,29 @@ src/inframon/
 | 실데이터 수치 게이트 (G2~G5) | ⬜ | 실 SLC·실 제원·실 가중치 필요 → [실데이터 런북](docs/실데이터_런북.md) |
 
 > 테스트 156개(합성·데모). 실데이터 투입은 `--doctor`/`--check-track` 게이트 + [런북](docs/실데이터_런북.md).
+
+## 기반 InSAR 도구 · 귀속 (Attribution)
+
+inframon 은 InSAR 다중시기 처리에 아래 오픈소스 도구를 **엔진으로 호출**한다(별도 설치,
+WSL2/Linux). inframon 은 이들의 소스를 포함하지 않고 CLI 로 오케스트레이션한다.
+
+- **SARvey** (기본 InSAR 엔진, PS/DS 시계열) — https://github.com/luhipi/sarvey · GPLv3
+- **MiaplPy** (위상연결·SLC 스택) — https://github.com/insarlab/MiaplPy · GPLv3
+- **MintPy** (InSAR 시계열) — https://github.com/insarlab/MintPy · GPLv3
+- **ISCE2** (Sentinel-1 topsStack 코레지) — https://github.com/isce-framework/isce2
+
+> InSAR 엔진은 **플러그블**이다 — SARvey 가 기본값이며 MiaplPy/MintPy/StaMPS 어댑터도 제공
+> (`scripts/wsl_sarvey/5x_*_to_inframon.py`). inframon 의 고유 기여는 **데이터 선별(OSM·ASF·ERA5),
+> 구조 해석(PINN), 기능공명(FRAM), 대시보드·검증·정확도 보정** 계층이다.
+
+데이터: Copernicus Sentinel-1(ASF)·GLO-30 DEM·ERA5(Open-Meteo)·OpenStreetMap(ODbL).
+사용 시 각 제공처 약관·인용 요건을 따른다. 상세는 [`NOTICE.md`](NOTICE.md).
+
+## 인용 (Citation)
+
+inframon 을 연구에 사용하면 inframon 과 **기반 도구(특히 SARvey)를 함께 인용**해 주세요.
+서지정보는 [`CITATION.cff`](CITATION.cff) 참조.
+
+## 라이선스
+
+**GPLv3** — [`LICENSE`](LICENSE) 참조. 기여 지침은 [`CONTRIBUTING.md`](CONTRIBUTING.md).

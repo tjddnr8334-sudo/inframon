@@ -77,7 +77,13 @@ def test_bridge_target_roundtrip(monkeypatch, tmp_path):
     target = BridgeTarget.from_bridge(bridge, selected_lat=37.3305, selected_lon=127.1110)
 
     assert target.confirmed and target.name == "정자교"
-    assert target.bbox == (127.1100, 37.3300, 127.1120, 37.3310)
+    # bbox 는 이제 교량 주변 buffer(점 추출 AOI); 원 extent 는 bridge_bbox 에 보존
+    assert target.bridge_bbox == (127.1100, 37.3300, 127.1120, 37.3310)
+    assert target.aoi_buffer_m == 200.0
+    bmn_lon, bmn_lat, bmx_lon, bmx_lat = target.bbox
+    # buffer 로 사방 확장됐는지 (AOI ⊃ 교량 extent)
+    assert bmn_lon < 127.1100 and bmn_lat < 37.3300
+    assert bmx_lon > 127.1120 and bmx_lat > 37.3310
 
     path = save_bridge_target(tmp_path / "recipe" / "bridge_target.json", target)
     assert path.exists()
