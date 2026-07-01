@@ -164,7 +164,7 @@ exports APA/BibTeX automatically. Ready-to-paste BibTeX:
 ### License
 
 **GPLv3** ([`LICENSE`](LICENSE)); contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Data sources & terms: [`NOTICE.md`](NOTICE.md).
+Data sources & terms: [`NOTICE.md`](NOTICE.md). Version history: [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -275,4 +275,4 @@ APA/BibTeX 를 자동 생성한다. 바로 붙여넣는 BibTeX 는 [English › 
 ### 라이선스
 
 **GPLv3** ([`LICENSE`](LICENSE)) · 기여: [`CONTRIBUTING.md`](CONTRIBUTING.md) ·
-데이터 출처·약관: [`NOTICE.md`](NOTICE.md).
+데이터 출처·약관: [`NOTICE.md`](NOTICE.md) · 변경 이력: [`CHANGELOG.md`](CHANGELOG.md).
