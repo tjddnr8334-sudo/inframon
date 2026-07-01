@@ -12,12 +12,22 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
-![FRAM collapse-probability risk map on OpenStreetMap (animated)](docs/img/demo.gif)
+**Concept — points ON a bridge deck (synthetic demo) / 개념 — 교량 데크 위 점 (합성 데모):**
 
-*FRAM collapse-probability (isotonic) per InSAR point, **on an OpenStreetMap basemap**, animated over
-2017–2025. 🟢 low → 🔴 high. · OSM 지도 위 측정점별 FRAM 붕괴확률의 시간 변화(2017–2025). FRAM 산출값이며 검증된 진단이 아님.*
+![Bridge-deck monitoring points, CRI over time (synthetic)](docs/img/demo_bridge.gif)
 
-![Result overview + LOS velocity on OpenStreetMap](docs/img/overview.png)
+*Illustrative **synthetic** demo — monitoring points along a modeled bridge deck (deck·pier·abutment),
+CRI 🟢→🔴 over time. **Not real InSAR.** · 모델 교량 데크 위 점의 CRI 시간변화(합성, 실측 아님).*
+
+**Real data (Jeongja Br., Sentinel-1) on OpenStreetMap / 실 데이터 (정자교) OSM 위:**
+
+![Real LOS velocity on OSM](docs/img/velocity_map.png)
+
+*Real SARvey result — PS/DS points sit on **surrounding buildings**; a smooth bridge deck over a river
+has **few natural scatterers**, so deck points are sparse (needs corner reflectors / high-res SAR — see
+Status). · 실 결과: 점이 주변 건물에 분포, 매끈한 교량 데크엔 산란체가 적어 데크 점은 희소(코너리플렉터/고해상도 SAR 필요).*
+
+![Result overview](docs/img/overview.png)
 
 ![Dashboard — FRAM](docs/img/dashboard_fram.png)
 ![Dashboard — PINN](docs/img/dashboard_pinn.png)
