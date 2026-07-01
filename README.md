@@ -57,6 +57,30 @@ PINN  → decomposition + Euler-Bernoulli PDE + absolute EI   (pinn/{engine,real
 FRAM  → pointwise resonance · function net (N-K) · CRI      (fram/{engine,real_engine}.py)  STUB + REAL
 ```
 
+### Repository structure
+
+```
+inframon/
+├── src/inframon/          # main package (installable: pip install -e .)
+│   ├── contracts/         # Pydantic + HDF5 data contract — the "sacred" schema (schema, io, array_schema)
+│   ├── cv/                # CV engine: ROI / segmentation / axis / georeference        (engine + real_engine)
+│   ├── insar/             # InSAR engine: Track H5 → world xyz series, DEM, ERA5 master, fusion (engine + real_engine)
+│   ├── pinn/              # PINN engine: decomposition + Euler-Bernoulli PDE + absolute EI (engine + real_engine, pde)
+│   ├── fram/              # FRAM engine: pointwise resonance · function net (N-K) · CRI (engine + real_engine, network)
+│   ├── orchestrator/      # pipeline wiring · hot-swap engine registry · incremental resume
+│   ├── api/               # FastAPI service (--serve) + engine registry / transform
+│   ├── dashboard/         # Streamlit app (FRAM / PINN / InSAR tabs)
+│   ├── __main__.py        # CLI entry — --demo / --doctor / --check-track / --engine X=real
+│   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
+├── tests/                 # 44 test files — golden regression, contract validation, per-engine *_real
+├── docs/                  # design & context docs (KR) + GitHub Pages landing (index.html)
+├── scripts/               # SLC download, WSL2 SARvey runners, dashboard / media capture
+├── examples/              # runnable examples (bmaps_tab)
+├── .github/workflows/     # CI — tests.yml (pytest on Python 3.11)
+├── CITATION.cff · LICENSE (GPLv3) · NOTICE.md · CONTRIBUTING.md
+└── pyproject.toml · environment.yml
+```
+
 ### Quick start
 
 ```bash
@@ -77,6 +101,33 @@ python -m inframon --check-track track.h5      # pre-ingest validation (exit 0 =
 python -m inframon --demo --insar-source track.h5 --out data/project.h5 \
   --engine cv=real --engine insar=real --engine pinn=real --engine fram=real
 ```
+
+### Reproducibility
+
+| Aspect | Detail |
+|---|---|
+| Language / runtime | Python ≥ 3.11 (CI runs on 3.11) |
+| Core deps | `numpy≥1.26` · `h5py≥3.10` · `pydantic≥2.6` — the stub demo runs on these alone |
+| Heavy deps (optional) | `torch≥2.2` (PINN/CV) · `transformers≥4.40` (CV) · `mintpy`/`rasterio`/`gdal` (InSAR) · `streamlit`/`plotly`/`folium` (dashboard) — see `pyproject.toml` extras |
+| InSAR toolchain | SARvey (default) · MiaplPy · MintPy · ISCE2 — run on **WSL2/Linux**, invoked via CLI (`docs/F_SARvey_WSL2.md`) |
+| Data sources | Sentinel-1 SLC (ESA/Copernicus via ASF) · Copernicus GLO-30 DEM · ERA5 (Open-Meteo) · OpenStreetMap (ODbL) — see [`NOTICE.md`](NOTICE.md) |
+| Deterministic demo | `python -m inframon --demo` → `data/project.h5` + CRI, no network/GPU, fixed seeds; numerics locked by golden-regression tests |
+| Real case study | Jeongja Bridge, Sentinel-1 — **1,072 points × 201 epochs** |
+| Analytic validation | PINN/FEM vs closed-form Euler-Bernoulli: **error < 0.1%** (`tests/test_pinn_real.py`, `tests/test_benchmark.py`) |
+| Environment capture | `python -m inframon --doctor` reports versions/readiness; `environment.yml` pins the conda env |
+
+Reproduce the demo end-to-end:
+
+```bash
+pip install -e ".[dev]"
+python -m inframon --doctor            # environment / readiness report
+python -m inframon --demo --out data/project.h5
+pytest -q                              # golden regression confirms numerics are unchanged
+```
+
+**Not yet reproducible/validated:** field measurements, commercial-FEM cross-check, and real
+failure-label evaluation are *not* done — outputs are pipeline results, not diagnoses (see the Status
+banner at the top).
 
 ### Underlying InSAR tools · Attribution
 
@@ -137,6 +188,30 @@ PINN  → 성분분해 + Euler-Bernoulli PDE + 절대 EI  (pinn/{engine,real_eng
 FRAM  → 점별 공명·함수망(N-K)·CRI + 경보·보정확률  (fram/{engine,real_engine}.py)  STUB + REAL
 ```
 
+### 디렉터리 구조
+
+```
+inframon/
+├── src/inframon/          # 메인 패키지 (설치: pip install -e .)
+│   ├── contracts/         # Pydantic + HDF5 데이터 계약 — "성역" 스키마 (schema, io, array_schema)
+│   ├── cv/                # CV 엔진: ROI/분할/축선/지오레퍼런스                 (engine + real_engine)
+│   ├── insar/             # InSAR 엔진: Track H5 → world xyz 시계열, DEM, ERA5 master, 융합 (engine + real_engine)
+│   ├── pinn/              # PINN 엔진: 성분분해 + Euler-Bernoulli PDE + 절대 EI (engine + real_engine, pde)
+│   ├── fram/              # FRAM 엔진: 점별 공명 · 함수망(N-K) · CRI          (engine + real_engine, network)
+│   ├── orchestrator/      # 파이프라인 배선 · 핫스왑 엔진 레지스트리 · 증분 재개
+│   ├── api/               # FastAPI 서비스(--serve) + 엔진 레지스트리/변환
+│   ├── dashboard/         # Streamlit 앱 (FRAM / PINN / InSAR 탭)
+│   ├── __main__.py        # CLI 진입점 — --demo / --doctor / --check-track / --engine X=real
+│   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
+├── tests/                 # 테스트 44개 — 골든 회귀, 계약 검증, 엔진별 *_real
+├── docs/                  # 설계·맥락 문서(한글) + GitHub Pages 랜딩(index.html)
+├── scripts/               # SLC 다운로드, WSL2 SARvey 러너, 대시보드/미디어 캡처
+├── examples/              # 실행 예제 (bmaps_tab)
+├── .github/workflows/     # CI — tests.yml (Python 3.11 pytest)
+├── CITATION.cff · LICENSE (GPLv3) · NOTICE.md · CONTRIBUTING.md
+└── pyproject.toml · environment.yml
+```
+
 ### 빠른 시작
 
 ```bash
@@ -157,6 +232,32 @@ python -m inframon --check-track track.h5      # 투입 전 사전검증 (exit 0
 python -m inframon --demo --insar-source track.h5 --out data/project.h5 \
   --engine cv=real --engine insar=real --engine pinn=real --engine fram=real
 ```
+
+### 재현성
+
+| 항목 | 내용 |
+|---|---|
+| 언어/런타임 | Python ≥ 3.11 (CI 3.11) |
+| 코어 의존성 | `numpy≥1.26` · `h5py≥3.10` · `pydantic≥2.6` — stub 데모는 이것만으로 실행 |
+| 무거운 의존성(선택) | `torch≥2.2`(PINN/CV) · `transformers≥4.40`(CV) · `mintpy`/`rasterio`/`gdal`(InSAR) · `streamlit`/`plotly`/`folium`(대시보드) — `pyproject.toml` extras |
+| InSAR 툴체인 | SARvey(기본) · MiaplPy · MintPy · ISCE2 — **WSL2/Linux**에서 CLI 호출 (`docs/F_SARvey_WSL2.md`) |
+| 데이터 출처 | Sentinel-1 SLC(ESA/Copernicus, ASF) · Copernicus GLO-30 DEM · ERA5(Open-Meteo) · OpenStreetMap(ODbL) — [`NOTICE.md`](NOTICE.md) |
+| 결정론적 데모 | `python -m inframon --demo` → `data/project.h5` + CRI, 네트워크/GPU 불필요·고정 시드, 골든 회귀로 수치 고정 |
+| 실 사례 | 정자교, Sentinel-1 — **1,072점 × 201에폭** |
+| 해석해 검증 | PINN/FEM vs Euler-Bernoulli 해석해: **오차 < 0.1%** (`tests/test_pinn_real.py`, `tests/test_benchmark.py`) |
+| 환경 기록 | `python -m inframon --doctor` 로 버전·준비도 출력, `environment.yml` 로 conda 환경 고정 |
+
+데모 전체 재현:
+
+```bash
+pip install -e ".[dev]"
+python -m inframon --doctor            # 환경·준비도 리포트
+python -m inframon --demo --out data/project.h5
+pytest -q                              # 골든 회귀로 수치 불변 확인
+```
+
+**아직 재현·검증 안 됨:** 현장 실측 · 상용 FEM 교차검증 · 실 붕괴라벨 평가는 미수행 — 출력은
+파이프라인 결과이지 진단이 아니다(상단 Status 배너 참조).
 
 ### 기반 InSAR 도구 · 귀속
 
