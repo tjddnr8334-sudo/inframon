@@ -738,54 +738,63 @@ def portfolio_section():
 
 
 def asc_desc_section() -> None:
-    """Asc+Desc 두 Track H5 → 연직(U)·종축(H) 분해 (fuse_asc_desc). LOS 모호성 해소."""
+    """상승+하강 궤도 결합 — ①UNION(점 증가) ②연직/EW 분해(fuse_asc_desc)."""
+    import math
+
     from inframon.insar.fusion import FusionError, fuse_asc_desc
     from inframon.insar.track_reader import read_track_h5
-    st.caption("서로 다른 궤도(오름·내림) LOS 2개를 합쳐 **연직 변위 U**(교량 처짐의 핵심)와 종축 H 로 분해합니다. "
-               "두 Track H5 모두 **입사각(incidence)** 이 있어야 합니다.")
+    st.caption("**상승(ascending) + 하강(descending)** 두 궤도를 결합: "
+               "**① UNION** = 두 궤도 점 합쳐 감시점 증가 · **② 연직분해** = 정합쌍을 연직 U·종축 H 로. "
+               "(연직분해는 두 Track H5 에 입사각·heading 필요)")
     c1, c2 = st.columns(2)
-    asc_p = c1.text_input("Ascending Track H5", "data/sarvey_track.h5", key="ad_asc")
-    desc_p = c2.text_input("Descending Track H5", "data/sarvey_track_desc.h5", key="ad_desc")
-    out_p = st.text_input("융합 결과 저장", "data/fused_vertical.h5", key="ad_out")
-    if st.button("🔀 Asc+Desc 연직분해", key="btn_ad"):
-        if not (Path(asc_p).exists() and Path(desc_p).exists()):
-            st.error("두 Track H5 경로가 모두 존재해야 합니다. (descending 트랙도 다운→코레지→SARvey 로 준비)")
-            return
-        try:
-            asc, desc = read_track_h5(asc_p), read_track_h5(desc_p)
-            res = fuse_asc_desc(asc, desc)
-        except FusionError as e:
-            st.error(f"융합 불가: {e}")
-            st.caption("→ 두 Track H5 에 incidence/heading 이 필요합니다(SARvey export 시 geometry 포함). "
-                       "없으면 단일 궤도 LOS 로 진행하세요.")
-            return
-        except Exception as e:  # noqa: BLE001
-            st.error(f"실패: {e}"); return
-        U = res.vertical
-        import numpy as _np
-        tv = res.track.date_labels
-        try:
-            days = _np.array([int(str(int(d)) ) for d in tv])  # noqa
-        except Exception:  # noqa: BLE001
-            days = _np.arange(U.shape[1])
-        # 점별 연직 속도(mm/yr) 근사
-        st.success(f"연직분해 완료 — 정합점 {U.shape[0]}개 × 공통 {U.shape[1]}시점")
-        lon = res.track.lonlat[:, 0]; lat = res.track.lonlat[:, 1]
-        vU = U[:, -1] - U[:, 0]
-        st.caption(f"연직변위(말−초) 범위 {float(_np.nanmin(vU)):.1f} ~ {float(_np.nanmax(vU)):.1f} mm")
+    asc_p = c1.text_input("상승궤도 Track H5", "data/sarvey_permissive.h5", key="ad_asc")
+    desc_p = c2.text_input("하강궤도 Track H5", "data/sarvey_desc.h5", key="ad_desc")
+    if not st.button("🔀 상승+하강 결합 (union + 연직분해)", key="btn_ad"):
+        return
+    if not (Path(asc_p).exists() and Path(desc_p).exists()):
+        st.error("두 Track H5 경로가 모두 존재해야 합니다 (하강궤도도 다운→코레지→SARvey 로 준비).")
+        return
+    asc, desc = read_track_h5(asc_p), read_track_h5(desc_p)
+    na, nd = asc.los.shape[0], desc.los.shape[0]
+
+    # ① UNION — 점 증가
+    st.markdown("**① UNION — 감시점 증가**")
+    u1, u2, u3 = st.columns(3)
+    u1.metric("상승 점", na); u2.metric("하강 점", nd)
+    u3.metric("UNION 합계", na + nd, delta=f"+{nd} vs 상승단독")
+    st.caption(f"두 궤도는 서로 다른 시선(LOS)이라 각각 독립 관측점 → 합치면 **{na}+{nd}={na+nd}점**으로 감시 밀도↑.")
+
+    # ② 연직/EW 분해
+    st.markdown("**② 연직/EW 분해 (fuse_asc_desc)**")
+    for td in (asc, desc):                    # heading 라디안이면 도(°)로
+        if td.heading is not None and abs(td.heading) < 7:
+            td.heading = math.degrees(td.heading)
+    try:
+        res = fuse_asc_desc(asc, desc)
+    except FusionError as e:
+        st.warning(f"연직분해 불가: {e} — UNION(①)만 사용하세요.")
+        return
+    U = res.vertical
+    lon, lat = res.track.lonlat[:, 0], res.track.lonlat[:, 1]
+    vU = U[:, -1] - U[:, 0]
+    f1, f2 = st.columns(2)
+    f1.metric("정합쌍(연직 산출점)", U.shape[0])
+    f2.metric("연직변위 범위(말−초)", f"{float(np.nanmin(vU)):+.1f}~{float(np.nanmax(vU)):+.1f} mm")
+    st.caption(f"heading: 상승 {asc.heading:.1f}° · 하강 {desc.heading:.1f}° → 2×2 역산으로 연직 U·종축 H 분리.")
+    if float(np.abs(lon).max()) <= 180:
         try:
             import folium
             from streamlit_folium import st_folium
-            m = folium.Map(location=[float(_np.nanmean(lat)), float(_np.nanmean(lon))], zoom_start=16,
-                           tiles="OpenStreetMap")
-            vmax = float(_np.nanpercentile(_np.abs(vU), 95)) or 1.0
+            m = folium.Map(location=[float(np.nanmean(lat)), float(np.nanmean(lon))],
+                           zoom_start=16, tiles="OpenStreetMap")
+            vmax = float(np.nanpercentile(np.abs(vU), 95)) or 1.0
             for i in range(len(lon)):
-                x = float(_np.clip(vU[i] / vmax, -1, 1))
+                x = float(np.clip(vU[i] / vmax, -1, 1))
                 col = (f"#ff{int(255*(1+x)):02x}{int(255*(1+x)):02x}" if x < 0
                        else f"#{int(255*(1-x)):02x}{int(255*(1-x)):02x}ff")
-                folium.CircleMarker([float(lat[i]), float(lon[i])], radius=3, weight=0, color=col,
+                folium.CircleMarker([float(lat[i]), float(lon[i])], radius=4, weight=0, color=col,
                                     fill=True, fill_color=col, fill_opacity=0.85,
-                                    tooltip=f"연직 {vU[i]:.1f} mm").add_to(m)
+                                    tooltip=f"연직 {vU[i]:+.1f} mm").add_to(m)
             st.markdown("**연직 변위 U 지도** (🔴침하·🔵융기)")
             st_folium(m, height=420, key="ad_map")
         except ImportError:
