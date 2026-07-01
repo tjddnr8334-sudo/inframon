@@ -667,7 +667,9 @@ def portfolio_section():
     st.dataframe(pd.DataFrame([{k: v for k, v in r.items() if k != "_path"} for r in rows]),
                  hide_index=True, use_container_width=True)
     names = [r["파일"] for r in rows]
-    pick = st.selectbox("교량(프로젝트) 선택", names, key="portfolio_pick")
+    default_name = Path(default_project_path()).name          # 기본 = project.h5
+    idx = names.index(default_name) if default_name in names else 0
+    pick = st.selectbox("교량(프로젝트) 선택", names, index=idx, key="portfolio_pick")
     st.caption("선택하면 아래 경로가 그 교량으로 바뀝니다. (여러 교량은 data/ 에 project_*.h5 로 저장)")
     return next(r["_path"] for r in rows if r["파일"] == pick)
 
