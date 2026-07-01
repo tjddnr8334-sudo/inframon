@@ -93,10 +93,27 @@ inframon's own contribution is the **selection (OSM·ASF·ERA5), PINN structural
 resonance, and dashboard/validation/accuracy** layers. Data: Sentinel-1 (ASF) · GLO-30 DEM · ERA5
 (Open-Meteo) · OpenStreetMap (ODbL). See [`NOTICE.md`](NOTICE.md).
 
-### Citation · License
+### How to cite
 
-Cite inframon **and the underlying tools (especially SARvey)** — see [`CITATION.cff`](CITATION.cff).
+If you use inframon in academic work, please cite it **and the underlying tools (especially
+SARvey)**. GitHub's **"Cite this repository"** button (built from [`CITATION.cff`](CITATION.cff))
+exports APA/BibTeX automatically. Ready-to-paste BibTeX:
+
+```bibtex
+@software{inframon_2026,
+  title   = {inframon: Bridge Infrastructure Monitoring Platform (Sentinel-1 InSAR $\to$ PINN $\to$ FRAM CRI)},
+  author  = {{inframon contributors}},
+  year    = {2026},
+  version = {0.1.0},
+  url     = {https://github.com/tjddnr8334-sudo/inframon},
+  note    = {Software}
+}
+```
+
+### License
+
 **GPLv3** ([`LICENSE`](LICENSE)); contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Data sources & terms: [`NOTICE.md`](NOTICE.md).
 
 ---
 
@@ -148,7 +165,13 @@ GPLv3)·**MiaplPy**·**MintPy**·**ISCE2**. InSAR 엔진은 **플러그블**(SAR
 inframon 고유 기여는 **선별(OSM·ASF·ERA5)·PINN·FRAM·대시보드/검증/정확도** 계층이다.
 데이터 출처·약관은 [`NOTICE.md`](NOTICE.md).
 
-### 인용 · 라이선스
+### 인용 방법
 
-inframon 과 **기반 도구(특히 SARvey)를 함께 인용** — [`CITATION.cff`](CITATION.cff).
-**GPLv3** ([`LICENSE`](LICENSE)) · 기여: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+논문·학술 자료에 inframon 을 사용하면 inframon 과 **기반 도구(특히 SARvey)를 함께 인용**한다.
+GitHub 저장소 페이지의 **"Cite this repository"** 버튼([`CITATION.cff`](CITATION.cff) 기반)이
+APA/BibTeX 를 자동 생성한다. 바로 붙여넣는 BibTeX 는 [English › How to cite](#how-to-cite) 참조.
+
+### 라이선스
+
+**GPLv3** ([`LICENSE`](LICENSE)) · 기여: [`CONTRIBUTING.md`](CONTRIBUTING.md) ·
+데이터 출처·약관: [`NOTICE.md`](NOTICE.md).

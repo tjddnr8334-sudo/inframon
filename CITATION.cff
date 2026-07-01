@@ -8,9 +8,11 @@ abstract: >-
 type: software
 authors:
   - name: "inframon contributors"
-version: "0.0.1"
+version: "0.1.0"
+date-released: "2026-07-01"
 license: GPL-3.0-or-later
 repository-code: "https://github.com/tjddnr8334-sudo/inframon"
+url: "https://github.com/tjddnr8334-sudo/inframon"
 keywords:
   - InSAR
   - Sentinel-1
