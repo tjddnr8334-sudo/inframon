@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inframon — 교량 InSAR 모니터링 플랫폼</title>
+<meta name="description" content="Sentinel-1 InSAR(SARvey) → PINN 구조해석 → FRAM 공명위험(CRI) 교량 모니터링 플랫폼">
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --mut:#9198a1; --acc:#3fb950; --acc2:#58a6ff; --bd:#30363d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,'Malgun Gothic',sans-serif; background:var(--bg); color:var(--fg); line-height:1.6; }
+  a { color:var(--acc2); text-decoration:none; } a:hover { text-decoration:underline; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 20px; }
+  header { text-align:center; padding:64px 20px 40px; background:linear-gradient(160deg,#0d1117,#161b22); border-bottom:1px solid var(--bd); }
+  header h1 { font-size:2.6rem; margin:0 0 8px; }
+  header .sub { color:var(--mut); font-size:1.15rem; max-width:720px; margin:0 auto; }
+  .badges { margin-top:18px; }
+  .badge { display:inline-block; background:var(--card); border:1px solid var(--bd); color:var(--fg); border-radius:20px; padding:4px 12px; margin:3px; font-size:.85rem; }
+  .btns { margin-top:24px; }
+  .btn { display:inline-block; background:var(--acc); color:#0d1117; font-weight:600; padding:10px 22px; border-radius:8px; margin:4px; }
+  .btn.ghost { background:transparent; color:var(--fg); border:1px solid var(--bd); }
+  section { padding:40px 0; border-bottom:1px solid var(--bd); }
+  h2 { font-size:1.5rem; border-left:4px solid var(--acc); padding-left:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin-top:20px; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:18px; }
+  .card h3 { margin:0 0 8px; color:var(--acc2); font-size:1.05rem; }
+  .card p { margin:0; color:var(--mut); font-size:.92rem; }
+  img.demo { width:100%; border:1px solid var(--bd); border-radius:10px; margin-top:16px; }
+  pre { background:#010409; border:1px solid var(--bd); border-radius:8px; padding:14px; overflow:auto; font-size:.85rem; }
+  .pipe { font-family:ui-monospace,monospace; color:var(--acc); background:#010409; border:1px solid var(--bd); border-radius:8px; padding:14px; text-align:center; overflow:auto; }
+  footer { text-align:center; color:var(--mut); padding:32px 20px; font-size:.85rem; }
+  .mut { color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🌉 inframon</h1>
+    <p class="sub">위성 SAR(InSAR) 기반 <b>교량 인프라 모니터링 플랫폼</b><br>
+       Sentinel-1 변위 → PINN 구조해석 → FRAM 공명위험(CRI)</p>
+    <div class="badges">
+      <span class="badge">InSAR · Sentinel-1</span>
+      <span class="badge">SARvey / ISCE2 / MiaplPy</span>
+      <span class="badge">PINN (Euler-Bernoulli + FEM)</span>
+      <span class="badge">FRAM · CRI</span>
+      <span class="badge">GPLv3</span>
+    </div>
+    <div class="btns">
+      <a class="btn" href="https://github.com/tjddnr8334-sudo/inframon">GitHub 저장소 →</a>
+      <a class="btn ghost" href="https://github.com/tjddnr8334-sudo/inframon#빠른-시작">빠른 시작</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <h2>미리보기</h2>
+    <p class="mut">정자교 실 Sentinel-1 데이터를 다운로드→ISCE2 코레지→MiaplPy→SARvey→PINN→FRAM 으로 처리한 실제 산출.</p>
+    <img class="demo" src="img/demo.gif" alt="위험 시간변화 데모">
+    <img class="demo" src="img/overview.png" alt="결과 요약: 변위·속도·CRI·PINN 성분분해">
+  </section>
+
+  <section>
+    <h2>무엇을 하나</h2>
+    <div class="grid">
+      <div class="card"><h3>① InSAR</h3><p>OSM 교량 선택 → ASF SLC 검색·트랙 선별 → SARvey 시계열 → 변위 추출. 기준점·온도회귀·대기보정으로 정확도 보정.</p></div>
+      <div class="card"><h3>② PINN</h3><p>Euler-Bernoulli PDE + FEM 모달로 변위를 열팽창/하중/침하/이상으로 분해, 절대 EI·α 역산. 해석해 검증(오차 &lt;0.1%).</p></div>
+      <div class="card"><h3>③ FRAM</h3><p>기능공명분석으로 공명위험지수 CRI + 4단계 경보. isotonic 캘리브로 붕괴확률 매핑, N-K 함수망.</p></div>
+      <div class="card"><h3>대시보드</h3><p>Streamlit — 교량 선택·SLC 다운로드·처리·위험 히트맵·시계열·리포트(PDF)·다중 교량 포트폴리오.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>파이프라인</h2>
+    <div class="pipe">OSM·ASF·ERA5 선별 → (WSL2) ISCE2 코레지 → MiaplPy → <b>SARvey</b> → Track H5<br>→ InSAR 정합 → <b>PINN</b> 구조해석 → <b>FRAM</b> 공명위험 CRI → 대시보드</div>
+  </section>
+
+  <section>
+    <h2>빠른 시작</h2>
+    <pre>pip install -e ".[dev]"
+python -m inframon --doctor          # 환경 진단
+python -m inframon --demo            # 합성 데모 → data/project.h5 + CRI
+python -m streamlit run src/inframon/dashboard/app.py   # 대시보드</pre>
+    <p class="mut">실 InSAR 처리(ISCE2/MiaplPy/SARvey)는 WSL2/Linux 필요. 코어·대시보드는 합성으로 동작.</p>
+  </section>
+
+  <section>
+    <h2>기반 도구 · 라이선스</h2>
+    <p>InSAR 처리는 <a href="https://github.com/luhipi/sarvey">SARvey</a>(기본 엔진),
+       <a href="https://github.com/insarlab/MiaplPy">MiaplPy</a>,
+       <a href="https://github.com/insarlab/MintPy">MintPy</a>,
+       <a href="https://github.com/isce-framework/isce2">ISCE2</a> 를 CLI 로 호출한다(별도 설치).
+       inframon 은 <b>GPLv3</b>. 인용은 <a href="https://github.com/tjddnr8334-sudo/inframon/blob/main/CITATION.cff">CITATION.cff</a>.</p>
+  </section>
+
+</div>
+<footer>
+  inframon · GPLv3 · <a href="https://github.com/tjddnr8334-sudo/inframon">github.com/tjddnr8334-sudo/inframon</a><br>
+  Powered by SARvey · ISCE2 · MiaplPy · MintPy
+</footer>
+</body>
+</html>
