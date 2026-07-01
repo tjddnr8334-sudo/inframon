@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inframon"
-version = "0.0.1"
+version = "0.1.0"
 description = "SARvey 기반 InSAR + PINN + FRAM 교량 인프라 모니터링 플랫폼"
 readme = "README.md"
 requires-python = ">=3.11"
