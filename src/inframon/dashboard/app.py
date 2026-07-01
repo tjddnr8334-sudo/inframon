@@ -567,6 +567,69 @@ def era5_master_section() -> None:
         st.json(sel.model_dump())
 
 
+def support_zone_section(path: str, times) -> None:
+    """지지부(교각·교대) ZONE — 매끈한 데크 대신 지지부 근처 점으로 침하·변위 감시."""
+    from inframon.insar.support_zone import support_velocity, support_zone
+    los, xyz = read(path, "/insar/los", "/insar/xyz")
+    st.caption("매끈한 데크는 InSAR 점이 없으므로, **교각·교대(거친 콘크리트)** 근처 점으로 침하·변위를 감시하고 "
+               "데크는 PINN 으로 추론한다. 교량 선형(OSM)이 필요.")
+    tp = f"{_recipe_dir()}/bridge_target.json"
+    nodes = None
+    if Path(tp).exists():
+        try:
+            from inframon.insar.recipe import load_bridge_target
+            g = load_bridge_target(tp).geometry
+            if g and len(g) >= 2:
+                nodes = [(la, lo) for la, lo in g]
+        except Exception:  # noqa: BLE001
+            pass
+    if nodes is None:
+        st.info("🗺️ 교량 타깃(선형 geometry)을 먼저 저장하세요 — 지지부 위치 산정에 필요.")
+        return
+    c1, c2 = st.columns(2)
+    n_piers = c1.number_input("교각 수(추정)", 0, 20, 3, 1, key="sz_piers")
+    buf = c2.number_input("지지부 buffer (m)", 5, 100, 30, 5, key="sz_buf")
+    r = support_zone(xyz[:, :2], nodes, n_piers=int(n_piers), buffer_m=float(buf))
+    days = np.array([(t - times[0]).days for t in times], dtype=float)
+    v = support_velocity(los, days, r["mask"])
+    m1, m2, m3 = st.columns(3)
+    m1.metric("지지부 점 수", r["n_support_points"])
+    m2.metric("평균 LOS 속도", "—" if v["n"] == 0 else f"{v['mean_mm_yr']:+.2f} mm/yr")
+    m3.metric("속도 범위", "—" if v["n"] == 0 else f"{v['min_mm_yr']:+.1f}~{v['max_mm_yr']:+.1f}")
+    st.dataframe(pd.DataFrame([{"지지부": f"{s['kind']}", "lat": round(s['lat'], 5),
+                                "lon": round(s['lon'], 5), f"{int(buf)}m내 점": s['n'],
+                                "최근접(m)": round(s['nearest_m'], 1)} for s in r["supports"]]),
+                 hide_index=True, use_container_width=True)
+    lon_c, lat_c = xyz[:, 0], xyz[:, 1]
+    if r["n_support_points"] > 0 and float(np.abs(lon_c).max()) <= 180:
+        try:
+            import folium
+            from streamlit_folium import st_folium
+            mp = folium.Map(location=[float(np.mean([p[0] for p in r["positions"]])),
+                                      float(np.mean([p[1] for p in r["positions"]]))],
+                            zoom_start=17, tiles="OpenStreetMap")
+            for plat, plon, kind in r["positions"]:      # 지지부 위치 마커
+                folium.Marker([plat, plon], tooltip=kind,
+                              icon=folium.Icon(color="black", icon="tower", prefix="fa")).add_to(mp)
+            idx = np.where(r["mask"])[0]
+            tv = np.array([(t - times[0]).days / 365.25 for t in times])
+            vel = np.linalg.lstsq(np.vstack([tv, np.ones_like(tv)]).T, los[idx].T, rcond=None)[0][0]
+            vmax = float(np.percentile(np.abs(vel), 95)) or 1.0
+            for j, i in enumerate(idx):
+                x = float(np.clip(vel[j] / vmax, -1, 1))
+                col = (f"#ff{int(255*(1+x)):02x}{int(255*(1+x)):02x}" if x < 0
+                       else f"#{int(255*(1-x)):02x}{int(255*(1-x)):02x}ff")
+                folium.CircleMarker([float(lat_c[i]), float(lon_c[i])], radius=5, color=col,
+                                    fill=True, fill_color=col, fill_opacity=.9, weight=1,
+                                    tooltip=f"{vel[j]:+.2f} mm/yr").add_to(mp)
+            st.markdown("**지지부 ZONE 점** (🗼=교대/교각 위치, 원=근처 점 속도)")
+            st_folium(mp, height=420, key="sz_map")
+        except ImportError:
+            pass
+    st.caption("데크 직접 점은 CR/고해상도 SAR 영역. 지지부 점으로 침하·부등변위 추세를 보고, "
+               "데크 거동은 PINN 경계추론.")
+
+
 def accuracy_section(path: str, times) -> None:
     """InSAR 정확도 보정 — 기준점 정합 + 온도회귀(열팽창 분리) → 순 변형속도."""
     from inframon.insar.atmo import (
@@ -1052,6 +1115,9 @@ def tab_insar(path: str, start: date) -> None:
 
     with st.expander("🎯 InSAR 정확도 보정 (기준점 · 온도회귀 · 대기보정)", expanded=False):
         accuracy_section(path, times)
+
+    with st.expander("🏗️ 지지부 ZONE 모니터링 (교각·교대 · 데크 대안)", expanded=False):
+        support_zone_section(path, times)
 
 
 # ───────────────────────────── ② PINN 탭 ──────────────────────────────
