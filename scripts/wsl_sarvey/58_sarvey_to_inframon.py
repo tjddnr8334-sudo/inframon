@@ -75,6 +75,11 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         print("geometryRadar 입사각 읽기 경고:", e)
 
+    # heading 은 MintPy/ISCE 에서 라디안으로 오는 경우가 많다(예: asc -0.23, desc -2.91).
+    # fuse_asc_desc 는 도(°)를 기대하므로 여기서 통일해 저장한다.
+    if math.isfinite(heading) and abs(heading) < 7.0:
+        heading = math.degrees(heading)
+
     from pyproj import Transformer
     lon, lat = Transformer.from_crs(f"EPSG:{a.utm_epsg}", "EPSG:4326",
                                     always_xy=True).transform(ux, uy)

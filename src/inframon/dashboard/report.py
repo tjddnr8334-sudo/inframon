@@ -30,8 +30,27 @@ def build_report(project_path: str | Path, out_pdf: str | Path,
     """project.h5 → PDF 리포트. 반환: 저장 경로."""
     import matplotlib
     matplotlib.use("Agg")
+    import matplotlib.font_manager as fm
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
+
+    # 한글 폰트 (없으면 영문 라벨만 정상; 있으면 한글 렌더). Windows=Malgun, mac=AppleGothic, Linux=Nanum
+    _installed = {f.name for f in fm.fontManager.ttflist}
+    for _cand in ("Malgun Gothic", "AppleGothic", "NanumGothic", "Noto Sans CJK KR", "맑은 고딕"):
+        if _cand in _installed:
+            plt.rcParams["font.family"] = _cand
+            break
+    else:
+        for _p in (r"C:\Windows\Fonts\malgun.ttf", "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+                   "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"):
+            if Path(_p).exists():
+                try:
+                    fm.fontManager.addfont(_p)
+                    plt.rcParams["font.family"] = fm.FontProperties(fname=_p).get_name()
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
+    plt.rcParams["axes.unicode_minus"] = False   # 마이너스 부호 깨짐 방지
 
     project_path, out_pdf = Path(project_path), Path(out_pdf)
     with h5py.File(project_path, "r") as f:

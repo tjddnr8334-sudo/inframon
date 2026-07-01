@@ -357,6 +357,17 @@ def slc_search_section() -> None:
                f"— {best.n_scenes}장 ({best.first_date}~{best.last_date})")
     st.caption("취득일: " + ", ".join(s.date for s in chosen))
 
+    # 데이터 가용성 자동 판정 (asc/desc 장면·시간겹침 → 처리 모드 추천)
+    from inframon.insar.availability import assess_availability
+    adv = assess_availability(groups)
+    _mode = {"asc+desc": "🟢 상승+하강 **연직분해 가능**", "union": "🟡 **UNION만**(점↑, 연직분해 불가)",
+             "single": "🟠 **단일 LOS**", "accumulate": "🔴 **데이터 부족**(누적 대기)",
+             "none": "⚫ 데이터 없음"}
+    a, d = adv["ascending"], adv["descending"]
+    st.info(f"**데이터 가용성** → {_mode.get(adv['mode'], adv['mode'])}\n\n"
+            f"- 상승: {a['n_scenes'] if a else 0}장 · 하강: {d['n_scenes'] if d else 0}장 · "
+            f"시간겹침 {adv['overlap_days']}일\n- {adv['reason']}")
+
     if st.button("💾 트랙 선별 저장 (레시피)", key="btn_save_track"):
         sel = TrackSelection.from_selection(best, chosen, polarization=pol)
         out = save_track_selection(f"{_recipe_dir()}/track_selection.json", sel)

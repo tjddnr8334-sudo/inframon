@@ -108,6 +108,11 @@ def main() -> None:
     p.add_argument("--fuse-tracks", nargs="+", default=None, metavar="TRACK_H5",
                    help="여러 방법-트랙(A/B/C/D) Track H5 를 CS 합의 융합 → --out 에 융합 Track H5 저장 "
                         "후 종료. 트랙 간 일치도(검증) 리포트 출력.")
+    p.add_argument("--support-zone", default=None, metavar="H5",
+                   help="지지부 ZONE 점 추출·침하속도(project.h5 또는 track H5). 교량 선형은 --recipe 의 "
+                        "bridge_target.json 에서. 후 종료.")
+    p.add_argument("--support-piers", type=int, default=3, help="--support-zone 교각 수(추정)")
+    p.add_argument("--support-buffer", type=float, default=30.0, help="--support-zone buffer[m]")
     args = p.parse_args()
 
     cfg = PipelineConfig()
@@ -135,6 +140,46 @@ def main() -> None:
         cfg.validate()
     except ValueError as exc:
         p.error(str(exc))
+
+    if args.support_zone:
+        import h5py
+        import numpy as np
+
+        from .insar.recipe import load_bridge_target
+        from .insar.support_zone import support_velocity, support_zone
+        try:
+            tgt = load_bridge_target(f"{args.recipe}/bridge_target.json")
+        except Exception as exc:  # noqa: BLE001
+            p.error(f"교량 타깃 로드 실패({args.recipe}/bridge_target.json): {exc}")
+        nodes = [(la, lo) for la, lo in (tgt.geometry or [])]
+        if len(nodes) < 2:
+            p.error("교량 선형(geometry) 절점이 2개 미만 — 지지부 위치 산정 불가.")
+        with h5py.File(args.support_zone, "r") as f:
+            if "/insar/xyz" in f:
+                xyz = f["/insar/xyz"][()]; los = f["/insar/los"][()]
+                lonlat = xyz[:, :2]
+                days = (f["/insar/dates"][()] if "/insar/dates" in f
+                        else np.arange(los.shape[1], dtype=float))
+            else:                                     # track H5
+                lonlat = f["pixel_lonlat"][()]; los = f["los_mm"][()]
+                ep = [str(int(e)) for e in f["epochs"][()]]
+                from datetime import datetime
+                d0 = datetime.strptime(ep[0], "%Y%m%d")
+                days = np.array([(datetime.strptime(e, "%Y%m%d") - d0).days for e in ep], float)
+        r = support_zone(lonlat, nodes, n_piers=args.support_piers, buffer_m=args.support_buffer)
+        v = support_velocity(los, np.asarray(days, float), r["mask"])
+        print(f"교량: {tgt.name}  (선형 {len(nodes)}절점)")
+        print(f"지지부(교대2+교각{args.support_piers}) {args.support_buffer:.0f}m 이내 점: "
+              f"{r['n_support_points']}개")
+        for s in r["supports"]:
+            print(f"  {s['kind']:9s} @ {s['lat']:.5f},{s['lon']:.5f}: "
+                  f"{s['n']}점 · 최근접 {s['nearest_m']:.1f}m")
+        if v["n"]:
+            print(f"LOS 속도(침하): 평균 {v['mean_mm_yr']:+.2f} mm/yr "
+                  f"(범위 {v['min_mm_yr']:+.1f}~{v['max_mm_yr']:+.1f})")
+        else:
+            print("지지부 buffer 내 점 없음 — buffer 확대 또는 데이터 보강 필요.")
+        return
 
     if args.schedule:
         try:
