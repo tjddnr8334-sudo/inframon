@@ -28,6 +28,26 @@ lon, lat = xyz[:, 0], xyz[:, 1]
 N, M = los.shape
 level = fm.get("warning", {}).get("level", "-")
 
+# OSM 베이스맵용: 경위도(4326) → 웹메르카토르(3857)
+import contextily as ctx
+from pyproj import Transformer
+_tf = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+mx, my = _tf.transform(lon, lat)
+_padx = (mx.max() - mx.min()) * 0.18 + 60
+_pady = (my.max() - my.min()) * 0.18 + 60
+
+
+def _basemap(ax):
+    """현재 축(3857 좌표)에 OSM 타일을 깐다. 실패(오프라인)해도 무시."""
+    ax.set_xlim(mx.min() - _padx, mx.max() + _padx)
+    ax.set_ylim(my.min() - _pady, my.max() + _pady)
+    try:
+        ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, crs="EPSG:3857",
+                        attribution_size=5)
+    except Exception as e:  # noqa: BLE001
+        print("basemap 실패(오프라인?):", e)
+    ax.set_xticks([]); ax.set_yticks([])
+
 # ── overview 2x2 ──
 fig, ax = plt.subplots(2, 2, figsize=(11, 8))
 fig.suptitle(f"inframon — bridge InSAR monitoring (SARvey→PINN→FRAM)   N={N} pts, M={M} epochs, "
@@ -52,27 +72,32 @@ fig.tight_layout()
 fig.savefig(f"{OUT}/overview.png", dpi=110); plt.close(fig)
 print(f"wrote {OUT}/overview.png")
 
-# ── velocity map ──
-fig, a = plt.subplots(figsize=(7, 5))
-sc = a.scatter(lon, lat, c=vel, cmap="RdBu_r", s=10)
-a.set_title("inframon — LOS velocity map (bridge PS/DS points)")
-a.set_xlabel("lon"); a.set_ylabel("lat"); fig.colorbar(sc, label="mm/epoch")
-fig.tight_layout(); fig.savefig(f"{OUT}/velocity_map.png", dpi=110); plt.close(fig)
+# ── velocity map (OSM 베이스맵 위) ──
+fig, a = plt.subplots(figsize=(7, 6))
+sc = a.scatter(mx, my, c=vel, cmap="RdBu_r", s=14, edgecolor="k", linewidth=.2, zorder=3)
+_basemap(a)
+a.set_title("inframon — LOS velocity on OpenStreetMap (Jeongja Br.)")
+fig.colorbar(sc, ax=a, label="LOS velocity (mm/epoch)", shrink=.8)
+fig.tight_layout(); fig.savefig(f"{OUT}/velocity_map.png", dpi=120); plt.close(fig)
 print(f"wrote {OUT}/velocity_map.png")
 
-# ── demo GIF: risk(CRI or calibrated) over time ──
+# ── demo GIF: FRAM 붕괴확률(또는 CRI) 시공간 지도 ──
 risk = cal if cal is not None else cri
+metric = "collapse prob. (isotonic)" if cal is not None else "CRI"
 frames = list(range(0, M, max(1, M // 30)))
-fig, a = plt.subplots(figsize=(6, 5))
-sc = a.scatter(lon, lat, c=risk[:, 0], cmap="RdYlGn_r", vmin=0, vmax=1, s=12)
-cb = fig.colorbar(sc, label="collapse prob." if cal is not None else "CRI")
-a.set_xlabel("lon"); a.set_ylabel("lat")
+fig, a = plt.subplots(figsize=(6.8, 6.0))
+sc = a.scatter(mx, my, c=risk[:, 0], cmap="RdYlGn_r", vmin=0, vmax=1, s=16,
+               edgecolor="k", linewidth=.2, zorder=3)
+_basemap(a)                                    # OSM 타일 (어디가 위험인지 지도로)
+fig.colorbar(sc, ax=a, label=f"FRAM {metric} · 0=safe→1=high", shrink=.8)
 ttl = a.set_title("")
+fig.text(0.5, 0.015, "risk per InSAR point on OpenStreetMap · FRAM output (not a validated diagnosis)",
+         ha="center", fontsize=8, color="gray")
 
 
 def _update(k):
     sc.set_array(risk[:, k])
-    ttl.set_text(f"inframon risk map — epoch {k+1}/{M}")
+    ttl.set_text(f"inframon — FRAM {metric} · epoch {k+1}/{M} (Jeongja Br.)")
     return sc, ttl
 
 

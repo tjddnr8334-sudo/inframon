@@ -12,9 +12,12 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
-![Risk over time (demo)](docs/img/demo.gif)
+![FRAM collapse-probability risk map on OpenStreetMap (animated)](docs/img/demo.gif)
 
-![Result overview](docs/img/overview.png)
+*FRAM collapse-probability (isotonic) per InSAR point, **on an OpenStreetMap basemap**, animated over
+2017–2025. 🟢 low → 🔴 high. · OSM 지도 위 측정점별 FRAM 붕괴확률의 시간 변화(2017–2025). FRAM 산출값이며 검증된 진단이 아님.*
+
+![Result overview + LOS velocity on OpenStreetMap](docs/img/overview.png)
 
 ![Dashboard — FRAM](docs/img/dashboard_fram.png)
 ![Dashboard — PINN](docs/img/dashboard_pinn.png)
