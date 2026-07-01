@@ -1,5 +1,10 @@
 # inframon — 통합 인프라 모니터링 플랫폼
 
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-GPLv3-green)
+![Version](https://img.shields.io/badge/version-0.1.0-orange)
+![Status](https://img.shields.io/badge/status-research%20prototype-yellow)
+
 InSAR · PINN · CV · FRAM 4대 엔진을 하나의 파이프라인으로 묶어
 교량 변위를 추출하고(InSAR), 구조적 의미를 풀고(PINN), 측정 영역을 자동 산정하고(CV),
 시스템 안전을 진단(FRAM, 공명 위험 지수 CRI)한다.
