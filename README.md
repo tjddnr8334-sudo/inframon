@@ -72,7 +72,7 @@ inframon/
 │   ├── dashboard/         # Streamlit app (FRAM / PINN / InSAR tabs)
 │   ├── __main__.py        # CLI entry — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 44 test files — golden regression, contract validation, per-engine *_real
+├── tests/                 # 43 test files (304 tests) — golden regression, contract validation, per-engine *_real
 ├── docs/                  # design & context docs (KR) + GitHub Pages landing (index.html)
 ├── scripts/               # SLC download, WSL2 SARvey runners, dashboard / media capture
 ├── examples/              # runnable examples (bmaps_tab)
@@ -80,6 +80,9 @@ inframon/
 ├── CITATION.cff · LICENSE (GPLv3) · NOTICE.md · CONTRIBUTING.md
 └── pyproject.toml · environment.yml
 ```
+
+> **System overview** — architecture, BMAPS synchronization, and originality vs. the underlying
+> InSAR tools are summarized in [`docs/시스템_개요.md`](docs/시스템_개요.md).
 
 ### Quick start
 
@@ -203,7 +206,7 @@ inframon/
 │   ├── dashboard/         # Streamlit 앱 (FRAM / PINN / InSAR 탭)
 │   ├── __main__.py        # CLI 진입점 — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 테스트 44개 — 골든 회귀, 계약 검증, 엔진별 *_real
+├── tests/                 # 테스트 파일 43개 (테스트 304개) — 골든 회귀, 계약 검증, 엔진별 *_real
 ├── docs/                  # 설계·맥락 문서(한글) + GitHub Pages 랜딩(index.html)
 ├── scripts/               # SLC 다운로드, WSL2 SARvey 러너, 대시보드/미디어 캡처
 ├── examples/              # 실행 예제 (bmaps_tab)
@@ -211,6 +214,9 @@ inframon/
 ├── CITATION.cff · LICENSE (GPLv3) · NOTICE.md · CONTRIBUTING.md
 └── pyproject.toml · environment.yml
 ```
+
+> **시스템 개요** — 체계 구조 · BMAPS 동기화 · 기반 도구 대비 독자성을
+> [`docs/시스템_개요.md`](docs/시스템_개요.md) 에 정리.
 
 ### 빠른 시작
 
