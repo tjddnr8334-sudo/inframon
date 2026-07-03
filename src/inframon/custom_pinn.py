@@ -40,6 +40,9 @@ def run_custom_pinn(
     traffic_params: dict[str, str] | None = None,
     fram_mode: str = "real",
     pinn_epochs: int = 600,
+    pinn_virtual_sensors: int = 200,
+    pinn_deck_long: int = 60,
+    pinn_deck_trans: int = 9,
 ) -> dict[str, Any]:
     """위치의 교량을 자동 프로파일링해 맞춤형 PINN+FRAM 실행. 수집·결과 요약 반환."""
     project_h5 = Path(project_h5)
@@ -89,6 +92,9 @@ def run_custom_pinn(
         cfg = PipelineConfig(n_points=insar.n_points, n_dates=insar.n_dates)
         cfg.bridge_profile = prof.model_dump()
         cfg.pinn_epochs = pinn_epochs
+        cfg.pinn_virtual_sensors = pinn_virtual_sensors
+        cfg.pinn_deck_long = pinn_deck_long
+        cfg.pinn_deck_trans = pinn_deck_trans
         if temperature is not None:
             cfg.pinn_temperature = np.asarray(temperature, dtype=float)
         if traffic_series is not None:
@@ -96,6 +102,10 @@ def run_custom_pinn(
 
         from .pinn.real_engine import run_pinn_real
         pinn = run_pinn_real(store, insar, cfg)
+        try:                                    # 가상센싱 상부거더 전체 변위장 요약
+            collected["girder_virtual_sensing"] = store.read_json_attr("pinn", "virtual_sensing")
+        except (KeyError, ValueError):
+            collected["girder_virtual_sensing"] = None
         if fram_mode == "real":
             from .fram.real_engine import run_fram_real as run_fram
         else:

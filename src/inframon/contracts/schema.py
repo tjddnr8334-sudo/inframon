@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field
 # 계약 스키마 버전. major 가 바뀌면 옛 project.h5 와 호환되지 않는다(읽을 때 raise).
 # 하위호환되는 Optional 필드 추가는 minor 만 올린다.
 # 1.1: InSAROutput.vertical_ds 추가(asc+desc 융합 연직 성분, Optional — 1.0 파일과 호환).
-SCHEMA_VERSION = "1.1"
+# 1.2: PINNOutput 에 가상센싱(상부거더 전체 변위장) Optional 필드 추가 — 1.0/1.1 파일과 호환.
+SCHEMA_VERSION = "1.2"
 
 # 부재 종류 (CV → InSAR → PINN → FRAM 전체에서 공유하는 표준 라벨)
 MEMBER_TYPES = ("deck", "pier", "abutment", "bearing")
@@ -101,6 +102,27 @@ class PINNOutput(BaseModel):
     # variability 시계열 [n_func, M]  — FRAM 공명 계산용
     V_func_series_ds: str
     func_names: list[str] = Field(default_factory=lambda: list(FRAM_FUNCTIONS))
+    # ── 가상센싱(virtual sensing): 상부거더 전체 변위장 ──
+    # InSAR 관측점(N개·희소·불규칙)에서 학습한 PINN 연속장을 거더 종축을 따라 촘촘한
+    # 가상센서 격자(V개)로 재평가한 결과 — 관측이 없는 위치까지 포함한 거더 전체 변위량.
+    # 모두 Optional: real 엔진만 채우고, stub·구버전 파일은 None(계약 검증 생략).
+    n_virtual: int | None = None
+    vsens_x_ds: str | None = None             # [V] 정규화 거더축 위치 [0,1]
+    vsens_l_from_fixed_ds: str | None = None  # [V] 고정단 거리 [m]
+    vsens_total_ds: str | None = None         # [V,M] 전체 변위량(종축·연직 벡터합 크기, mm)
+    vsens_deflection_ds: str | None = None    # [V,M] 처짐(연직 하중, mm)
+    vsens_thermal_ds: str | None = None       # [V,M] 열팽창(종축, mm)
+    vsens_settle_ds: str | None = None        # [V,M] 침하(연직, mm)
+    vsens_anomaly_ds: str | None = None       # [V,M] 이상(mm)
+    # ── 가상센싱 2D: 교량 상판(deck) 전체 면 변위 지도 ──
+    # PCA 로 세운 상판 격자(G=n_long×n_trans) 위의 전체 변위량 — 관측점이 없는 상판
+    # 위치까지 포함(가상센싱). 점<3·stub·구버전이면 None(계약 검증 생략).
+    n_deck: int | None = None
+    deck_xy_ds: str | None = None             # [G,2] 격자 world 좌표(EPSG:5179)
+    deck_s_ds: str | None = None              # [G] 종축(길이) 투영 [m]
+    deck_w_ds: str | None = None              # [G] 횡축(폭) 투영 [m]
+    deck_total_ds: str | None = None          # [G,M] 상판 전체 변위량(mm)
+    deck_deflection_ds: str | None = None     # [G,M] 상판 처짐(mm)
 
 
 # ───────────────────────────── 모듈 4: FRAM ────────────────────────────

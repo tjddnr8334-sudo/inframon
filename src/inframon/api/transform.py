@@ -230,6 +230,85 @@ def point_series(store: ProjectStore, point_id: int) -> dict[str, Any]:
     return out
 
 
+def girder_displacement(store: ProjectStore, *, date: Any = "latest") -> dict[str, Any]:
+    """상부거더 **가상센싱 전체 변위장** — PINN 이 관측점 없는 위치까지 채운 종단 프로파일.
+
+    지정 시점의 거더축(고정단 거리[m])을 따른 전체 변위량[mm]·처짐[mm] 프로파일과
+    첨두(최대 변위)·중앙경간 시계열을 준다(대시보드 거더 변위 곡선용).
+    """
+    pinn = _pinn(store)
+    if pinn is None or not pinn.vsens_total_ds:
+        raise ResultNotFound("가상센싱 거더 변위장이 없습니다(pinn=real 실행 필요).")
+    ins = _insar(store)
+    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    k = _resolve_index(date, len(dates))
+    xl = np.asarray(store.read_array(pinn.vsens_l_from_fixed_ds))     # [V]
+    total = np.asarray(store.read_array(pinn.vsens_total_ds))         # [V,M]
+    defl = np.asarray(store.read_array(pinn.vsens_deflection_ds))     # [V,M]
+    V = int(total.shape[0])
+    profile = [{
+        "l_from_fixed_m": round(float(xl[i]), 3),
+        "total_mm": round(float(total[i, k]), 3),
+        "deflection_mm": round(float(defl[i, k]), 3),
+    } for i in range(V)]
+    peak_i = int(np.argmax(total[:, k]))
+    mid = V // 2
+    return {
+        "n_virtual": V,
+        "dates": dates,
+        "date_index": k,
+        "span_m": round(float(xl[-1]), 3),
+        "profile": profile,
+        "peak": {"l_from_fixed_m": round(float(xl[peak_i]), 3),
+                 "total_mm": round(float(total[peak_i, k]), 3)},
+        "midspan_total_mm_series": [round(float(v), 3) for v in total[mid]],
+    }
+
+
+def deck_displacement(store: ProjectStore, *, date: Any = "latest",
+                      to_crs: str = WGS84) -> dict[str, Any]:
+    """상판(deck) **전체 면 가상센싱 변위 지도** — PINN 이 관측점 없는 상판 위치까지 채운 2D 장.
+
+    PCA 로 세운 상판 격자(G=n_long×n_trans)의 각 격자점에 world 좌표(lat/lon)와 전체
+    변위량[mm]·처짐[mm]을 준다(지도 히트맵). 격자 형상(n_long,n_trans)도 함께.
+    """
+    pinn = _pinn(store)
+    if pinn is None or not pinn.deck_total_ds:
+        raise ResultNotFound("상판 2D 가상센싱 변위장이 없습니다(pinn=real·측점≥3 필요).")
+    ins = _insar(store)
+    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    k = _resolve_index(date, len(dates))
+    xy = np.asarray(store.read_array(pinn.deck_xy_ds), dtype=np.float64)   # [G,2] (E,N)
+    total = np.asarray(store.read_array(pinn.deck_total_ds))              # [G,M]
+    defl = np.asarray(store.read_array(pinn.deck_deflection_ds))         # [G,M]
+    latlon = xyz_to_latlon(np.column_stack([xy, np.zeros(len(xy))]), to_crs)  # [G,3]
+    G = int(total.shape[0])
+    nodes = [{
+        "lat": round(float(latlon[i, 0]), 7),
+        "lon": round(float(latlon[i, 1]), 7),
+        "total_mm": round(float(total[i, k]), 3),
+        "deflection_mm": round(float(defl[i, k]), 3),
+    } for i in range(G)]
+    grid = None
+    try:
+        vs = store.read_json_attr("pinn", "virtual_sensing")
+        grid = vs.get("deck") if isinstance(vs, dict) else None
+    except (KeyError, ValueError):
+        pass
+    peak_i = int(np.argmax(total[:, k]))
+    return {
+        "n_deck": G,
+        "n_long": (grid or {}).get("n_long"),
+        "n_trans": (grid or {}).get("n_trans"),
+        "footprint_m": (grid or {}).get("footprint_m"),
+        "dates": dates,
+        "date_index": k,
+        "nodes": nodes,
+        "peak": {"lat": nodes[peak_i]["lat"], "lon": nodes[peak_i]["lon"],
+                 "total_mm": nodes[peak_i]["total_mm"]},
+    }
+
+
 def cri(store: ProjectStore) -> dict[str, Any]:
     """§3.5 CRI 시계열(안전성 추세). 시점별 최대 CRI."""
     fram = _fram(store)
