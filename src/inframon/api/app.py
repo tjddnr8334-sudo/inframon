@@ -153,6 +153,18 @@ def create_app(registry: BridgeRegistry, *, to_crs: str = WGS84,
         with _store(bridge_id) as s:
             return transform.function_network(s, k)
 
+    @app.get("/api/v1/bridges/{bridge_id}/pinn/girder-displacement")
+    def girder_displacement(bridge_id: str, date: str = "latest") -> dict[str, Any]:
+        """상부거더 가상센싱 전체 변위장(종단 프로파일 + 첨두/중앙경간)."""
+        with _store(bridge_id) as s:
+            return transform.girder_displacement(s, date=date)
+
+    @app.get("/api/v1/bridges/{bridge_id}/pinn/deck-displacement")
+    def deck_displacement(bridge_id: str, date: str = "latest") -> dict[str, Any]:
+        """상판 전체 면 가상센싱 변위 지도(2D 격자 lat/lon + 변위량[mm])."""
+        with _store(bridge_id) as s:
+            return transform.deck_displacement(s, date=date, to_crs=to_crs)
+
     # ── KAIA 핸드오프: 변위 CSV / VLM 입력 패키지 다운로드 ──
     @app.get("/api/v1/bridges/{bridge_id}/insar/export.csv")
     def export_csv_endpoint(bridge_id: str):

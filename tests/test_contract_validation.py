@@ -93,7 +93,7 @@ def test_manifest_recorded(project):
     with ProjectStore(project, mode="r") as store:
         man = store.read_manifest()
     assert len(man["run_id"]) == 12
-    assert man["schema_version"] == "1.1"
+    assert man["schema_version"] == "1.2"
     assert man["engine_modes"] == {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "stub"}
     assert "insar/los" in man["dataset_hashes"]
     assert man["config"]["n_points"] == 30
