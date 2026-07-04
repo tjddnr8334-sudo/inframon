@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from .config import PipelineConfig
 from .insar.inventory import build_scene_manifest, inspect_insar_data, write_inventory
@@ -63,6 +64,14 @@ def main() -> None:
     p.add_argument("--zip", action="store_true", help="--export-vlm 패키지를 .zip 으로도 묶는다.")
     p.add_argument("--no-figures", action="store_true",
                    help="--export-vlm 에서 figures PNG 생성을 생략(matplotlib 불필요).")
+    p.add_argument("--export-kg", default=None, metavar="JSON",
+                   help="--out 의 project.h5 를 지식그래프(nodes/edges + triples + JSON-LD)로 "
+                        "내보내고 종료(KG/VLM 확장점). --bridge-id/--srs.")
+    p.add_argument("--vlm-eval", default=None, metavar="DIR",
+                   help="VLM 패키지 폴더(--export-vlm 산출)를 VLM 백엔드로 평가해 assessment.json "
+                        "을 쓰고 종료. --vlm-backend 로 백엔드 선택(기본 template).")
+    p.add_argument("--vlm-backend", default="template", metavar="NAME",
+                   help="--vlm-eval 백엔드 이름(기본 template). 실 모델은 register_backend 로 등록.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
@@ -469,6 +478,46 @@ def main() -> None:
         print(f"  변위 CSV        : {r['rows']} 행 (N={r['n_points']} × M={r['n_dates']})")
         print(f"  채널            : 연직={'O' if ch['vertical_fused'] else 'X'} · "
               f"PINN={'O' if ch['pinn'] else 'X'} · CRI(참고)={'O' if ch['fram_cri'] else 'X'}")
+        print(f"  지식그래프      : {r['kg_nodes']} 노드 · {r['kg_edges']} 엣지 (knowledge_graph.json)")
+        print("=" * 56)
+        return
+
+    if args.export_kg:
+        from .kg import export_kg
+
+        srs = getattr(args, "srs", "wgs84")
+        to_crs = "EPSG:5179" if srs == "5179" else "EPSG:4326"
+        try:
+            r = export_kg(args.out, args.export_kg, bridge_id=args.bridge_id, to_crs=to_crs)
+        except FileNotFoundError:
+            p.error(f"project.h5 가 없습니다: {args.out} (먼저 --demo 등으로 생성하세요)")
+        print("=" * 56)
+        print("  지식그래프(KG) 내보내기 완료")
+        print("=" * 56)
+        print(f"  입력 project.h5 : {args.out}")
+        print(f"  그래프          : {r['graph']}")
+        print(f"  노드/엣지       : {r['n_nodes']} 노드 · {r['n_edges']} 엣지")
+        print(f"  사이드카        : {', '.join(Path(f).name for f in r['files'][1:])}")
+        print("=" * 56)
+        return
+
+    if args.vlm_eval:
+        from .vlm import available_backends, run_vlm_assessment
+
+        try:
+            a = run_vlm_assessment(args.vlm_eval, backend=args.vlm_backend)
+        except FileNotFoundError as exc:
+            p.error(str(exc))
+        except NotImplementedError as exc:
+            p.error(str(exc))
+        print("=" * 56)
+        print("  VLM 평가(백엔드) 완료")
+        print("=" * 56)
+        print(f"  패키지          : {args.vlm_eval}")
+        print(f"  백엔드          : {a['backend']} (사용가능: {available_backends()})")
+        print(f"  코드판정 여부   : {a['is_code_judgment']} · 판정: {a['verdict']}")
+        print(f"  소견 {len(a['findings'])}건 → assessment.json")
+        print(f"  ⚠️ {a['disclaimer']}")
         print("=" * 56)
         return
 

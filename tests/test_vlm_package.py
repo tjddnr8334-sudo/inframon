@@ -150,7 +150,8 @@ def test_insar_only_project_graceful(tmp_path):
     r = export_vlm_package(out, tmp_path / "pkg", bridge_id="IO", with_figures=True)
     summ = json.loads((tmp_path / "pkg" / "summary.json").read_text(encoding="utf-8"))
     assert summ["pinn"] is None and summ["risk_reference"] is None
-    assert summ["channels_present"] == {"vertical_fused": False, "pinn": False, "fram_cri": False}
+    assert summ["channels_present"] == {"vertical_fused": False, "pinn": False,
+                                        "fram_cri": False, "virtual_sensing": False}
     assert summ["settlement_hotspots"][0]["channel"] == "los"
     # CRI/PINN 없으니 figures 는 변위맵·핫스팟시계열 2종만
     figs = {p.name for p in (tmp_path / "pkg" / "figures").glob("*.png")}
