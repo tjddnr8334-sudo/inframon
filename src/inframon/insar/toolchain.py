@@ -5,8 +5,10 @@
 `scripts/wsl_sarvey/00_setup_env.sh` 또는 컨테이너 `scripts/wsl_sarvey/Dockerfile`)로 구축하도록
 안내한다 — "프로그램 내 저장"은 이 재현 레시피 + 감지/구동 계층으로 실현한다.
 
-감지 명령(WSL/컨테이너 셸에서 실행)은 `probe_commands()` 로 노출하고, 실제 실행은 주입
-가능한 `runner(cmd)->(rc, out)` 로 격리한다(테스트에서 가짜 runner 주입).
+도구들은 각각 **별도 conda 환경**(isce2/miaplpy/sarvey)에 설치되고, non-interactive WSL
+셸에서 conda 는 PATH·셸함수로 안 잡히므로 conda **실행파일 직접 경로 + `conda run -n <env>`**
+로 각 환경 안에서 import 를 확인한다. 실제 셸 실행은 주입 가능한 `runner(cmd)->(rc, out)`
+로 격리한다(테스트에서 가짜 runner 주입).
 """
 
 from __future__ import annotations
@@ -15,16 +17,37 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-# (키, 사람이름, 프로브 셸명령) — conda 환경 안/밖 어디서든 존재를 확인.
+# conda 실행파일 후보(직접 경로). ⚠️ 이 WSL 호출 방식에선 **새 셸변수·for 루프가 빈 값**이
+# 되므로($HOME·명령치환·&&/|| 만 정상) 변수 없이 직접 경로 || 체인으로만 탐색한다.
+CONDA_BINS: tuple[str, ...] = (
+    "$HOME/miniforge3/bin/conda",
+    "$HOME/miniconda3/bin/conda",
+    "$HOME/anaconda3/bin/conda",
+    "/opt/conda/bin/conda",
+    "conda",  # 이미 PATH 에 있으면(컨테이너/활성화된 셸)
+)
+
+
+def _conda_probe() -> str:
+    """conda 실행파일 자체 존재 확인 — 어느 후보든 `--version` 이 되면 발견."""
+    alts = " || ".join(f"{c} --version" for c in CONDA_BINS)
+    return "{ " + alts + "; } 2>/dev/null"
+
+
+def _env_probe(env: str, marker: str, *modules: str) -> str:
+    """<env> 환경에서 modules 중 하나라도 import 되면 marker 를 출력(발견)."""
+    alts = " || ".join(f"{c} run -n {env} python -c 'import {m}'"
+                       for c in CONDA_BINS for m in modules)
+    return "{ " + alts + f"; }} 2>/dev/null && echo {marker}"
+
+
+# (키, 사람이름, 감지 셸명령) — 변수/루프 없이 self-contained. 발견 시 표식(버전/이름) 출력.
 PROBES: list[tuple[str, str, str]] = [
-    ("conda", "conda/mamba (환경관리자)", "command -v conda || command -v mamba"),
-    ("isce2", "ISCE2 (스택·코레지스트레이션)",
-     "python3 -c 'import isce' 2>/dev/null && echo isce || command -v stackSentinel.py"),
+    ("conda", "conda/mamba (환경관리자)", _conda_probe()),
+    ("isce2", "ISCE2 (스택·코레지스트레이션)", _env_probe("isce2", "isce", "isce")),
     ("miaplpy", "MiaplPy/MintPy (위상연결)",
-     "python3 -c 'import miaplpy' 2>/dev/null && echo miaplpy || "
-     "python3 -c 'import mintpy' 2>/dev/null && echo mintpy"),
-    ("sarvey", "SARvey (MTI 시계열)",
-     "python3 -c 'import sarvey' 2>/dev/null && echo sarvey || command -v sarvey"),
+     _env_probe("miaplpy", "miaplpy", "miaplpy", "mintpy")),
+    ("sarvey", "SARvey (MTI 시계열)", _env_probe("sarvey", "sarvey", "sarvey")),
 ]
 
 SETUP_CONDA = "bash scripts/wsl_sarvey/00_setup_env.sh"
@@ -42,14 +65,15 @@ class ToolStatus:
 def default_runner(cmd: str) -> tuple[int, str]:
     """기본 runner — WSL(기본 배포판) 로그인 셸에서 셸명령 실행 → (rc, stdout).
 
-    WSL 이 없으면(예: 이미 Linux/컨테이너 안) 현재 셸에서 직접 실행한다.
+    WSL 이 없으면(예: 이미 Linux/컨테이너 안) 현재 셸에서 직접 실행한다. 프로브가 conda
+    실행파일을 직접 경로로 찾으므로 별도 환경 활성화(prelude)는 필요 없다.
     """
     if shutil.which("wsl"):
         argv = ["wsl", "--", "bash", "-lc", cmd]
     else:
         argv = ["bash", "-lc", cmd]
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=60)
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=120)
         return p.returncode, (p.stdout or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 127, str(exc)
@@ -61,7 +85,9 @@ def check_toolchain(runner=default_runner) -> dict:
     for key, label, probe in PROBES:
         rc, out = runner(probe)
         found = rc == 0 and bool(out.strip())
-        statuses.append(ToolStatus(key, label, found, out.strip()[:120]))
+        # 표식은 항상 마지막 줄(발견 echo) — import 시 라이브러리가 찍는 배너는 버린다.
+        detail = out.strip().splitlines()[-1][:120] if out.strip() else ""
+        statuses.append(ToolStatus(key, label, found, detail))
     missing = [s.key for s in statuses if not s.found]
     ready = not missing
     return {
