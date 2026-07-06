@@ -72,6 +72,18 @@ def main() -> None:
                         "을 쓰고 종료. --vlm-backend 로 백엔드 선택(기본 template).")
     p.add_argument("--vlm-backend", default="template", metavar="NAME",
                    help="--vlm-eval 백엔드 이름(기본 template). 실 모델은 register_backend 로 등록.")
+    p.add_argument("--download-slc", default=None, metavar="RECIPE_DIR",
+                   help="레시피(processing_manifest.json)의 선별 SLC 를 Earthdata 자격으로 자동 "
+                        "다운로드하고 종료. --slc-out/--slc-limit, 자격은 --earthdata-*.")
+    p.add_argument("--slc-out", default=None, metavar="DIR",
+                   help="--download-slc 저장 폴더(기본 <RECIPE_DIR>/SLC).")
+    p.add_argument("--slc-limit", type=int, default=0, metavar="N",
+                   help="--download-slc 처음 N장만(기본 0=전체 선별 장면).")
+    p.add_argument("--earthdata-user", default=None, help="Earthdata 사용자 ID.")
+    p.add_argument("--earthdata-pass", default=None, help="Earthdata 비밀번호.")
+    p.add_argument("--earthdata-token", default=None, help="Earthdata 토큰(우선). 없으면 user/pass·~/.netrc.")
+    p.add_argument("--insar-tools", action="store_true",
+                   help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
@@ -518,6 +530,41 @@ def main() -> None:
         print(f"  코드판정 여부   : {a['is_code_judgment']} · 판정: {a['verdict']}")
         print(f"  소견 {len(a['findings'])}건 → assessment.json")
         print(f"  ⚠️ {a['disclaimer']}")
+        print("=" * 56)
+        return
+
+    if args.insar_tools:
+        from .insar.toolchain import check_toolchain, format_report
+
+        print(format_report(check_toolchain()))
+        return
+
+    if args.download_slc:
+        from .insar.slc_download import (
+            SlcAuthError,
+            SlcRecipeError,
+            download_recipe_slc,
+        )
+
+        try:
+            r = download_recipe_slc(
+                args.download_slc, args.slc_out,
+                username=args.earthdata_user, password=args.earthdata_pass,
+                token=args.earthdata_token, limit=args.slc_limit)
+        except SlcAuthError as exc:
+            p.error(str(exc))
+        except SlcRecipeError as exc:
+            p.error(str(exc))
+        print("=" * 56)
+        print("  실 SLC 자동 다운로드 완료")
+        print("=" * 56)
+        print(f"  레시피          : {args.download_slc}")
+        print(f"  인증            : {r.auth}")
+        print(f"  선별 장면       : {r.selected}/{r.requested} (SLC·VV·중복제거)  ~ {r.gigabytes:.0f} GB")
+        print(f"  받음/스킵       : {r.downloaded} 다운로드 · {r.skipped_existing} 기존 스킵")
+        print(f"  저장            : {r.out_dir}")
+        if r.missing:
+            print(f"  ⚠️ 누락 granule : {len(r.missing)}개 (ASF 검색 실패)")
         print("=" * 56)
         return
 
