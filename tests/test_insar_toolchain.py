@@ -23,7 +23,7 @@ def test_all_found_ready():
 def test_none_found_provision_guidance():
     status = check_toolchain(runner=lambda cmd: (127, ""))
     assert status["ready"] is False
-    assert set(status["missing"]) == {k for k, _, _ in PROBES}
+    assert set(status["missing"]) == {p[0] for p in PROBES}
     pv = status["provision"]
     assert pv["conda"] == SETUP_CONDA
     assert pv["container"] == SETUP_CONTAINER
@@ -31,20 +31,24 @@ def test_none_found_provision_guidance():
 
 
 def test_partial_found():
-    # conda·isce2 만 있고 나머지 없음
+    # conda·isce2 만 있고 나머지 없음 — env 별 감지(conda run -n <env>)를 명령문으로 구분.
     def runner(cmd):
-        return (0, "ok") if ("conda" in cmd or "isce" in cmd) else (1, "")
+        if "--version" in cmd:              # conda 자체 프로브(_conda_probe)
+            return (0, "conda 26.1.0")
+        if "-n isce2" in cmd:               # isce2 환경 프로브
+            return (0, "isce")
+        return (1, "")                      # miaplpy·sarvey 미설치
     status = check_toolchain(runner=runner)
     assert status["ready"] is False
     assert "sarvey" in status["missing"] and "miaplpy" in status["missing"]
-    assert "conda" not in status["missing"]
+    assert "conda" not in status["missing"] and "isce2" not in status["missing"]
 
 
 def test_empty_stdout_counts_as_missing():
     # rc=0 이지만 출력이 비면(명령은 성공했으나 도구 없음) 미발견 처리
     status = check_toolchain(runner=lambda cmd: (0, "  "))
     assert status["ready"] is False
-    assert set(status["missing"]) == {k for k, _, _ in PROBES}
+    assert set(status["missing"]) == {p[0] for p in PROBES}
 
 
 def test_format_report_marks():
