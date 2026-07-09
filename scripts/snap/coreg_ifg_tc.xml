@@ -1,0 +1,127 @@
+<graph id="Graph">
+  <version>1.0</version>
+
+  <node id="Read-ref">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${refFile}</file></parameters>
+  </node>
+  <node id="Read-sec">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${secFile}</file></parameters>
+  </node>
+
+  <node id="Split-ref">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex>
+      <lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters>
+  </node>
+  <node id="Split-sec">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex>
+      <lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters>
+  </node>
+
+  <node id="Orbit-ref">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+  <node id="Orbit-sec">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+
+  <node id="BackGeocoding">
+    <operator>Back-Geocoding</operator>
+    <sources>
+      <sourceProduct refid="Orbit-ref"/>
+      <sourceProduct.1 refid="Orbit-sec"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
+    </parameters>
+  </node>
+
+  <node id="Interferogram">
+    <operator>Interferogram</operator>
+    <sources><sourceProduct refid="BackGeocoding"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subtractFlatEarthPhase>true</subtractFlatEarthPhase>
+      <subtractTopographicPhase>true</subtractTopographicPhase>
+      <demName>${demName}</demName>
+      <includeCoherence>true</includeCoherence>
+      <cohWinAz>3</cohWinAz>
+      <cohWinRg>10</cohWinRg>
+    </parameters>
+  </node>
+
+  <node id="Deburst">
+    <operator>TOPSAR-Deburst</operator>
+    <sources><sourceProduct refid="Interferogram"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <selectedPolarisations>VV</selectedPolarisations>
+    </parameters>
+  </node>
+
+  <node id="IfgPhase">
+    <operator>BandMaths</operator>
+    <sources><sourceProduct refid="Deburst"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetBands>
+        <targetBand>
+          <name>phase</name><type>float32</type>
+          <expression>atan2(${qBand}, ${iBand})</expression>
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+        <targetBand>
+          <name>coherence</name><type>float32</type>
+          <expression>${cohBand}</expression>
+          <noDataValue>0.0</noDataValue>
+        </targetBand>
+      </targetBands>
+    </parameters>
+  </node>
+
+  <node id="TerrainCorrection">
+    <operator>Terrain-Correction</operator>
+    <sources><sourceProduct refid="IfgPhase"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <demResamplingMethod>BILINEAR_INTERPOLATION</demResamplingMethod>
+      <imgResamplingMethod>NEAREST_NEIGHBOUR</imgResamplingMethod>
+      <pixelSpacingInMeter>14.0</pixelSpacingInMeter>
+      <mapProjection>WGS84(DD)</mapProjection>
+      <saveIncidenceAngleFromEllipsoid>true</saveIncidenceAngleFromEllipsoid>
+      <nodataValueAtSea>false</nodataValueAtSea>
+    </parameters>
+  </node>
+
+  <node id="Write">
+    <operator>Write</operator>
+    <sources><sourceProduct refid="TerrainCorrection"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${outFile}</file>
+      <formatName>GeoTIFF</formatName>
+    </parameters>
+  </node>
+</graph>
