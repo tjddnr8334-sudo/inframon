@@ -20,9 +20,7 @@ def main() -> int:
         except (AttributeError, ValueError):
             pass
 
-    from inframon.desktop import RUN_SERVER_FLAG, _run_streamlit_server, run_app
-
-    if "--_selftest" in sys.argv:  # 번들 의존성 점검(특히 옵션 기능 asf_search/SLC 검색)
+    if "--_selftest" in sys.argv:  # 번들 의존성 점검(옵션 기능 포함). desktop import 불필요
         ok = True
         for mod in ("asf_search", "shapely", "dateparser", "networkx",
                     "requests", "urllib3", "streamlit", "h5py"):
@@ -34,10 +32,19 @@ def main() -> int:
                 print(f"FAIL  {mod}: {exc!r}")
         return 0 if ok else 1
 
-    if RUN_SERVER_FLAG in sys.argv:
-        idx = sys.argv.index(RUN_SERVER_FLAG)
+    if "--_run-streamlit" in sys.argv:   # 내부: Streamlit 서버 기동(대시보드용)
+        from inframon.desktop import _run_streamlit_server
+        idx = sys.argv.index("--_run-streamlit")
         _run_streamlit_server(int(sys.argv[idx + 1]))
         return 0
+
+    # 인자가 있으면(예: inframon_full.exe --snap-auto …) 처리엔진 CLI 로 위임(풀 exe).
+    # GUI 라이브러리(pywebview) 없이 도는 처리 파이프라인 겸용. 무인자면 대시보드 창.
+    if len(sys.argv) > 1:
+        from inframon.__main__ import main as cli_main
+        return cli_main() or 0
+
+    from inframon.desktop import run_app
     return run_app()
 
 
