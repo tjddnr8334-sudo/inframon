@@ -75,7 +75,7 @@ exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
     name="inframon",
-    console=True,          # 첫 빌드는 콘솔 유지(오류 확인). 안정화 후 False 로.
+    console=False,         # 뷰어 = windowed(더블클릭 시 콘솔창 없이 앱 창만).
     icon="assets/inframon.ico",
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="inframon")
