@@ -76,6 +76,6 @@ exe = EXE(
     exclude_binaries=True,
     name="inframon",
     console=True,          # 첫 빌드는 콘솔 유지(오류 확인). 안정화 후 False 로.
-    icon=None,
+    icon="assets/inframon.ico",
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="inframon")
