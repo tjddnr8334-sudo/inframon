@@ -37,6 +37,25 @@ def test_ifg_band_names():
     assert c == "coh_IW3_VV_07Jan2024_19Jan2024"
 
 
+def test_point_in_poly():
+    # 기울어진 사각형(실제 S1 burst 형태) 포함/제외
+    poly = [(126.167, 37.120), (127.183, 37.263), (127.146, 37.429), (126.129, 37.286)]
+    assert sb._point_in_poly(127.108, 37.322, poly) is True     # 교량 포함
+    assert sb._point_in_poly(128.0, 37.0, poly) is False        # 밖
+
+
+def test_edge_margin_km():
+    # 단위 사각형 중심 → 각 변까지 margin 계산(위도 0 근처 근사)
+    poly = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    m = sb._edge_margin_km(0.5, 0.5, poly)
+    assert 50.0 < m < 60.0        # 0.5deg ~ 55km
+
+
+def test_burstloc_contained_default():
+    b = sb.BurstLoc("IW2", 1, 5.4, 37.3, 127.1)
+    assert b.contained is True and b.covered is True
+
+
 def test_find_gpt_explicit(tmp_path):
     fake = tmp_path / "gpt.exe"
     fake.write_text("")

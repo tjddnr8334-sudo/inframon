@@ -44,9 +44,14 @@ class BurstLoc:
 
     subswath: str          # 'IW1'|'IW2'|'IW3'
     burst_index: int       # 1-based (SNAP firstBurstIndex/lastBurstIndex)
-    distance_km: float     # 교량 ~ 최근접 격자점 거리
-    grid_lat: float
+    distance_km: float     # contained=True: 가장자리서 안쪽 margin[km] / False: burst중심 거리
+    grid_lat: float        # burst 중심(또는 최근접) lat
     grid_lon: float
+    contained: bool = True  # 교량이 이 burst footprint 안에 있는가
+
+    @property
+    def covered(self) -> bool:
+        return self.contained
 
 
 @dataclass
@@ -115,13 +120,49 @@ def _annotation_xml(z: zipfile.ZipFile, subswath: str) -> ET.Element:
     return ET.fromstring(z.read(names[0]))
 
 
-def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
-    """기준 SLC 에서 교량(lat,lon)에 가장 가까운 subswath·burst(1-based) 판별.
+def _km(dlon: float, dlat: float, lat: float) -> float:
+    return math.hypot(dlat, dlon * math.cos(math.radians(lat))) * 111.0
 
-    각 subswath 주석의 geolocationGridPoint 중 교량 최근접 점을 찾고, 그 점의 line 을
-    linesPerBurst 로 나눠 burst 인덱스를 얻는다. 세 subswath 중 최근접을 채택.
+
+def _edge_margin_km(lon: float, lat: float, poly: list[tuple[float, float]]) -> float:
+    """점에서 다각형 변까지 최단거리[km](얼마나 안쪽인지)."""
+    best = float("inf")
+    n = len(poly)
+    for i in range(n):
+        ax, ay = poly[i]; bx, by = poly[(i + 1) % n]
+        vx, vy = bx - ax, by - ay
+        wx, wy = lon - ax, lat - ay
+        seg2 = vx * vx + vy * vy
+        u = 0.0 if seg2 == 0 else max(0.0, min(1.0, (wx * vx + wy * vy) / seg2))
+        px, py = ax + u * vx, ay + u * vy
+        best = min(best, _km(lon - px, lat - py, lat))
+    return best
+
+
+def _point_in_poly(lon: float, lat: float, poly: list[tuple[float, float]]) -> bool:
+    """ray-casting 점-다각형 포함(poly: [(lon,lat),...]). shapely 의존 회피."""
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]; xj, yj = poly[j]
+        if ((yi > lat) != (yj > lat)) and \
+           (lon < (xj - xi) * (lat - yi) / ((yj - yi) or 1e-12) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
+    """기준 SLC 에서 교량(lat,lon)을 **포함하는** subswath·burst(1-based) 판별.
+
+    각 subswath·burst 의 4모서리 geolocationGridPoint 로 footprint 다각형을 만들어 점
+    포함을 검사한다(단순 최근접 격자점은 IW 경계 overlap 에서 오판 → 포함검사가 정확).
+    포함 burst 가 여럿이면(인접 overlap) 중심에 가장 가까운 것을, 없으면 최근접 격자점
+    burst 로 폴백(거리로 커버리지 밖임을 알림).
     """
-    best: BurstLoc | None = None
+    contain: list[BurstLoc] = []
+    nearest: BurstLoc | None = None
     with zipfile.ZipFile(str(slc_zip)) as z:
         for sw in ("IW1", "IW2", "IW3"):
             try:
@@ -131,17 +172,35 @@ def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
             st = root.find(".//swathTiming")
             lpb = int(st.find("linesPerBurst").text)
             nb = len(st.find("burstList").findall("burst"))
-            for p in root.findall(".//geolocationGridPoint"):
-                gla = float(p.find("latitude").text)
-                glo = float(p.find("longitude").text)
-                ln = int(p.find("line").text)
-                d = math.hypot(gla - lat, (glo - lon) * math.cos(math.radians(lat))) * 111.0
-                if best is None or d < best.distance_km:
-                    bi = min(max(ln // lpb + 1, 1), nb)   # 1-based, clamp
-                    best = BurstLoc(sw, bi, d, gla, glo)
-    if best is None:
+            pts = [(int(p.find("line").text), int(p.find("pixel").text),
+                    float(p.find("latitude").text), float(p.find("longitude").text))
+                   for p in root.findall(".//geolocationGridPoint")]
+            if not pts:
+                continue
+            pixels = sorted({q[1] for q in pts})
+            px0, px1 = pixels[0], pixels[-1]
+
+            def nearest_pt(line: int, pix: int) -> tuple[float, float]:
+                q = min(pts, key=lambda t: (abs(t[0] - line), abs(t[1] - pix)))
+                return q[3], q[2]      # lon, lat
+
+            for i in range(nb):
+                l0, l1 = i * lpb, (i + 1) * lpb
+                poly = [nearest_pt(l0, px0), nearest_pt(l0, px1),
+                        nearest_pt(l1, px1), nearest_pt(l1, px0)]
+                clon = sum(p[0] for p in poly) / 4.0
+                clat = sum(p[1] for p in poly) / 4.0
+                dc = _km(clon - lon, clat - lat, lat)
+                if nearest is None or dc < nearest.distance_km:
+                    nearest = BurstLoc(sw, i + 1, dc, clat, clon, contained=False)
+                if _point_in_poly(lon, lat, poly):
+                    margin = _edge_margin_km(lon, lat, poly)
+                    contain.append(BurstLoc(sw, i + 1, margin, clat, clon, contained=True))
+    if contain:
+        return max(contain, key=lambda b: b.distance_km)   # 가장 깊이 포함(가장자리 여유 큰)
+    if nearest is None:
         raise SnapError("SLC 에서 subswath 주석을 읽지 못했습니다.")
-    return best
+    return nearest      # 커버리지 밖 — contained=False, distance_km=중심거리
 
 
 def platform_heading(slc_zip: str | Path, subswath: str) -> float | None:
