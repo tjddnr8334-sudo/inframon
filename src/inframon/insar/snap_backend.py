@@ -377,6 +377,150 @@ def build_track_h5(
     return N
 
 
+def _stack_graph_xml(scene_files: list[str], subswath: str, burst: int, dem: str) -> str:
+    """N장면 코레지스트레이션(Back-Geocoding) → Deburst → TC → 지오코딩 진폭 스택 GeoTIFF.
+
+    첫 장면이 마스터(기준). 각 장면 TOPSAR-Split(같은 subswath·burst) → Apply-Orbit →
+    Back-Geocoding(전부) → Deburst → Terrain-Correction. TC 가 복소 i/q 를 Intensity 로
+    지오코딩하므로 날짜별 Intensity 밴드가 나온다(√Intensity=진폭 → ADI).
+    """
+    reads, splits, orbits, srcs = [], [], [], []
+    for i, f in enumerate(scene_files):
+        reads.append(f'  <node id="Read_{i}"><operator>Read</operator><sources/>'
+                     f'<parameters class="com.bc.ceres.binding.dom.XppDomElement">'
+                     f'<file>{f}</file></parameters></node>')
+        splits.append(
+            f'  <node id="Split_{i}"><operator>TOPSAR-Split</operator>'
+            f'<sources><sourceProduct refid="Read_{i}"/></sources>'
+            f'<parameters class="com.bc.ceres.binding.dom.XppDomElement">'
+            f'<subswath>{subswath}</subswath><selectedPolarisations>VV</selectedPolarisations>'
+            f'<firstBurstIndex>{burst}</firstBurstIndex><lastBurstIndex>{burst}</lastBurstIndex>'
+            f'</parameters></node>')
+        orbits.append(
+            f'  <node id="Orbit_{i}"><operator>Apply-Orbit-File</operator>'
+            f'<sources><sourceProduct refid="Split_{i}"/></sources>'
+            f'<parameters class="com.bc.ceres.binding.dom.XppDomElement">'
+            f'<orbitType>Sentinel Precise (Auto Download)</orbitType>'
+            f'<continueOnFail>true</continueOnFail></parameters></node>')
+        tag = "sourceProduct" if i == 0 else f"sourceProduct.{i}"
+        srcs.append(f'    <{tag} refid="Orbit_{i}"/>')
+    nodes = "\n".join(reads + splits + orbits)
+    return f"""<graph id="Graph">
+  <version>1.0</version>
+{nodes}
+  <node id="BackGeo"><operator>Back-Geocoding</operator>
+    <sources>
+{chr(10).join(srcs)}
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>{dem}</demName>
+      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
+    </parameters>
+  </node>
+  <node id="Deburst"><operator>TOPSAR-Deburst</operator>
+    <sources><sourceProduct refid="BackGeo"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <selectedPolarisations>VV</selectedPolarisations></parameters>
+  </node>
+  <node id="TC"><operator>Terrain-Correction</operator>
+    <sources><sourceProduct refid="Deburst"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>{dem}</demName>
+      <imgResamplingMethod>NEAREST_NEIGHBOUR</imgResamplingMethod>
+      <pixelSpacingInMeter>14.0</pixelSpacingInMeter>
+      <mapProjection>WGS84(DD)</mapProjection>
+    </parameters>
+  </node>
+  <node id="Write"><operator>Write</operator>
+    <sources><sourceProduct refid="TC"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${{outFile}}</file><formatName>GeoTIFF</formatName></parameters>
+  </node>
+</graph>
+"""
+
+
+def amplitude_stack(scenes: list[str | Path], lat: float, lon: float, out_file: str | Path,
+                    *, dem: str = "SRTM 1Sec HGT", gpt: str | None = None,
+                    burst: BurstLoc | None = None, timeout: int = 7200) -> dict:
+    """전 장면 코레지스트레이션 지오코딩 진폭 스택(GeoTIFF) 산출. 반환: 밴드↔날짜 매핑 등."""
+    scenes = [str(s) for s in sorted(scenes, key=scene_date)]
+    gpt = gpt or find_gpt()
+    ref = scenes[0]
+    if burst is None:
+        burst = find_bridge_burst(ref, lat, lon)
+    dates = [scene_date(s) for s in scenes]
+    graph_xml = _stack_graph_xml(scenes, burst.subswath, burst.burst_index, dem)
+    gpath = Path(out_file).with_suffix(".stackgraph.xml")
+    gpath.write_text(graph_xml, encoding="utf-8")
+    args = [gpt, str(gpath), f"-PoutFile={out_file}"]
+    log = str(Path(out_file).with_suffix(".log"))
+    with open(log, "w", encoding="utf-8") as lf:
+        p = subprocess.run(args, stdout=lf, stderr=subprocess.STDOUT, timeout=timeout)
+    ok = p.returncode == 0 and Path(out_file).exists()
+    return {"ok": ok, "rc": p.returncode, "out": str(out_file), "dates": dates,
+            "burst": f"{burst.subswath}#{burst.burst_index}", "log": log}
+
+
+def compute_adi(amp_stack_tif: str | Path, n_dates: int,
+                out_adi_tif: str | Path | None = None):
+    """진폭 스택(날짜별 Intensity 또는 i/q) → **ADI = σ_amp/μ_amp** 단일밴드.
+
+    밴드수가 n_dates 면 각 밴드=Intensity(√ → 진폭), 2·n_dates 면 i/q 쌍(hypot → 진폭).
+    반환: (adi[H,W], transform, crs). out_adi_tif 주면 단일밴드 GeoTIFF 저장.
+    """
+    import numpy as np
+    import rasterio
+
+    with rasterio.open(str(amp_stack_tif)) as ds:
+        nb = ds.count
+        arr = ds.read().astype(np.float64)          # (bands, H, W)
+        transform, crs = ds.transform, ds.crs
+        prof = ds.profile
+    if nb == 2 * n_dates:
+        amp = np.hypot(arr[0::2], arr[1::2])         # i/q per date
+    else:
+        amp = np.sqrt(np.clip(arr, 0.0, None))       # intensity → amplitude
+    mean = amp.mean(axis=0)
+    std = amp.std(axis=0)
+    adi = np.where(mean > 0, std / mean, np.nan).astype(np.float32)
+    if out_adi_tif:
+        prof.update(count=1, dtype="float32")
+        keys = ("driver", "height", "width", "count", "dtype", "crs", "transform")
+        with rasterio.open(str(out_adi_tif), "w", **{k: prof[k] for k in keys}) as dst:
+            dst.write(adi, 1)
+    return adi, transform, crs
+
+
+def _sample_raster(tif: str | Path, lons, lats, band: int = 1):
+    """지오코딩 래스터를 점 좌표(lon,lat)에서 band 샘플(최근접)."""
+    import numpy as np
+    import rasterio
+
+    with rasterio.open(str(tif)) as ds:
+        return np.array([v[0] for v in ds.sample(zip(lons, lats), indexes=band)],
+                        dtype=np.float64)
+
+
+def adi_at_points(amp_pair_tifs: list[str | Path], lons, lats):
+    """쌍별 진폭 tif(band1=기준강도·band2=보조강도) → 각 점의 **ADI = σ_amp/μ_amp**.
+
+    기준(마스터) 진폭은 모든 쌍에서 동일하므로 첫 쌍 band1 에서, 보조 진폭은 각 쌍
+    band2 에서 샘플. amp=√Intensity. 반환: adi[N](진폭시계열 8날짜 기준).
+    """
+    import numpy as np
+
+    ref_amp = np.sqrt(np.clip(_sample_raster(amp_pair_tifs[0], lons, lats, band=1), 0, None))
+    cols = [ref_amp]
+    for t in amp_pair_tifs:
+        cols.append(np.sqrt(np.clip(_sample_raster(t, lons, lats, band=2), 0, None)))
+    amp = np.column_stack(cols)                     # (N, 1+n_pairs)
+    mean = amp.mean(axis=1); std = amp.std(axis=1)
+    return np.where(mean > 0, std / mean, np.nan).astype(np.float32)
+
+
 def _seg_dist_km(plon, plat, a, b):
     """점 배열(plon,plat) ~ 선분 a-b(각 (lon,lat)) 최단거리[km] (벡터화)."""
     import numpy as np
@@ -402,6 +546,8 @@ def build_bridge_track_ps_ds(
     pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
     *, geometry_latlon: list, buffer_m: float = 30.0, coh_min: float = 0.35,
     ps_coh: float = 0.7, heading: float | None = None,
+    adi_tif: str | Path | None = None, adi_max: float = 0.25,
+    amp_pairs: list | None = None,
 ) -> dict:
     """**교량 데크(폴리라인) buffer_m 이내**의 PS/DS 점 선별 → Track H5.
 
@@ -464,7 +610,23 @@ def build_bridge_track_ps_ds(
     gbar = coh_mean.ravel()[idx].astype(np.float32)
     incidence = inc0.ravel()[idx].astype(np.float32)
     deck_dist_m = (dist_km.ravel()[idx] * 1000.0).astype(np.float32)
-    scatter_class = np.where(gbar >= ps_coh, 1, 0).astype(np.int8)   # 1=PS, 0=DS
+
+    # PS/DS 분류: ADI 가 있으면 **진폭분산 ADI<adi_max=PS**(엄밀, Ferretti 2001),
+    # 없으면 코히런스(γ̄≥ps_coh=PS) 1차 분류.
+    if amp_pairs:                                   # 쌍별 진폭 → 점별 ADI
+        adi_pt = adi_at_points(amp_pairs, pt_lon, pt_lat)
+        adi_pt[~np.isfinite(adi_pt)] = 9.99
+        scatter_class = np.where(adi_pt < adi_max, 1, 0).astype(np.int8)
+        adi_method = f"ADI<{adi_max}"
+    elif adi_tif is not None and Path(adi_tif).exists():
+        adi_pt = _sample_raster(adi_tif, pt_lon, pt_lat).astype(np.float32)
+        adi_pt[~np.isfinite(adi_pt)] = 9.99
+        scatter_class = np.where(adi_pt < adi_max, 1, 0).astype(np.int8)  # 1=PS,0=DS
+        adi_method = f"ADI<{adi_max}"
+    else:
+        adi_pt = np.full(N, np.nan, np.float32)
+        scatter_class = np.where(gbar >= ps_coh, 1, 0).astype(np.int8)
+        adi_method = f"coherence>={ps_coh}(1차)"
 
     # LOS 속도(mm/yr): los vs 경과일 선형회귀
     from datetime import datetime
@@ -483,7 +645,8 @@ def build_bridge_track_ps_ds(
         f.create_dataset("coh", data=gbar)
         f.create_dataset("incidenceAngle", data=incidence)
         f.create_dataset("los_velocity_mm_yr", data=vel)
-        f.create_dataset("scatterer_class", data=scatter_class)   # 1=PS,0=DS(1차)
+        f.create_dataset("scatterer_class", data=scatter_class)   # 1=PS,0=DS
+        f.create_dataset("amplitude_dispersion", data=adi_pt)     # ADI(없으면 NaN)
         f.create_dataset("deck_distance_m", data=deck_dist_m)
         if heading is not None and math.isfinite(heading):
             f.attrs["HEADING"] = float(heading)
@@ -493,7 +656,9 @@ def build_bridge_track_ps_ds(
     n_ps = int((scatter_class == 1).sum())
     return {"n_points": N, "n_ps": n_ps, "n_ds": N - n_ps,
             "buffer_m": buffer_m, "deck_dist_max_m": float(deck_dist_m.max()),
-            "coh_mean": float(gbar.mean()), "out": str(out_h5)}
+            "coh_mean": float(gbar.mean()), "class_method": adi_method,
+            "adi_median": (float(np.nanmedian(adi_pt)) if np.isfinite(adi_pt).any() else None),
+            "out": str(out_h5)}
 
 
 def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,

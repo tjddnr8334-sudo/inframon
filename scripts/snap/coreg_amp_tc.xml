@@ -1,0 +1,57 @@
+<graph id="Graph">
+  <version>1.0</version>
+  <node id="Read-ref"><operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${refFile}</file></parameters></node>
+  <node id="Read-sec"><operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${secFile}</file></parameters></node>
+
+  <node id="Split-ref"><operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath><selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex><lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters></node>
+  <node id="Split-sec"><operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath><selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex><lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters></node>
+
+  <node id="Orbit-ref"><operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType><continueOnFail>true</continueOnFail></parameters></node>
+  <node id="Orbit-sec"><operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType><continueOnFail>true</continueOnFail></parameters></node>
+
+  <node id="BackGeocoding"><operator>Back-Geocoding</operator>
+    <sources><sourceProduct refid="Orbit-ref"/><sourceProduct.1 refid="Orbit-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
+    </parameters></node>
+
+  <node id="Deburst"><operator>TOPSAR-Deburst</operator>
+    <sources><sourceProduct refid="BackGeocoding"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <selectedPolarisations>VV</selectedPolarisations></parameters></node>
+
+  <node id="TC"><operator>Terrain-Correction</operator>
+    <sources><sourceProduct refid="Deburst"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <imgResamplingMethod>NEAREST_NEIGHBOUR</imgResamplingMethod>
+      <pixelSpacingInMeter>14.0</pixelSpacingInMeter>
+      <mapProjection>WGS84(DD)</mapProjection>
+    </parameters></node>
+
+  <node id="Write"><operator>Write</operator>
+    <sources><sourceProduct refid="TC"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${outFile}</file><formatName>GeoTIFF</formatName></parameters></node>
+</graph>
