@@ -94,6 +94,15 @@ def main() -> None:
                         "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
     p.add_argument("--snap-target", default=None, metavar="LAT,LON",
                    help="--snap-insar 단일 교량 대상 좌표.")
+    p.add_argument("--snap-auto", default=None, metavar="LAT,LON",
+                   help="프레임 자동선정: 교량 좌표로 ASF 조회→최적 프레임 선택→SLC 다운로드"
+                        "→burst 포함 검증→SNAP 처리. Earthdata 자격 필요(--earthdata-*/~/.netrc).")
+    p.add_argument("--snap-count", type=int, default=8, metavar="N",
+                   help="--snap-auto 다운로드 장면 수(기본 8).")
+    p.add_argument("--snap-start", default="2024-01-01", metavar="YYYY-MM-DD",
+                   help="--snap-auto 조회 시작일(기본 2024-01-01).")
+    p.add_argument("--snap-end", default="2025-07-01", metavar="YYYY-MM-DD",
+                   help="--snap-auto 조회 종료일(기본 2025-07-01).")
     p.add_argument("--snap-bridges", default=None, metavar="JSON",
                    help="--snap-insar 배치: [{name,lat,lon},...] JSON 파일. 같은 burst 는 코레지 1회 재사용.")
     p.add_argument("--snap-dem", default="SRTM 1Sec HGT", metavar="NAME",
@@ -261,17 +270,47 @@ def main() -> None:
         serve_api(reg, port=args.port, to_crs=to_crs, allow_origins=origins)
         return
 
-    if args.snap_insar:
+    if args.snap_insar or args.snap_auto:
         import json as _json
         from pathlib import Path as _Path
 
         from .insar.snap_backend import SnapError, run_batch
         from .insar.snap_backend import run as snap_run
 
+        out_dir = str(_Path(args.out).parent if args.out.endswith(".h5") else args.out)
+
+        # 프레임 자동선정: 조회→선정→다운로드→burst 검증
+        if args.snap_auto:
+            from .insar.snap_acquire import AcquireError, acquire
+            try:
+                a_lat, a_lon = (float(v) for v in args.snap_auto.split(","))
+            except ValueError:
+                p.error("--snap-auto 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
+            acq_dir = args.snap_insar or str(_Path(out_dir) / "auto_acquire")
+            try:
+                acq = acquire(a_lat, a_lon, acq_dir, count=args.snap_count,
+                              start=args.snap_start, end=args.snap_end,
+                              username=args.earthdata_user, password=args.earthdata_pass,
+                              token=args.earthdata_token)
+            except (AcquireError, SnapError) as exc:
+                p.error(str(exc))
+            print("=" * 56)
+            print("  프레임 자동선정 완료")
+            print("=" * 56)
+            print(f"  선정 프레임 : {acq.frame.label()}  "
+                  f"(중심성 {acq.frame.centrality_km:+.1f}km, {acq.frame.n_scenes}장 중 {len(acq.downloaded)} 다운)")
+            print(f"  burst      : {acq.burst.subswath}#{acq.burst.burst_index} "
+                  f"({'포함' if acq.contained else '⚠️ 밖'})")
+            for c in acq.considered[:-1]:
+                print(f"    · 건너뜀 : {c}")
+            print("-" * 56)
+            args.snap_insar = acq.slc_dir            # 다운로드 폴더로 처리 계속
+            if not args.snap_target and not args.snap_bridges:
+                args.snap_target = args.snap_auto    # 자동선정 좌표로 단일 처리
+
         scenes = sorted(str(x) for x in _Path(args.snap_insar).glob("*.zip"))
         if not scenes:
             p.error(f"SLC(.zip) 를 찾지 못함: {args.snap_insar}")
-        out_dir = str(_Path(args.out).parent if args.out.endswith(".h5") else args.out)
         try:
             if args.snap_bridges:
                 bridges = _json.loads(_Path(args.snap_bridges).read_text(encoding="utf-8"))
