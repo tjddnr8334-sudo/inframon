@@ -377,6 +377,125 @@ def build_track_h5(
     return N
 
 
+def _seg_dist_km(plon, plat, a, b):
+    """점 배열(plon,plat) ~ 선분 a-b(각 (lon,lat)) 최단거리[km] (벡터화)."""
+    import numpy as np
+    ax, ay = a; bx, by = b
+    vx, vy = bx - ax, by - ay
+    seg2 = vx * vx + vy * vy or 1e-12
+    t = np.clip(((plon - ax) * vx + (plat - ay) * vy) / seg2, 0.0, 1.0)
+    px, py = ax + t * vx, ay + t * vy
+    return np.hypot((plon - px) * math.cos(math.radians(ay)), plat - py) * 111.0
+
+
+def _polyline_dist_km(plon, plat, geom_lonlat):
+    """점 배열 ~ 폴리라인(데크) 최단거리[km] — 세그먼트별 최소."""
+    import numpy as np
+    best = None
+    for a, b in zip(geom_lonlat, geom_lonlat[1:]):
+        d = _seg_dist_km(plon, plat, a, b)
+        best = d if best is None else np.minimum(best, d)
+    return best
+
+
+def build_bridge_track_ps_ds(
+    pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
+    *, geometry_latlon: list, buffer_m: float = 30.0, coh_min: float = 0.35,
+    ps_coh: float = 0.7, heading: float | None = None,
+) -> dict:
+    """**교량 데크(폴리라인) buffer_m 이내**의 PS/DS 점 선별 → Track H5.
+
+    각 쌍 tif band1=phase·2=coherence·3=incidence. 데크 30m 버퍼 안에서 시간평균
+    시간평균 코히런스(temporal coherence 근사)로 응집산란체를 고르고, γ̄≥ps_coh 는 PS,
+    coh_min≤γ̄<ps_coh 는 DS 로 1차 분류(진폭 ADI 산출 시 PS 정밀화 가능).
+    LOS 속도(mm/yr)도 계산해 저장(대시보드 속도점군용). 반환: 통계 dict.
+    """
+    import h5py
+    import numpy as np
+    import rasterio
+
+    ok = [p for p in pairs if p.ok and Path(p.product).exists()]
+    if not ok:
+        raise SnapError("성공한 간섭도 쌍이 없어 Track 을 만들 수 없습니다.")
+    geom = [(float(lon), float(lat)) for lat, lon in geometry_latlon]   # (lon,lat)
+    lons = [g[0] for g in geom]; lats = [g[1] for g in geom]
+    mlon, Mlon, mlat, Mlat = min(lons), max(lons), min(lats), max(lats)
+    marg = buffer_m / 111000.0 * 3 + 0.001    # 데크 bbox + 여유(버퍼계산 대상 축소)
+
+    with rasterio.open(ok[0].product) as ds0:
+        ph0 = ds0.read(1); coh0 = ds0.read(2)
+        inc0 = ds0.read(3) if ds0.count >= 3 else np.full(ph0.shape, np.nan, np.float32)
+        H, W = ph0.shape
+        rows, cols = np.mgrid[0:H, 0:W]
+        xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
+        glon = np.asarray(xs).reshape(H, W); glat = np.asarray(ys).reshape(H, W)
+
+    # 데크 bbox 근방만 폴리라인 거리 계산(전체 격자 스캔 회피)
+    near = ((glon >= mlon - marg) & (glon <= Mlon + marg) &
+            (glat >= mlat - marg) & (glat <= Mlat + marg))
+    dist_km = np.full((H, W), np.inf)
+    dist_km[near] = _polyline_dist_km(glon[near], glat[near], geom)
+
+    # 시간평균 코히런스(모든 쌍)
+    coh_stack = [coh0.astype(np.float64)]
+    ph_list = [ph0.astype(np.float64)]
+    for p in ok[1:]:
+        with rasterio.open(p.product) as ds:
+            coh_stack.append(ds.read(2).astype(np.float64))
+            ph_list.append(ds.read(1).astype(np.float64))
+    coh_mean = np.mean(coh_stack, axis=0)
+
+    within = dist_km <= (buffer_m / 1000.0)
+    finite = np.isfinite(ph0) & (ph0 != 0.0)
+    sel = within & finite & (coh_mean >= coh_min)
+    idx = np.where(sel.ravel())[0]
+    if idx.size == 0:
+        raise SnapError(f"데크 {buffer_m:.0f}m 이내 평균코히런스>={coh_min} 점이 없습니다"
+                        f"(coh_min 완화 또는 버퍼 확대 필요).")
+
+    pt_lon = glon.ravel()[idx]; pt_lat = glat.ravel()[idx]
+    N = idx.size; M = 1 + len(ok)
+    scale = -WAVELENGTH_M / (4.0 * math.pi) * 1000.0
+    los = np.zeros((N, M))
+    dates = [ref_date]
+    for k, phk in enumerate(ph_list, start=1):
+        dates.append(ok[k - 1].sec_date)
+        los[:, k] = phk.ravel()[idx] * scale
+    gbar = coh_mean.ravel()[idx].astype(np.float32)
+    incidence = inc0.ravel()[idx].astype(np.float32)
+    deck_dist_m = (dist_km.ravel()[idx] * 1000.0).astype(np.float32)
+    scatter_class = np.where(gbar >= ps_coh, 1, 0).astype(np.int8)   # 1=PS, 0=DS
+
+    # LOS 속도(mm/yr): los vs 경과일 선형회귀
+    from datetime import datetime
+    days = np.array([(datetime.strptime(d, "%Y%m%d") -
+                      datetime.strptime(ref_date, "%Y%m%d")).days for d in dates], float)
+    yr = days / 365.25
+    A = np.vstack([yr, np.ones_like(yr)]).T
+    vel = np.linalg.lstsq(A, los.T, rcond=None)[0][0].astype(np.float32)   # mm/yr
+
+    epochs = np.array([int(d) for d in dates], dtype=np.int32)
+    out_h5 = Path(out_h5); out_h5.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(out_h5, "w") as f:
+        f.create_dataset("pixel_lonlat", data=np.column_stack([pt_lon, pt_lat]).astype(np.float64))
+        f.create_dataset("epochs", data=epochs)
+        f.create_dataset("los_mm", data=los.astype(np.float32))
+        f.create_dataset("coh", data=gbar)
+        f.create_dataset("incidenceAngle", data=incidence)
+        f.create_dataset("los_velocity_mm_yr", data=vel)
+        f.create_dataset("scatterer_class", data=scatter_class)   # 1=PS,0=DS(1차)
+        f.create_dataset("deck_distance_m", data=deck_dist_m)
+        if heading is not None and math.isfinite(heading):
+            f.attrs["HEADING"] = float(heading)
+        f.attrs["source"] = "SNAP bridge-deck PS/DS (deck buffer, temporal-coherence)"
+        f.attrs["RADAR_WAVELENGTH"] = WAVELENGTH_M
+        f.attrs["deck_buffer_m"] = float(buffer_m)
+    n_ps = int((scatter_class == 1).sum())
+    return {"n_points": N, "n_ps": n_ps, "n_ds": N - n_ps,
+            "buffer_m": buffer_m, "deck_dist_max_m": float(deck_dist_m.max()),
+            "coh_mean": float(gbar.mean()), "out": str(out_h5)}
+
+
 def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
         *, out_h5: str | Path | None = None, reference: str | Path | None = None,
         dem: str = "SRTM 1Sec HGT", coh_min: float = 0.3, radius_km: float = 3.0,

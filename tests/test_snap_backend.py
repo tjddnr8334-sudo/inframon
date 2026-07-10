@@ -204,6 +204,49 @@ def test_run_batch_bad_bridge(monkeypatch, tmp_path):
     assert len(res) == 1 and res[0].error and res[0].track_h5 is None
 
 
+# ── 교량 데크 버퍼 PS/DS 선별 ──
+def test_seg_and_polyline_dist_km():
+    # 데크 선분 (127.10,37.32)–(127.11,37.32) 에서 남쪽으로 떨어진 점
+    d = sb._seg_dist_km(__import__("numpy").array([127.105]),
+                        __import__("numpy").array([37.32 - 0.001]),
+                        (127.10, 37.32), (127.11, 37.32))
+    assert 0.10 < float(d[0]) < 0.12          # 0.001deg ~ 0.11km
+    poly = [(127.10, 37.32), (127.11, 37.32), (127.12, 37.325)]
+    dp = sb._polyline_dist_km(__import__("numpy").array([127.105]),
+                              __import__("numpy").array([37.32]), poly)
+    assert float(dp[0]) < 0.01                # 선 위 → ~0
+
+
+def test_build_bridge_track_ps_ds(tmp_path):
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("rasterio")
+    h5py = pytest.importorskip("h5py")
+    # 데크(수평선) 근처는 고코히런스, 멀면 저코히런스인 합성 tif
+    lon0, lat0, px = 127.100, 37.325, 0.0001    # ~11m 픽셀
+    H = W = 60
+    deck_lat = 37.322
+    rows, cols = np.mgrid[0:H, 0:W]
+    lat = lat0 - rows * px
+    coh = np.where(np.abs(lat - deck_lat) < 0.0003, 0.8, 0.1).astype("float32")  # 데크±33m 고코히런스
+    ph = np.full((H, W), 0.5, "float32"); inc = np.full((H, W), 39.0, "float32")
+    pairs = []
+    for sd in ("20240119", "20240131"):
+        tif = tmp_path / f"tc_20240107_{sd}.tif"
+        _write_tif(tif, lon0, lat0, ph, coh, inc, px=px)
+        pairs.append(SnapPairResult("20240107", sd, str(tif), True))
+    geom = [[deck_lat, 127.103], [deck_lat, 127.106]]   # [lat,lon] 수평 데크
+    r = sb.build_bridge_track_ps_ds(pairs, "20240107", tmp_path / "deck.h5",
+                                    geometry_latlon=geom, buffer_m=30.0,
+                                    coh_min=0.35, ps_coh=0.7, heading=-13.1)
+    assert r["n_points"] > 0
+    assert r["deck_dist_max_m"] <= 30.0 + 1e-6
+    with h5py.File(tmp_path / "deck.h5") as f:
+        assert "scatterer_class" in f and "los_velocity_mm_yr" in f
+        assert f.attrs["deck_buffer_m"] == 30.0
+        # 모든 점이 고코히런스(0.8) → PS(class 1)
+        assert set(np.unique(f["scatterer_class"][()])) <= {0, 1}
+
+
 def test_build_track_h5_no_points(tmp_path):
     pytest.importorskip("rasterio")
     # 모든 coh 낮음 → 점 없음 → SnapError
