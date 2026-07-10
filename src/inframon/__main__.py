@@ -299,8 +299,11 @@ def main() -> None:
                 print("=" * 56)
                 print("  SNAP(Windows 네이티브) InSAR → Track H5 완료")
                 print("=" * 56)
+                _cov = (f"교량 포함(가장자리서 {res.burst.distance_km:.1f}km 안쪽)"
+                        if res.burst.contained
+                        else f"⚠️ 커버리지 밖 ~{res.burst.distance_km:.1f}km — 다른 프레임/궤도 권장")
                 print(f"  기준영상   : {res.reference}   burst {res.burst.subswath}#{res.burst.burst_index}"
-                      f" (교량 {res.burst.distance_km:.1f}km)")
+                      f" ({_cov})")
                 print(f"  간섭도쌍   : {sum(pp.ok for pp in res.pairs)}/{len(res.pairs)} 성공")
                 print(f"  측정점     : N={res.n_points}")
                 print(f"  Track H5   : {res.track_h5}")
