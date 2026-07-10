@@ -191,8 +191,13 @@ def process_star_network(
     scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
     *, reference: str | Path | None = None, dem: str = "SRTM 1Sec HGT",
     graph_dir: str | Path | None = None, gpt: str | None = None,
+    burst: BurstLoc | None = None, skip_existing: bool = True,
 ) -> SnapRunResult:
-    """스타 네트워크(기준 vs 각 보조) 코레지+간섭도+TC. reference 기본=최이른 날짜."""
+    """스타 네트워크(기준 vs 각 보조) 코레지+간섭도+TC. reference 기본=최이른 날짜.
+
+    burst 를 주면 자동판별을 건너뛴다(배치에서 같은 burst 재사용). skip_existing 이면
+    이미 만든 지오코딩 산출물(.tif)은 gpt 를 다시 돌리지 않고 재사용(멱등 재개).
+    """
     scenes = [str(s) for s in scenes]
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     gpt = gpt or find_gpt()
@@ -200,7 +205,8 @@ def process_star_network(
 
     ref = str(reference) if reference else min(scenes, key=scene_date)
     secs = [s for s in scenes if str(s) != str(ref)]
-    burst = find_bridge_burst(ref, lat, lon)
+    if burst is None:
+        burst = find_bridge_burst(ref, lat, lon)
 
     res = SnapRunResult(reference=scene_date(ref), burst=burst)
     for sec in sorted(secs, key=scene_date):
@@ -208,6 +214,9 @@ def process_star_network(
         tif = str(out / f"tc_{rd}_{sd}.tif")
         log = str(out / f"tc_{rd}_{sd}.log")
         try:
+            if skip_existing and Path(tif).exists() and Path(tif).stat().st_size > 0:
+                res.pairs.append(SnapPairResult(rd, sd, tif, True, "재사용(skip_existing)"))
+                continue
             rc = run_pair(gpt, graph, ref, sec, burst, dem, tif, log_file=log)
             ok = rc == 0 and Path(tif).exists()
             res.pairs.append(SnapPairResult(rd, sd, tif, ok,
@@ -323,3 +332,73 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
                                   coh_min=coh_min, radius_km=radius_km, heading=hd)
     res.track_h5 = out_h5
     return res
+
+
+@dataclass
+class BridgeResult:
+    name: str
+    lat: float
+    lon: float
+    track_h5: str | None
+    n_points: int
+    burst: BurstLoc | None
+    error: str | None = None
+
+    def as_dict(self) -> dict:
+        return {"name": self.name, "lat": self.lat, "lon": self.lon,
+                "track_h5": self.track_h5, "n_points": self.n_points,
+                "burst": None if not self.burst else
+                f"{self.burst.subswath}#{self.burst.burst_index}",
+                "error": self.error}
+
+
+def run_batch(
+    scenes: list[str | Path], bridges: list[dict], out_dir: str | Path,
+    *, reference: str | Path | None = None, dem: str = "SRTM 1Sec HGT",
+    graph_dir: str | Path | None = None, gpt: str | None = None,
+    coh_min: float = 0.3, radius_km: float = 3.0,
+) -> list[BridgeResult]:
+    """여러 교량 배치 처리. 같은 (subswath,burst) 교량은 코레지+간섭도를 **1번만** 하고
+    Track H5 만 교량별로 생성(전체 한국 스케일에서 재처리 회피). bridges: [{name,lat,lon}].
+    """
+    scenes = [str(s) for s in scenes]
+    gpt = gpt or find_gpt()
+    ref = str(reference) if reference else min(scenes, key=scene_date)
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+
+    groups: dict[tuple[str, int], list[dict]] = {}
+    detected: dict[tuple[str, int], BurstLoc] = {}
+    results: list[BridgeResult] = []
+    for b in bridges:
+        try:
+            la, lo = float(b["lat"]), float(b["lon"])
+        except (KeyError, ValueError, TypeError):
+            results.append(BridgeResult(str(b.get("name", "?")), 0.0, 0.0, None, 0, None,
+                                        "lat/lon 누락/오류"))
+            continue
+        bl = find_bridge_burst(ref, la, lo)
+        key = (bl.subswath, bl.burst_index)
+        groups.setdefault(key, []).append(b)
+        detected.setdefault(key, bl)
+
+    for key, members in groups.items():
+        bl = detected[key]
+        burst_dir = out / f"{bl.subswath}_b{bl.burst_index}"
+        first = members[0]
+        run_res = process_star_network(
+            scenes, float(first["lat"]), float(first["lon"]), burst_dir,
+            reference=ref, dem=dem, graph_dir=graph_dir, gpt=gpt, burst=bl)
+        hd = platform_heading(ref, bl.subswath)
+        for b in members:
+            name = str(b.get("name") or f"{b['lat']}_{b['lon']}")
+            safe = re.sub(r"[^0-9A-Za-z_.-]+", "_", name)
+            th5 = str(out / f"track_{safe}.h5")
+            try:
+                n = build_track_h5(run_res.pairs, run_res.reference, th5,
+                                   lat=float(b["lat"]), lon=float(b["lon"]),
+                                   coh_min=coh_min, radius_km=radius_km, heading=hd)
+                results.append(BridgeResult(name, float(b["lat"]), float(b["lon"]), th5, n, bl))
+            except SnapError as e:
+                results.append(BridgeResult(name, float(b["lat"]), float(b["lon"]),
+                                            None, 0, bl, str(e)))
+    return results
