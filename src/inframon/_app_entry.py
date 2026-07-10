@@ -13,6 +13,21 @@ import sys
 
 
 def main() -> int:
+    # windowed(.exe, console=False) 에선 sys.stdout/stderr 가 None 이라 어떤 print() 든
+    # AttributeError 로 죽는다(PyInstaller GUI 앱의 전형적 함정). None 이면 로그파일로
+    # 돌려 모든 출력을 안전하게 하고(창 경로의 print 들도 동작), 크래시도 파일로 남긴다.
+    if sys.stdout is None or sys.stderr is None:
+        import os
+        import tempfile
+        logdir = os.path.join(tempfile.gettempdir(), "inframon")
+        os.makedirs(logdir, exist_ok=True)
+        _logf = open(os.path.join(logdir, "inframon_app.log"), "a",
+                     encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = _logf
+        if sys.stderr is None:
+            sys.stderr = _logf
+
     # frozen 콘솔(Windows cp949)에서도 한글·특수문자(—, ·) 출력이 깨지지 않도록 UTF-8 강제.
     for stream in (sys.stdout, sys.stderr):
         try:
