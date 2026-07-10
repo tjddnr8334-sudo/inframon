@@ -247,6 +247,68 @@ def test_build_bridge_track_ps_ds(tmp_path):
         assert set(np.unique(f["scatterer_class"][()])) <= {0, 1}
 
 
+# ── ADI(진폭분산) 기반 PS/DS ──
+def _write_amp_tif(path, lon0, lat0, ref, sec, px=0.0001):
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+    H, W = ref.shape
+    with rasterio.open(path, "w", driver="GTiff", height=H, width=W, count=2,
+                       dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(lon0, lat0, px, px)) as ds:
+        ds.write(ref.astype("float32"), 1)   # band1 = 기준 강도
+        ds.write(sec.astype("float32"), 2)   # band2 = 보조 강도
+
+
+def test_adi_at_points(tmp_path):
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("rasterio")
+    lon0, lat0, px = 127.10, 37.33, 0.0005
+    H = W = 10
+    # 안정 강도(모든 날짜 1e5 근처) → ADI 낮음
+    ref = np.full((H, W), 1e5, "float32")
+    tifs = []
+    for k in range(3):
+        sec = np.full((H, W), 1e5 + k * 10, "float32")   # 거의 일정 → 낮은 ADI
+        t = tmp_path / f"amp_{k}.tif"
+        _write_amp_tif(t, lon0, lat0, ref, sec, px)
+        tifs.append(str(t))
+    lons = np.array([127.101, 127.102]); lats = np.array([37.328, 37.327])
+    adi = sb.adi_at_points(tifs, lons, lats)
+    assert adi.shape == (2,)
+    assert np.all(adi < 0.05)          # 안정 강도 → ADI ~ 0
+
+
+def test_build_bridge_track_ps_ds_with_amp(tmp_path):
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("rasterio")
+    h5py = pytest.importorskip("h5py")
+    lon0, lat0, px = 127.100, 37.325, 0.0001
+    H = W = 60
+    deck_lat = 37.322
+    rows, _ = np.mgrid[0:H, 0:W]
+    lat = lat0 - rows * px
+    coh = np.where(np.abs(lat - deck_lat) < 0.0003, 0.8, 0.1).astype("float32")
+    ph = np.full((H, W), 0.5, "float32"); inc = np.full((H, W), 39.0, "float32")
+    pairs, amps = [], []
+    for k, sd in enumerate(("20240119", "20240131")):
+        tif = tmp_path / f"tc_20240107_{sd}.tif"
+        _write_tif(tif, lon0, lat0, ph, coh, inc, px=px)
+        pairs.append(SnapPairResult("20240107", sd, str(tif), True))
+        # 안정 강도 → 낮은 ADI → PS
+        amp = tmp_path / f"amp_0107_{sd}.tif"
+        _write_amp_tif(amp, lon0, lat0, np.full((H, W), 1e5, "float32"),
+                       np.full((H, W), 1e5, "float32"), px)
+        amps.append(str(amp))
+    geom = [[deck_lat, 127.103], [deck_lat, 127.106]]
+    r = sb.build_bridge_track_ps_ds(pairs, "20240107", tmp_path / "d.h5",
+                                    geometry_latlon=geom, buffer_m=30.0, coh_min=0.35,
+                                    amp_pairs=amps, adi_max=0.25)
+    assert r["class_method"].startswith("ADI<")
+    assert r["n_ps"] == r["n_points"]       # 전부 낮은 ADI → 전부 PS
+    with h5py.File(tmp_path / "d.h5") as f:
+        assert "amplitude_dispersion" in f
+
+
 def test_build_track_h5_no_points(tmp_path):
     pytest.importorskip("rasterio")
     # 모든 coh 낮음 → 점 없음 → SnapError
