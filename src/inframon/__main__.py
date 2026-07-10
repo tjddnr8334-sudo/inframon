@@ -89,6 +89,17 @@ def main() -> None:
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
+    p.add_argument("--snap-insar", default=None, metavar="SLC_DIR",
+                   help="SNAP(Windows 네이티브) 백엔드로 SLC_DIR 의 S1 SLC 처리 → Track H5 "
+                        "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
+    p.add_argument("--snap-target", default=None, metavar="LAT,LON",
+                   help="--snap-insar 단일 교량 대상 좌표.")
+    p.add_argument("--snap-bridges", default=None, metavar="JSON",
+                   help="--snap-insar 배치: [{name,lat,lon},...] JSON 파일. 같은 burst 는 코레지 1회 재사용.")
+    p.add_argument("--snap-dem", default="SRTM 1Sec HGT", metavar="NAME",
+                   help="--snap-insar DEM 이름(SNAP, 기본 SRTM 1Sec HGT).")
+    p.add_argument("--snap-gpt", default=None, metavar="PATH",
+                   help="gpt 실행파일 경로(기본 자동탐지: C:\\Program Files\\esa-snap\\bin\\gpt.exe).")
     p.add_argument("--app", action="store_true",
                    help="대시보드를 전용 데스크톱 창에 띄운다(더블클릭 실행용). pywebview 필요")
     p.add_argument("--serve", action="store_true",
@@ -248,6 +259,57 @@ def main() -> None:
         to_crs = SRC_CRS if args.srs == "5179" else WGS84
         origins = tuple(args.cors_origin) if args.cors_origin else ("*",)
         serve_api(reg, port=args.port, to_crs=to_crs, allow_origins=origins)
+        return
+
+    if args.snap_insar:
+        import json as _json
+        from pathlib import Path as _Path
+
+        from .insar.snap_backend import SnapError, run_batch
+        from .insar.snap_backend import run as snap_run
+
+        scenes = sorted(str(x) for x in _Path(args.snap_insar).glob("*.zip"))
+        if not scenes:
+            p.error(f"SLC(.zip) 를 찾지 못함: {args.snap_insar}")
+        out_dir = str(_Path(args.out).parent if args.out.endswith(".h5") else args.out)
+        try:
+            if args.snap_bridges:
+                bridges = _json.loads(_Path(args.snap_bridges).read_text(encoding="utf-8"))
+                results = run_batch(scenes, bridges, out_dir, dem=args.snap_dem,
+                                    gpt=args.snap_gpt)
+                print("=" * 56)
+                print(f"  SNAP(Windows) 배치 완료 — 교량 {len(results)}개")
+                print("=" * 56)
+                for r in results:
+                    tag = f"N={r.n_points} {r.burst}" if r.track_h5 else f"실패: {r.error}"
+                    print(f"  · {r.name:<20} {tag}")
+                    if r.track_h5:
+                        print(f"      → {r.track_h5}")
+                print("=" * 56)
+            else:
+                if not args.snap_target:
+                    p.error("--snap-insar 는 --snap-target LAT,LON 또는 --snap-bridges JSON 이 필요합니다")
+                try:
+                    lat, lon = (float(v) for v in args.snap_target.split(","))
+                except ValueError:
+                    p.error("--snap-target 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
+                out_h5 = args.out if args.out.endswith(".h5") else str(_Path(out_dir) / "track_snap.h5")
+                res = snap_run(scenes, lat, lon, out_dir=out_dir, out_h5=out_h5,
+                               dem=args.snap_dem, gpt=args.snap_gpt)
+                print("=" * 56)
+                print("  SNAP(Windows 네이티브) InSAR → Track H5 완료")
+                print("=" * 56)
+                print(f"  기준영상   : {res.reference}   burst {res.burst.subswath}#{res.burst.burst_index}"
+                      f" (교량 {res.burst.distance_km:.1f}km)")
+                print(f"  간섭도쌍   : {sum(pp.ok for pp in res.pairs)}/{len(res.pairs)} 성공")
+                print(f"  측정점     : N={res.n_points}")
+                print(f"  Track H5   : {res.track_h5}")
+                print("-" * 56)
+                print(f"  다음: python -m inframon --import-track-h5 {res.track_h5} --out data/project.h5")
+                print(f"        python -m inframon --custom-pinn {lat},{lon} --out data/project.h5")
+                print("=" * 56)
+        except SnapError as exc:
+            p.error(str(exc))
         return
 
     if args.custom_pinn:

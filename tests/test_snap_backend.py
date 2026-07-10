@@ -140,6 +140,51 @@ def test_build_track_h5(tmp_path):
         assert "incidenceAngle" in f
 
 
+# ── 배치(burst 그룹핑으로 코레지 재사용) ──
+def test_run_batch_groups_by_burst(monkeypatch, tmp_path):
+    scenes = ["S1A_IW_SLC__1SDV_20240107T093202_20240107T093230_x.zip",
+              "S1A_IW_SLC__1SDV_20240119T093202_20240119T093230_x.zip"]
+    # 교량 A,B 는 같은 burst(IW3#9), C 는 다른 burst(IW2#5)
+    def fake_burst(ref, lat, lon):
+        return BurstLoc("IW3", 9, 2.0, lat, lon) if lat > 37.3 else BurstLoc("IW2", 5, 1.0, lat, lon)
+    monkeypatch.setattr(sb, "find_gpt", lambda *a, **k: "gpt")
+    monkeypatch.setattr(sb, "find_bridge_burst", fake_burst)
+    monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)
+    calls = {"process": 0}
+
+    def fake_process(scenes, lat, lon, out_dir, *, burst=None, **kw):
+        calls["process"] += 1
+        r = sb.SnapRunResult(reference="20240107", burst=burst)
+        r.pairs = [SnapPairResult("20240107", "20240119", "p.tif", True)]
+        return r
+
+    monkeypatch.setattr(sb, "process_star_network", fake_process)
+    monkeypatch.setattr(sb, "build_track_h5",
+                        lambda pairs, ref, out, **kw: (Path(out).write_text("x"), 50)[1])
+    bridges = [{"name": "A", "lat": 37.32, "lon": 127.10},
+               {"name": "B", "lat": 37.33, "lon": 127.11},
+               {"name": "C", "lat": 37.20, "lon": 127.05}]
+    from pathlib import Path
+    results = sb.run_batch(scenes, bridges, tmp_path)
+    assert len(results) == 3
+    assert calls["process"] == 2                 # burst 2종 → 코레지 2회(3회 아님)
+    assert all(r.n_points == 50 for r in results)
+    assert {r.name for r in results} == {"A", "B", "C"}
+
+
+def test_run_batch_bad_bridge(monkeypatch, tmp_path):
+    monkeypatch.setattr(sb, "find_gpt", lambda *a, **k: "gpt")
+    monkeypatch.setattr(sb, "find_bridge_burst",
+                        lambda *a, **k: BurstLoc("IW3", 9, 2.0, 37.3, 127.1))
+    monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: None)
+    monkeypatch.setattr(sb, "process_star_network",
+                        lambda *a, **k: sb.SnapRunResult("20240107", BurstLoc("IW3", 9, 2.0, 37.3, 127.1)))
+    monkeypatch.setattr(sb, "build_track_h5", lambda *a, **k: 5)
+    res = sb.run_batch(["S1A_IW_SLC__1SDV_20240107T093202_x.zip"],
+                       [{"name": "bad"}], tmp_path)   # lat/lon 누락
+    assert len(res) == 1 and res[0].error and res[0].track_h5 is None
+
+
 def test_build_track_h5_no_points(tmp_path):
     pytest.importorskip("rasterio")
     # 모든 coh 낮음 → 점 없음 → SnapError
