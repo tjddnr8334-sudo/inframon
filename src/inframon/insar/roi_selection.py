@@ -56,9 +56,18 @@ def _elem_lonlat(el: dict):
     return None
 
 
-def fetch_builtup(lat: float, lon: float, radius_m: float, *, query_fn=_overpass_query):
-    """교량 주변 built-up 요소 중심점 목록 [(lon,lat), ...]."""
-    data = query_fn(_builtup_query(lat, lon, radius_m))
+def fetch_builtup(lat: float, lon: float, radius_m: float, *, query_fn=_overpass_query,
+                  retries: int = 3):
+    """교량 주변 built-up 요소 중심점 목록 [(lon,lat), ...]. Overpass 504 등 일시오류 재시도."""
+    ql = _builtup_query(lat, lon, radius_m)
+    data = None
+    for attempt in range(retries):
+        try:
+            data = query_fn(ql)
+            break
+        except Exception:  # noqa: BLE001 — 504/timeout 등 → 재시도(마지막이면 전파)
+            if attempt == retries - 1:
+                raise
     pts = []
     for el in data.get("elements", []):
         p = _elem_lonlat(el)

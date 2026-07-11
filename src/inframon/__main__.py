@@ -89,6 +89,10 @@ def main() -> None:
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
+    p.add_argument("--pipeline", default=None, metavar="LAT,LON",
+                   help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
+    p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
+                   help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
     p.add_argument("--snap-insar", default=None, metavar="SLC_DIR",
                    help="SNAP(Windows 네이티브) 백엔드로 SLC_DIR 의 S1 SLC 처리 → Track H5 "
                         "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
@@ -352,6 +356,17 @@ def main() -> None:
                 print("=" * 56)
         except SnapError as exc:
             p.error(str(exc))
+        return
+
+    if args.pipeline:
+        from .pipeline_bridge import run_bridge_pipeline
+        try:
+            _lat, _lon = (float(v) for v in args.pipeline.split(","))
+        except ValueError:
+            p.error("--pipeline 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
+        rep = run_bridge_pipeline(_lat, _lon, mode=args.pipeline_mode,
+                                  earthdata_token=args.earthdata_token)
+        print(rep.summary())
         return
 
     if args.custom_pinn:

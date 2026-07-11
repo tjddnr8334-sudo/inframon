@@ -92,8 +92,11 @@ def _centrality_km(lat: float, lon: float, geometry: dict) -> float:
 
 
 def search_frames(lat: float, lon: float, *, start: str, end: str,
-                  search_fn=_geo_search) -> list[FrameCandidate]:
-    """교량을 덮는 프레임 후보를 조회해 **중심성×장면수** 로 순위(내림차순)."""
+                  search_fn=_geo_search, min_scenes: int = 10) -> list[FrameCandidate]:
+    """교량을 덮는 프레임 후보 조회 → 순위. **장면수 충분(≥min_scenes) 우선, 그 다음 중심성.**
+
+    (중심성만으론 잘 덮지만 장면 2장뿐인 프레임이 뽑혀 시계열 불가 → 장면수 게이팅.)
+    """
     scenes = search_fn(lat, lon, start, end)
     groups: dict[tuple, dict[str, dict]] = {}      # key → {date: scene}(날짜 중복제거)
     cents: dict[tuple, list[float]] = {}
@@ -106,8 +109,9 @@ def search_frames(lat: float, lon: float, *, start: str, end: str,
         items = sorted(bydate.values(), key=lambda x: x["date"])
         med = statistics.median(cents[(d, p, f)]) if cents[(d, p, f)] else float("-inf")
         cands.append(FrameCandidate(d, p, f, med, items))
-    # 중심성 우선, 동률이면 장면수. (음수 중심성=커버리지 밖은 뒤로)
-    cands.sort(key=lambda c: (c.centrality_km, c.n_scenes), reverse=True)
+    # 장면수 충분(≥min_scenes) 우선 → 그 다음 중심성 → 장면수. (커버리지 밖 음수는 뒤로)
+    cands.sort(key=lambda c: (c.n_scenes >= min_scenes, c.centrality_km, c.n_scenes),
+               reverse=True)
     return cands
 
 
