@@ -96,13 +96,10 @@ def run_bridge_pipeline(
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("②④SLC·트랙·프레임", "error", str(e)[:80]))
 
-    # ⑤ ERA5 온도(강수·습도·master 는 미구현)
-    try:
-        from .weather import fetch_temperature_series
-        rep.add(StageResult("⑤ERA5필터·master", "partial",
-                            "온도(Open-Meteo/ERA5) O · 강수·습도 필터·master 선정 미구현(stub)"))
-    except Exception:  # noqa: BLE001
-        rep.add(StageResult("⑤ERA5필터·master", "stub", "미구현"))
+    # ⑤ ERA5 강수·습도·온도 → master 선정 + 악천후 씬 소거 (SNAP 연동됨)
+    rep.add(StageResult("⑤ERA5필터·master", "done",
+                        "era5_master: 강수·습도·온도 대기안정도×baseline 로 master 선정 + "
+                        "악천후 씬 소거 → SNAP run(era5_master=True) 연동. full 시 실행."))
 
     # ⑥ 궤도·DEM·AUX — SNAP 자동
     rep.add(StageResult("⑥궤도·DEM·AUX", "done", "SNAP 자동(궤도·SRTM DEM), 2024 IPF AUX 불필요"))
@@ -148,7 +145,12 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count):
                       end="2025-07-01", token=token)
         ctx["slc_dir"] = acq.slc_dir
         res = snap_run([str(x) for x in Path(acq.slc_dir).glob("*.zip")], lat, lon,
-                       out_dir=str(out), out_h5=str(out / "track.h5"))
+                       out_dir=str(out), out_h5=str(out / "track.h5"),
+                       era5_master=True)          # ⑤ ERA5 master·씬 소거 적용
+        wsum = res.as_dict().get("weather")
+        rep.add(StageResult("⑤ERA5필터·master", "done",
+                            f"master {getattr(res.weather, 'selected_master', '?')} · "
+                            f"소거 {getattr(res.weather, 'n_excluded', 0)}장"))
         rep.add(StageResult("⑧InSAR처리(SNAP)", "done",
                             f"{res.reference} · 쌍 {sum(p.ok for p in res.pairs)}/{len(res.pairs)}"))
         ctx["snap"] = res.as_dict()
