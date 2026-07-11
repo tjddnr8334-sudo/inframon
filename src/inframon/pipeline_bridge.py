@@ -108,18 +108,21 @@ def run_bridge_pipeline(
     rep.add(StageResult("⑦asc+desc연직분해", "partial",
                         "fusion.py 존재 · SNAP 미연동, 데이터 부족시 단일 폴백(현 정자교 하강 2장)"))
 
-    # ⑪ 교량 종별·종류·폭·해상/내륙/산지
+    # ⑪ 교량 종별(1/2/3종)·종류(PSC box/라멘)·폭·지형(산지/평지/해상)
     try:
+        from .insar.bridge_meta import build_bridge_meta
         from .insar.bridge_profile import classify_bridge, water_context_for
         tags = ctx.get("bridge", {}).get("tags", {})
         length = ctx.get("bridge", {}).get("length_m")
         cls = classify_bridge(tags, length)
         water = water_context_for(cls, length)
-        ctx["bridge_class"] = cls; ctx["water_context"] = water
-        rep.add(StageResult("⑪교량메타", "partial",
-                            f"형식 {cls}·{water} O / 1·2·3종·폭·산지 미구현(stub)"))
+        meta = build_bridge_meta(lat, lon, tags, cls, length, water)
+        ctx["bridge_meta"] = meta.as_dict()
+        wtxt = f"{meta.width_m}m" if meta.width_m else "폭미상"
+        rep.add(StageResult("⑪교량메타", "done",
+                            f"{meta.grade}·{meta.structure_ko}·{wtxt}·경간~{meta.max_span_m}m·{meta.terrain}"))
     except Exception as e:  # noqa: BLE001
-        rep.add(StageResult("⑪교량메타", "stub", str(e)[:60]))
+        rep.add(StageResult("⑪교량메타", "error", str(e)[:70]))
 
     # ⑧⑨⑫ 중량 단계 — plan 이면 계획, full 이면 실행
     heavy = [
