@@ -70,14 +70,21 @@ class SnapRunResult:
     pairs: list[SnapPairResult] = field(default_factory=list)
     track_h5: str | None = None
     n_points: int = 0
+    weather: object = None            # ⑤ ERA5 MasterSelection(사용시) 또는 사유 문자열
 
     def as_dict(self) -> dict:
+        w = self.weather
+        wsum = None
+        if w is not None and hasattr(w, "selected_master"):
+            wsum = {"master": w.selected_master, "n_excluded": getattr(w, "n_excluded", 0)}
+        elif isinstance(w, str):
+            wsum = w
         return {
             "reference": self.reference,
             "burst": {"subswath": self.burst.subswath, "index": self.burst.burst_index,
                       "distance_km": round(self.burst.distance_km, 2)},
             "pairs": [{"ref": p.ref_date, "sec": p.sec_date, "ok": p.ok} for p in self.pairs],
-            "track_h5": self.track_h5, "n_points": self.n_points,
+            "track_h5": self.track_h5, "n_points": self.n_points, "weather": wsum,
         }
 
 
@@ -661,13 +668,59 @@ def build_bridge_track_ps_ds(
             "out": str(out_h5)}
 
 
+def select_master_era5(
+    scenes: list[str | Path], lat: float, lon: float, *,
+    precip_max_mm: float | None = 8.0, humidity_max_pct: float | None = None,
+    temp_max_c: float | None = None, temp_min_c: float | None = None,
+    select_fn=None,
+) -> tuple[str, list[str], object]:
+    """⑤ ERA5(강수·습도·온도)로 **master 선정 + 악천후 씬 소거**.
+
+    era5_master.select_master 로 대기 안정도×baseline coherence 최대 master 를 고르고,
+    임계 초과(강수/습도/온도) 씬을 제거. 반환: (master_scene 경로, 유지 scenes, MasterSelection).
+    네트워크는 select_fn 주입으로 격리(테스트).
+    """
+    paths = [str(s) for s in scenes]
+    by_date = {scene_date(p): p for p in paths}
+    dates = sorted(by_date)
+    if select_fn is None:
+        from .era5_master import select_master as select_fn
+    ms = select_fn(lat, lon, dates, scene_names=dates,
+                   precip_max_mm=precip_max_mm, humidity_max_pct=humidity_max_pct,
+                   temp_max_c=temp_max_c, temp_min_c=temp_min_c)
+    excluded = {sw.date for sw in ms.scenes if getattr(sw, "excluded", False)}
+    kept = [by_date[d] for d in dates if d not in excluded]
+    master = by_date.get(ms.selected_master, kept[0] if kept else paths[0])
+    if master not in kept:
+        kept = [master] + kept
+    return master, kept, ms
+
+
 def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
         *, out_h5: str | Path | None = None, reference: str | Path | None = None,
         dem: str = "SRTM 1Sec HGT", coh_min: float = 0.3, radius_km: float = 3.0,
-        graph_dir: str | Path | None = None, gpt: str | None = None) -> SnapRunResult:
-    """전체: 스타 네트워크 처리 → Track H5. 임의 한국 교량 재사용 진입점."""
+        graph_dir: str | Path | None = None, gpt: str | None = None,
+        era5_master: bool = False, precip_max_mm: float | None = 8.0,
+        humidity_max_pct: float | None = None, temp_max_c: float | None = None,
+        temp_min_c: float | None = None) -> SnapRunResult:
+    """전체: 스타 네트워크 처리 → Track H5. 임의 한국 교량 재사용 진입점.
+
+    era5_master=True 면 ⑤ ERA5(강수·습도·온도)로 master(reference) 선정 + 악천후 씬 소거
+    후 처리. reference 를 명시하면 그 값이 우선.
+    """
+    scenes = [str(s) for s in scenes]
+    weather = None
+    if era5_master and reference is None:
+        try:
+            reference, scenes, weather = select_master_era5(
+                scenes, lat, lon, precip_max_mm=precip_max_mm,
+                humidity_max_pct=humidity_max_pct, temp_max_c=temp_max_c, temp_min_c=temp_min_c)
+        except (ValueError, OSError) as e:            # ERA5 실패 → 최이른 폴백
+            weather = f"ERA5 master 실패(최이른 폴백): {e}"
+
     res = process_star_network(scenes, lat, lon, out_dir, reference=reference,
                                dem=dem, graph_dir=graph_dir, gpt=gpt)
+    res.weather = weather
     ref = str(reference) if reference else min([str(s) for s in scenes], key=scene_date)
     hd = platform_heading(ref, res.burst.subswath)
     out_h5 = str(out_h5) if out_h5 else str(Path(out_dir) / f"track_snap_{res.reference}.h5")

@@ -111,6 +111,8 @@ def main() -> None:
                    help="--snap-insar 배치: [{name,lat,lon},...] JSON 파일. 같은 burst 는 코레지 1회 재사용.")
     p.add_argument("--snap-dem", default="SRTM 1Sec HGT", metavar="NAME",
                    help="--snap-insar DEM 이름(SNAP, 기본 SRTM 1Sec HGT).")
+    p.add_argument("--snap-era5-master", action="store_true",
+                   help="⑤ ERA5(강수·습도·온도) 대기안정도로 master 선정 + 악천후 씬 소거(era5_master 연동).")
     p.add_argument("--snap-gpt", default=None, metavar="PATH",
                    help="gpt 실행파일 경로(기본 자동탐지: C:\\Program Files\\esa-snap\\bin\\gpt.exe).")
     p.add_argument("--app", action="store_true",
@@ -338,9 +340,13 @@ def main() -> None:
                     p.error("--snap-target 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
                 out_h5 = args.out if args.out.endswith(".h5") else str(_Path(out_dir) / "track_snap.h5")
                 res = snap_run(scenes, lat, lon, out_dir=out_dir, out_h5=out_h5,
-                               dem=args.snap_dem, gpt=args.snap_gpt)
+                               dem=args.snap_dem, gpt=args.snap_gpt,
+                               era5_master=args.snap_era5_master)
                 print("=" * 56)
                 print("  SNAP(Windows 네이티브) InSAR → Track H5 완료")
+                if res.weather is not None and hasattr(res.weather, "selected_master"):
+                    print(f"  ⑤ERA5 master: {res.weather.selected_master} · "
+                          f"악천후 소거 {getattr(res.weather, 'n_excluded', 0)}장")
                 print("=" * 56)
                 _cov = (f"교량 포함(가장자리서 {res.burst.distance_km:.1f}km 안쪽)"
                         if res.burst.contained

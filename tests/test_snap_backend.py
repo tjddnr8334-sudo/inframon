@@ -309,6 +309,55 @@ def test_build_bridge_track_ps_ds_with_amp(tmp_path):
         assert "amplitude_dispersion" in f
 
 
+# ── ⑤ ERA5 master 선정·씬 소거 ──
+class _SW:
+    def __init__(self, date, excluded=False):
+        self.date = date; self.excluded = excluded
+
+
+class _MS:
+    def __init__(self, master, scenes):
+        self.selected_master = master; self.scenes = scenes
+        self.n_excluded = sum(s.excluded for s in scenes)
+
+
+def test_select_master_era5(monkeypatch):
+    scenes = [f"S1A_IW_SLC__1SDV_{d}T093202_x.zip"
+              for d in ("20240107", "20240119", "20240131", "20240212")]
+    # 0119 를 악천후로 소거, master=0131
+
+    def fake_select(lat, lon, dates, scene_names=None, **k):
+        sw = [_SW(d, excluded=(d == "20240119")) for d in dates]
+        return _MS("20240131", sw)
+
+    master, kept, ms = sb.select_master_era5(scenes, 37.32, 127.10, select_fn=fake_select)
+    assert "20240131" in master                 # ERA5 master
+    kept_dates = {sb.scene_date(s) for s in kept}
+    assert "20240119" not in kept_dates         # 악천후 소거
+    assert "20240131" in kept_dates and len(kept) == 3
+    assert ms.n_excluded == 1
+
+
+def test_run_uses_era5_master(monkeypatch, tmp_path):
+    scenes = [f"S1A_IW_SLC__1SDV_{d}T093202_x.zip" for d in ("20240107", "20240119", "20240131")]
+    called = {}
+
+    def fake_select(lat, lon, dates, **k):
+        return _MS("20240119", [_SW(d) for d in dates])   # master=0119, 소거 없음
+
+    def fake_psn(sc, la, lo, od, *, reference=None, **k):
+        called["reference"] = reference; called["n_scenes"] = len(sc)
+        return sb.SnapRunResult("20240119", BurstLoc("IW2", 1, 5.0, la, lo))
+
+    monkeypatch.setattr("inframon.insar.era5_master.select_master", fake_select)
+    monkeypatch.setattr(sb, "process_star_network", fake_psn)
+    monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)
+    monkeypatch.setattr(sb, "build_track_h5", lambda *a, **k: 10)
+    res = sb.run(scenes, 37.32, 127.10, tmp_path, era5_master=True)
+    assert "20240119" in str(called["reference"])       # ERA5 master 를 reference 로
+    assert res.weather is not None
+
+
 def test_build_track_h5_no_points(tmp_path):
     pytest.importorskip("rasterio")
     # 모든 coh 낮음 → 점 없음 → SnapError
