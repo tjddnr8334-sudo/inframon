@@ -748,6 +748,50 @@ class BridgeResult:
                 "error": self.error}
 
 
+def fuse_snap_asc_desc(asc_h5: str | Path, desc_h5: str | Path,
+                       out_h5: str | Path | None = None,
+                       *, min_desc_epochs: int = 5) -> dict:
+    """⑦ 상승·하강 SNAP Track → **연직(U)·수평(H) 분해**. 불가/부족 시 **단일 궤도 폴백**.
+
+    desc 시점이 min_desc_epochs 미만이면 융합 시도 없이 단일(asc). fuse_asc_desc 가
+    FusionError(입사각·heading·정합·기하 부족)면 단일 폴백. 성공 시 los_mm=연직 U 로,
+    horizontal_mm=종축 H 로 out_h5 기록.
+    """
+    import h5py
+    import numpy as np
+
+    from .fusion import FusionError, fuse_asc_desc
+    from .track_reader import read_track_h5
+
+    asc = read_track_h5(str(asc_h5))
+    desc = read_track_h5(str(desc_h5))
+    n_desc = int(desc.los.shape[1])
+    if n_desc < min_desc_epochs:
+        return {"mode": "single", "reason": f"하강 시점 부족({n_desc}<{min_desc_epochs}) → 단일(asc)",
+                "out": str(asc_h5)}
+    try:
+        fr = fuse_asc_desc(asc, desc)
+    except FusionError as e:
+        return {"mode": "single", "reason": f"{e} → 단일(asc)", "out": str(asc_h5)}
+
+    out_h5 = str(out_h5) if out_h5 else str(Path(asc_h5).with_name("track_vertical.h5"))
+    U, H, t = fr.vertical, fr.longitudinal, fr.track
+    with h5py.File(out_h5, "w") as f:
+        f.create_dataset("pixel_lonlat", data=t.lonlat.astype(np.float64))
+        f.create_dataset("epochs", data=np.array([int(d) for d in
+                         [s.decode() if isinstance(s, bytes) else str(s) for s in t.date_labels]],
+                         dtype=np.int32))
+        f.create_dataset("los_mm", data=U.astype(np.float32))          # 연직 U 를 주 변위로
+        f.create_dataset("vertical_mm", data=U.astype(np.float32))
+        f.create_dataset("horizontal_mm", data=H.astype(np.float32))
+        f.create_dataset("coh", data=t.coherence.astype(np.float32))
+        if t.incidence is not None:
+            f.create_dataset("incidenceAngle", data=t.incidence.astype(np.float32))
+        f.attrs["source"] = "SNAP asc+desc 연직분해(fuse_asc_desc)"
+    return {"mode": "fused", "n_points": int(U.shape[0]), "n_epochs": int(U.shape[1]),
+            "vertical_mm_range": [float(np.nanmin(U)), float(np.nanmax(U))], "out": out_h5}
+
+
 def run_batch(
     scenes: list[str | Path], bridges: list[dict], out_dir: str | Path,
     *, reference: str | Path | None = None, dem: str = "SRTM 1Sec HGT",

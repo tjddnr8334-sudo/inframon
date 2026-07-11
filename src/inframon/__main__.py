@@ -113,6 +113,8 @@ def main() -> None:
                    help="--snap-insar DEM 이름(SNAP, 기본 SRTM 1Sec HGT).")
     p.add_argument("--snap-era5-master", action="store_true",
                    help="⑤ ERA5(강수·습도·온도) 대기안정도로 master 선정 + 악천후 씬 소거(era5_master 연동).")
+    p.add_argument("--snap-fuse", default=None, metavar="ASC_H5,DESC_H5",
+                   help="⑦ 상승·하강 SNAP Track 연직분해(→--out). 하강 부족/기하특이 시 단일 폴백.")
     p.add_argument("--snap-gpt", default=None, metavar="PATH",
                    help="gpt 실행파일 경로(기본 자동탐지: C:\\Program Files\\esa-snap\\bin\\gpt.exe).")
     p.add_argument("--app", action="store_true",
@@ -362,6 +364,26 @@ def main() -> None:
                 print("=" * 56)
         except SnapError as exc:
             p.error(str(exc))
+        return
+
+    if args.snap_fuse:
+        from .insar.snap_backend import fuse_snap_asc_desc
+        try:
+            _asc, _desc = args.snap_fuse.split(",")
+        except ValueError:
+            p.error("--snap-fuse 형식은 ASC_H5,DESC_H5 입니다")
+        r = fuse_snap_asc_desc(_asc.strip(), _desc.strip(),
+                               args.out if args.out.endswith(".h5") else None)
+        print("=" * 56)
+        print(f"  ⑦ asc+desc 연직분해 — {r['mode']}")
+        print("=" * 56)
+        if r["mode"] == "fused":
+            print(f"  연직 Track : {r['out']}  (N={r['n_points']}, {r['n_epochs']}시점)")
+            print(f"  연직 범위  : {r['vertical_mm_range'][0]:.1f} ~ {r['vertical_mm_range'][1]:.1f} mm")
+        else:
+            print(f"  단일 폴백  : {r['reason']}")
+            print(f"  사용 Track : {r['out']}")
+        print("=" * 56)
         return
 
     if args.pipeline:

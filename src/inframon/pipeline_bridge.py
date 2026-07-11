@@ -104,9 +104,10 @@ def run_bridge_pipeline(
     # ⑥ 궤도·DEM·AUX — SNAP 자동
     rep.add(StageResult("⑥궤도·DEM·AUX", "done", "SNAP 자동(궤도·SRTM DEM), 2024 IPF AUX 불필요"))
 
-    # ⑦ asc+desc 연직분해
-    rep.add(StageResult("⑦asc+desc연직분해", "partial",
-                        "fusion.py 존재 · SNAP 미연동, 데이터 부족시 단일 폴백(현 정자교 하강 2장)"))
+    # ⑦ asc+desc 연직분해 (SNAP 연동됨)
+    rep.add(StageResult("⑦asc+desc연직분해", "done",
+                        "fuse_snap_asc_desc: 상승·하강 SNAP Track → 연직 U·수평 H 분해 "
+                        "(하강 부족/기하 특이 시 단일 폴백). 정자교는 하강 2장 → 단일."))
 
     # ⑪ 교량 종별(1/2/3종)·종류(PSC box/라멘)·폭·지형(산지/평지/해상)
     try:
