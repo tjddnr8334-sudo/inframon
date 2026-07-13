@@ -84,9 +84,10 @@ def run_fram(
 
     # 경보 판정
     cri_max = float(CRI.max())
-    from .real_engine import grade_alert_factor
-    _gf = grade_alert_factor(getattr(cfg, 'bridge_grade', None))
-    t_lo, t_mid, t_hi = (min(t * _gf, 1.0) for t in cfg.cri_thresholds)
+    from .real_engine import grade_alert_factor, terrain_alert_factor
+    _ef = (grade_alert_factor(getattr(cfg, 'bridge_grade', None))
+           * terrain_alert_factor(getattr(cfg, 'bridge_terrain', None)))
+    t_lo, t_mid, t_hi = (min(t * _ef, 1.0) for t in cfg.cri_thresholds)
     if cri_max >= t_hi:
         level = "위험"
     elif cri_max >= t_mid:
