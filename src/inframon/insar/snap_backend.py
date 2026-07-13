@@ -748,6 +748,45 @@ class BridgeResult:
                 "error": self.error}
 
 
+_GRAPH_AMP = "coreg_amp_tc.xml"    # 2장 코레지→지오코딩 진폭(band1=기준·band2=보조)
+
+
+def amplitude_pairs(
+    scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
+    *, reference: str | Path | None = None, burst: BurstLoc | None = None,
+    dem: str = "SRTM 1Sec HGT", gpt: str | None = None,
+    graph_dir: str | Path | None = None, skip_existing: bool = True,
+    timeout: int = 3600,
+) -> list[str]:
+    """ADI 용 **쌍별 지오코딩 진폭** 산출 — 각 (기준,보조) 2장 코레지→진폭 GeoTIFF.
+
+    8장 단일 Back-Geocoding 은 메모리 스래싱(멈춤) → 쌍별 경량(~3분/쌍). 반환: amp tif
+    경로들(band1=기준강도·band2=보조강도). adi_at_points 로 점별 ADI 계산에 쓴다.
+    """
+    scenes = [str(s) for s in scenes]
+    gpt = gpt or find_gpt()
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    ref = str(reference) if reference else min(scenes, key=scene_date)
+    if burst is None:
+        burst = find_bridge_burst(ref, lat, lon)
+    graph = str((Path(graph_dir) if graph_dir else _default_graph_dir()) / _GRAPH_AMP)
+    rd = scene_date(ref)
+    amps: list[str] = []
+    for sec in sorted([s for s in scenes if str(s) != ref], key=scene_date):
+        tif = str(out / f"amp_{rd}_{scene_date(sec)}.tif")
+        if not (skip_existing and Path(tif).exists() and Path(tif).stat().st_size > 0):
+            args = [gpt, graph, f"-PrefFile={ref}", f"-PsecFile={sec}",
+                    f"-Psubswath={burst.subswath}", f"-PfirstBurst={burst.burst_index}",
+                    f"-PlastBurst={burst.burst_index}", f"-PdemName={dem}", f"-PoutFile={tif}"]
+            try:
+                subprocess.run(args, capture_output=True, timeout=timeout)
+            except (OSError, subprocess.SubprocessError):
+                continue
+        if Path(tif).exists():
+            amps.append(tif)
+    return amps
+
+
 def fuse_snap_asc_desc(asc_h5: str | Path, desc_h5: str | Path,
                        out_h5: str | Path | None = None,
                        *, min_desc_epochs: int = 5) -> dict:
