@@ -87,6 +87,28 @@ def _span_meters(xyz: np.ndarray) -> float:
     return ext * 111000.0 if ext < 1.0 else ext
 
 
+LIVE_LOAD_PER_LANE_N_M = 12.7e3   # 대표 도로 설계활하중 [N/m/차로] (KL-510 등 수준)
+LANE_WIDTH_M = 3.5                # 차로 폭 [m]
+
+
+def _effective_load_for_ei(prof, use_traffic: bool, traffic) -> tuple[float, str]:
+    """EI 식별용 유효 분포하중 q — **교통데이터 있으면 교통 활하중 기반**, 없으면 자중 균일.
+
+    InSAR 가 보는 load-deflection 변동은 (사하중은 상수라 상쇄되고) **활하중(교통) 구동**
+    이다. 따라서 교통 시계열이 있으면 EI 를 자중 q0 가 아니라 활하중(차로수×설계활하중×
+    교통 피크비)으로 식별해야 물리적으로 맞다. 차로수는 폭/3.5m 로 추정.
+    """
+    if use_traffic and traffic is not None:
+        tr = np.asarray(traffic, dtype=float).ravel()
+        n_lanes = max(1, round((float(prof.width_m) if prof.width_m else 2 * LANE_WIDTH_M)
+                               / LANE_WIDTH_M))
+        peak = float(tr.max() / (tr.mean() + 1e-9))          # 평균 대비 교통 피크비
+        q = LIVE_LOAD_PER_LANE_N_M * n_lanes * peak
+        return q, (f"교통 활하중({n_lanes}차로×{LIVE_LOAD_PER_LANE_N_M/1e3:.1f}kN/m"
+                   f"×피크{peak:.2f}={q/1e3:.0f}kN/m)")
+    return float(prof.load_per_len), f"자중 균일하중({prof.load_per_len/1e3:.0f}kN/m)"
+
+
 def _identify_EI_from_pde(
     d4_hat: float, L_m: float, q: float = Q0_NOMINAL, w_scale_m: float = 1.0
 ) -> float:
@@ -259,7 +281,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         curvature = wxx.reshape(N, M).detach().numpy() * w_scale_used   # ∂²w/∂x²
         # 절대 EI: 비차원 PDE 균형 EI·∂⁴w/∂x⁴=q (프로파일 자중), 처짐 스케일[mm]→m.
         # 연직 관측이 있으면 실측 처짐으로부터 EI 식별(더 정확).
-        EI_global = _identify_EI_from_pde(d4_hat, L_m, prof.load_per_len, w_scale_used * 1e-3)
+        q_eff, load_basis = _effective_load_for_ei(prof, use_traffic, traffic)
+        EI_global = _identify_EI_from_pde(d4_hat, L_m, q_eff, w_scale_used * 1e-3)
 
     comp_thermal, comp_load = thermal, w_load
     comp_settle, comp_anomaly = settle, anom
@@ -468,7 +491,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "profile_source": prof.source,
         "temperature_driven": bool(use_temp), "traffic_driven": bool(use_traffic),
         "vertical_observed": bool(use_vertical),   # 연직 채널로 처짐/침하 분리 여부
-        "EI_global": EI_global,
+        "EI_global": EI_global, "ei_load_basis": load_basis,   # EI 식별 하중(교통활하중 or 자중)
+        "q_effective_N_m": q_eff,
         "pde_form": prof.bridge_type,
         "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),
         "pde_foundation_k": None if p0_pde is None else float(_F.softplus(p0_pde).item()),
