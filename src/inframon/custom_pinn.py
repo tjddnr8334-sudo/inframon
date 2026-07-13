@@ -91,6 +91,10 @@ def run_custom_pinn(
         # 4) cfg + 실행 (기존 /insar 위)
         cfg = PipelineConfig(n_points=insar.n_points, n_dates=insar.n_dates)
         cfg.bridge_profile = prof.model_dump()
+        from .insar.bridge_meta import bridge_grade, max_span_estimate
+        _span = max_span_estimate(prof.bridge_type, prof.length_m)
+        cfg.bridge_grade = bridge_grade(prof.length_m, _span)      # ⑪ 종별 → FRAM 경보차등
+        collected["bridge_grade"] = cfg.bridge_grade
         cfg.pinn_epochs = pinn_epochs
         cfg.pinn_virtual_sensors = pinn_virtual_sensors
         cfg.pinn_deck_long = pinn_deck_long
