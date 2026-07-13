@@ -76,15 +76,18 @@ MATERIAL_DENSITY = {
     "steel": 7850.0, "concrete": 2500.0,
     "prestressed_concrete": 2500.0, "reinforced_concrete": 2500.0,
 }
-# 형식별 단면 충실도(총 폭×높이 대비 실제 재료 단면적 비) — 박스·트러스는 속이 비어 작다.
+# 형식별 유효 질량충실도(폭×높이 envelope 대비) — 상부구조 사하중(바닥판·거더·포장·부속)을
+# 포함한 질량 기준. 기존값(거더 0.12 등)은 주부재 단면만 세어 바닥판·포장 질량을 누락→
+# 질량 ~3× 과소, 모달진동수 과대(금곡교 36m 경간 10Hz)였다. 실 교량 단면으로 재보정.
 _TYPE_AREA_FACTOR = {
-    "box_girder": 0.10, "girder": 0.12, "rahmen": 0.45, "arch": 0.30,
-    "truss": 0.05, "cable_stayed": 0.15, "suspension": 0.12,
+    "box_girder": 0.30, "girder": 0.35, "rahmen": 0.70, "arch": 0.45,
+    "truss": 0.15, "cable_stayed": 0.30, "suspension": 0.28,
 }
-# 형식별 단면2차모멘트 효율(직사각형 wd³/12 대비) — 박스·트러스는 플랜지가 멀어 효율↑.
+# 형식별 종방향 합성단면 2차모멘트 효율(전폭 직사각형 wd³/12 대비). 거더는 I형거더들이
+# 전폭을 채우지 않아 solid rect 대비 낮다(0.45→0.28, 합성단면 실측). 박스는 폐합으로 효율↑.
 _TYPE_I_FACTOR = {
-    "box_girder": 0.65, "girder": 0.45, "rahmen": 0.55, "arch": 0.50,
-    "truss": 0.70, "cable_stayed": 0.40, "suspension": 0.35,
+    "box_girder": 0.60, "girder": 0.28, "rahmen": 0.50, "arch": 0.45,
+    "truss": 0.60, "cable_stayed": 0.35, "suspension": 0.30,
 }
 
 

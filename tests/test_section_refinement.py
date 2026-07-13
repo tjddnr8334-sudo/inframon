@@ -33,3 +33,19 @@ def test_rho_a_fallback_when_no_width():
 def test_mass_per_len_explicit_wins():
     prof = BridgeProfile(width_m=12.0, section_depth_m=3.0, mass_per_len=5.0e4)
     assert prof.rho_a() == 5.0e4                              # 명시값 우선
+
+
+def test_refined_section_gives_physical_frequency():
+    """재보정 단면제원이 실 교량 물리 진동수·질량을 준다(과강성 해소).
+
+    36m 경간 콘크리트 거더: 1차 고유진동수가 물리범위(2~8Hz), 질량이 현실범위(30~90t/m).
+    재보정 전(area 0.12·I 0.45)은 질량 과소·EI 과대로 ~10Hz 비물리였다.
+    """
+    from inframon.fem_crosscheck import analytical_frequencies
+    prof = BridgeProfile(bridge_type="girder", material="prestressed_concrete",
+                         width_m=36.0, section_depth_m=1.8, length_m=36.0,
+                         boundary="continuous")
+    m = prof.rho_a()
+    assert 30e3 <= m <= 90e3                                  # 현실 질량 [kg/m]
+    f1 = analytical_frequencies(prof.geometric_EI(), m, 36.0, "continuous")[0]
+    assert 2.0 <= f1 <= 8.0                                   # 물리 1차모드 [Hz]
