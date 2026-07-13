@@ -45,6 +45,47 @@ def test_pipeline_plan_order_and_status(monkeypatch):
     assert rep.context["roi"]["n_buildings"] == 1224
 
 
+class _DummyStore:
+    def __init__(self, *a, **k): pass
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+def test_pipeline_full_runs_9_12(monkeypatch, tmp_path):
+    _patch_light(monkeypatch)
+    from inframon.insar import snap_acquire as sa, snap_backend as sb
+
+    class _Acq:
+        slc_dir = str(tmp_path / "SLC")
+    monkeypatch.setattr(sa, "acquire", lambda *a, **k: _Acq())
+
+    _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
+                            [sb.SnapPairResult("20240107", "20240119", "p.tif", True)])
+    _res.track_h5 = str(tmp_path / "t.h5"); _res.weather = None
+    monkeypatch.setattr(sb, "run", lambda *a, **k: _res)
+    monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)
+    monkeypatch.setattr(sb, "scene_date", lambda s: "20240107")
+    (tmp_path / "SLC").mkdir()
+    (tmp_path / "SLC" / "S1A_IW_SLC__1SDV_20240107T093202_x.zip").write_text("x")
+    monkeypatch.setattr(sb, "build_bridge_track_ps_ds",
+                        lambda *a, **k: {"n_points": 229, "n_ps": 66, "n_ds": 163,
+                                         "buffer_m": 30.0, "class_method": "coherence>=0.7(1차)",
+                                         "deck_dist_max_m": 30.0, "coh_mean": 0.64, "out": "x"})
+    monkeypatch.setattr("inframon.contracts.io.ProjectStore", _DummyStore)
+    monkeypatch.setattr("inframon.insar.track_reader.import_track_h5", lambda store, h5, **k: None)
+    monkeypatch.setattr("inframon.custom_pinn.run_custom_pinn",
+                        lambda proj, lat, lon, **k: {"cri_global_max": 0.974, "warning_level": "위험"})
+
+    rep = pb.run_bridge_pipeline(37.3219, 127.1083, out_dir=str(tmp_path), mode="full")
+    byname = {s.step: s for s in rep.stages}
+    assert byname["⑨PS/DS(교량30m)"].status == "done"
+    assert "229" in byname["⑨PS/DS(교량30m)"].detail
+    assert byname["⑫PINN→FRAM"].status == "done"
+    assert "0.974" in byname["⑫PINN→FRAM"].detail
+    assert rep.context["ps_ds"]["n_ps"] == 66
+    assert rep.context["pinn"]["cri_max"] == 0.974
+
+
 def test_pipeline_summary_renders(monkeypatch):
     _patch_light(monkeypatch)
     rep = pb.run_bridge_pipeline(37.3219, 127.1083, mode="plan")
