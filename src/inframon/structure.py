@@ -64,12 +64,27 @@ MATERIAL_E = {
     "prestressed_concrete": 3.4e10,
     "reinforced_concrete": 2.7e10,
 }
-# 재료별 단위길이 질량 ρA [kg/m] (대표값 — 폭/단면 따라 큰 편차)
+# 재료별 단위길이 질량 ρA [kg/m] (대표값 — 폭/단면 없을 때 폴백)
 MATERIAL_RHO_A = {
     "steel": 1.0e4,
     "concrete": 2.4e4,
     "prestressed_concrete": 2.4e4,
     "reinforced_concrete": 2.4e4,
+}
+# 재료 밀도 ρ [kg/m³] — 폭·높이 알 때 단면적 A 로 ρA=ρ·A 정밀화
+MATERIAL_DENSITY = {
+    "steel": 7850.0, "concrete": 2500.0,
+    "prestressed_concrete": 2500.0, "reinforced_concrete": 2500.0,
+}
+# 형식별 단면 충실도(총 폭×높이 대비 실제 재료 단면적 비) — 박스·트러스는 속이 비어 작다.
+_TYPE_AREA_FACTOR = {
+    "box_girder": 0.10, "girder": 0.12, "rahmen": 0.45, "arch": 0.30,
+    "truss": 0.05, "cable_stayed": 0.15, "suspension": 0.12,
+}
+# 형식별 단면2차모멘트 효율(직사각형 wd³/12 대비) — 박스·트러스는 플랜지가 멀어 효율↑.
+_TYPE_I_FACTOR = {
+    "box_girder": 0.65, "girder": 0.45, "rahmen": 0.55, "arch": 0.50,
+    "truss": 0.70, "cable_stayed": 0.40, "suspension": 0.35,
 }
 
 
@@ -94,9 +109,32 @@ class BridgeProfile(BaseModel):
             return float(self.youngs_modulus)
         return MATERIAL_E.get(self.material, 2.1e11)
 
+    def section_area_m2(self) -> float | None:
+        """단면적 A [m²] — 폭·높이·형식 충실도. 폭 미상이면 None."""
+        if self.width_m and self.section_depth_m:
+            fac = _TYPE_AREA_FACTOR.get(self.bridge_type, 0.15)
+            return max(float(self.width_m), 0.5) * float(self.section_depth_m) * fac
+        return None
+
+    def second_moment_I_m4(self) -> float | None:
+        """단면2차모멘트 I [m⁴] — 직사각형 wd³/12 × 형식효율. 폭 미상이면 None."""
+        if self.width_m and self.section_depth_m:
+            rect = float(self.width_m) * float(self.section_depth_m) ** 3 / 12.0
+            return rect * _TYPE_I_FACTOR.get(self.bridge_type, 0.5)
+        return None
+
+    def geometric_EI(self) -> float | None:
+        """기하 EI = E·I [N·m²] — 제원 기반(식별 EI 와 비교/사전값). 폭 미상이면 None."""
+        I = self.second_moment_I_m4()
+        return self.youngs() * I if I is not None else None
+
     def rho_a(self) -> float:
+        """단위길이 질량 ρA [kg/m] — 폭·높이 알면 ρ·A(정밀), 없으면 재료 대표값(폴백)."""
         if self.mass_per_len is not None:
             return float(self.mass_per_len)
+        A = self.section_area_m2()
+        if A is not None:
+            return MATERIAL_DENSITY.get(self.material, 7850.0) * A
         return MATERIAL_RHO_A.get(self.material, 1.0e4)
 
     def half_depth(self) -> float:

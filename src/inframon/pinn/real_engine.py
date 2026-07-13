@@ -493,6 +493,11 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "vertical_observed": bool(use_vertical),   # 연직 채널로 처짐/침하 분리 여부
         "EI_global": EI_global, "ei_load_basis": load_basis,   # EI 식별 하중(교통활하중 or 자중)
         "q_effective_N_m": q_eff,
+        # 단면 정밀화(폭·높이 알 때): 단면적 A·단면2차 I·기하 EI=E·I (식별 EI 와 비교)
+        "section_area_m2": prof.section_area_m2(),
+        "second_moment_I_m4": prof.second_moment_I_m4(),
+        "geometric_EI_Nm2": prof.geometric_EI(),
+        "width_m": prof.width_m, "section_depth_m": prof.section_depth_m,
         "pde_form": prof.bridge_type,
         "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),
         "pde_foundation_k": None if p0_pde is None else float(_F.softplus(p0_pde).item()),
