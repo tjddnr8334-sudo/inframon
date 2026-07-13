@@ -78,3 +78,56 @@ def test_fetch_traffic_network_fail_returns_none(monkeypatch):
     assert traffic.fetch_traffic_series(["20240107", "20240119"], service_key="K",
                                         endpoint="https://x", date_field="d",
                                         count_field="c") is None
+
+
+# ── 한국도로공사 EX API (일자별 전국 교통량, apiId=0617) ──
+def _ex_url_sumdate(url: str) -> str:
+    import urllib.parse
+    return urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["sumDate"][0]
+
+
+def test_records_picks_ex_list_convention():
+    data = {"code": "SUCCESS", "count": "2",
+            "list": [{"trafficVolumn": "1"}, {"trafficVolumn": "2"}]}
+    recs = traffic._records(data)
+    assert len(recs) == 2 and recs[0]["trafficVolumn"] == "1"
+
+
+def test_fetch_ex_daily_traffic_sums_and_aligns(monkeypatch):
+    import urllib.request
+    # sumDate 당 차종·TCS 분해 레코드 → 합산되어야 함
+    per_day = {
+        "20240107": [{"carType": "1", "trafficVolumn": "10,000"},
+                     {"carType": "2", "trafficVolumn": "2000"}],   # 합 12000
+        "20240119": [{"carType": "1", "trafficVolumn": "9000"}],   # 합 9000
+    }
+
+    def fake(url, **k):
+        d = _ex_url_sumdate(url)
+        assert "nationalTrafficVolumn" in url and "key=K" in url and "exDivCode=00" in url
+        return _FakeResp({"code": "SUCCESS", "list": per_day[d]})
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    out = traffic.fetch_ex_daily_traffic(["20240107", "20240119"], key="K")
+    assert out is not None and out.shape == (2,)
+    assert out[0] == 12000.0 and out[1] == 9000.0
+
+
+def test_fetch_ex_partial_fail_uses_mean(monkeypatch):
+    import urllib.request
+
+    def fake(url, **k):
+        if _ex_url_sumdate(url) == "20240107":
+            return _FakeResp({"list": [{"trafficVolumn": "8000"}]})
+        raise OSError("net")                              # 0119 실패
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    out = traffic.fetch_ex_daily_traffic(["20240107", "20240119"], key="K")
+    assert out[0] == 8000.0 and out[1] == 8000.0          # 누락일 → 평균(8000)
+
+
+def test_fetch_ex_all_fail_returns_none(monkeypatch):
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda *a, **k: (_ for _ in ()).throw(OSError("net")))
+    assert traffic.fetch_ex_daily_traffic(["20240107", "20240119"], key="K") is None

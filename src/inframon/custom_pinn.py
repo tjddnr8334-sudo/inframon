@@ -35,6 +35,7 @@ def run_custom_pinn(
     data_go_kr_endpoint: str | None = None,
     data_go_kr_params: dict[str, str] | None = None,
     data_go_kr_field_map: dict[str, str] | None = None,
+    traffic_ex_key: str | None = None,          # 한국도로공사 EX API 인증키(turnkey)
     traffic_key: str | None = None,
     traffic_endpoint: str | None = None,
     traffic_date_field: str | None = None,
@@ -58,12 +59,10 @@ def run_custom_pinn(
         if store.has_array("/insar/date_labels"):
             date_labels = [str(d) for d in store.read_array("/insar/date_labels").astype(str)]
 
-        # 1) 교량 제원 — 전국교량표준데이터 CSV(최근접) 우선, 없으면 OSM/data.go.kr API
+        # 1) 교량 제원 — 전국교량표준데이터 CSV(최근접) 우선, 없으면 OSM/data.go.kr API.
+        #    CSV 자동탐색은 CLI 레이어(__main__)에서 하고, 여기선 명시적으로 받은 것만 쓴다.
         prof = None
         official_grade = None
-        if not bridge_csv:                       # 미지정이면 data/ 에서 자동탐색(turnkey)
-            from .public_data import default_bridge_csv
-            bridge_csv = default_bridge_csv()
         if bridge_csv:
             from .public_data import nearest_bridge_profile
             prof = nearest_bridge_profile(bridge_csv, lat, lon, max_km=bridge_csv_max_km)
@@ -96,9 +95,15 @@ def run_custom_pinn(
         else:
             collected["temperature"] = "취득일(date_labels) 없음 → 계절가정"
 
-        # 3) 교통량 (공공 API, 키)
+        # 3) 교통량 — 한국도로공사 EX API(turnkey, 키만) 우선, 없으면 generic 엔드포인트
         traffic_series = None
-        if traffic_key and traffic_endpoint and traffic_date_field and traffic_count_field and date_labels:
+        if traffic_ex_key and date_labels:
+            from .traffic import fetch_ex_daily_traffic
+            traffic_series = fetch_ex_daily_traffic(date_labels, key=traffic_ex_key)
+            collected["traffic"] = (
+                f"한국도로공사 EX 일자별 전국 교통량 {len(traffic_series)}일"
+                if traffic_series is not None else "EX API 실패/빈응답 → 자유하중 폴백")
+        elif traffic_key and traffic_endpoint and traffic_date_field and traffic_count_field and date_labels:
             from .traffic import fetch_traffic_series
             traffic_series = fetch_traffic_series(
                 date_labels, service_key=traffic_key, endpoint=traffic_endpoint,
@@ -106,7 +111,7 @@ def run_custom_pinn(
                 params=traffic_params)
             collected["traffic"] = "수집됨" if traffic_series is not None else "실패→자유하중 폴백"
         else:
-            collected["traffic"] = "키/엔드포인트 없음 → 자유하중"
+            collected["traffic"] = "키 없음 → 자유하중(설계활하중 DB등급 반영)"
 
         # 4) cfg + 실행 (기존 /insar 위)
         cfg = PipelineConfig(n_points=insar.n_points, n_dates=insar.n_dates)

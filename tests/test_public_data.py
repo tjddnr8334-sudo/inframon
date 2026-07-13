@@ -41,7 +41,8 @@ def test_bridge_profile_lanes_to_width():
 
 def test_datasets_and_describe():
     assert "15081953" in DATASETS["national_bridge_standard"]["id"]   # CSV 파일데이터
-    assert "15076822" in DATASETS["korex_traffic"]["id"]
+    assert "15062049" in DATASETS["korex_traffic"]["id"]              # EX 일자별 전국 교통량
+    assert "nationalTrafficVolumn" in DATASETS["korex_traffic"]["endpoint"]
     txt = describe_datasets()
     assert "전국교량표준데이터" in txt and "data.go.kr" in txt
 

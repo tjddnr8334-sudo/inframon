@@ -43,11 +43,16 @@ DATASETS = {
         },
     },
     "korex_traffic": {
-        "id": "15076822",
-        "portal": "https://www.data.go.kr/data/15076822/openapi.do",
-        "desc": "한국도로공사 실시간 전국 교통량 — 시간별 교통량(차종별)",
-        "fields": {"date": ["stdDate", "일자", "collectDate", "trafficDate"],
-                   "count": ["trafficAmout", "trafficAmount", "교통량", "sumTraffic"]},
+        # 한국도로공사 EX OpenAPI(LINK형). 인증키는 data.ex.co.kr 에서 별도 발급(data.go.kr 아님).
+        # apiId=0617 일자별 전국 교통량 — sumDate 당 전국 집계(차종·TCS/hipass 분해). 시간변조용.
+        "id": "15062049",
+        "apiId": "0617",
+        "portal": "https://www.data.go.kr/data/15062049/openapi.do",
+        "ex_portal": "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0617",
+        "endpoint": "https://data.ex.co.kr/openapi/trafficapi/nationalTrafficVolumn",
+        "desc": "한국도로공사 일자별 전국 교통량(EX API) — sumDate 당 전국 집계, 일자별 시간변조",
+        "request": {"key": "발급키", "type": "json", "sumDate": "YYYYMMDD"},
+        "fields": {"date": ["sumDate"], "count": ["trafficVolumn"]},
     },
 }
 

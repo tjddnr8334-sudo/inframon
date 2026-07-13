@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -89,6 +90,10 @@ def main() -> None:
     p.add_argument("--bridge-csv", default=None, metavar="CSV",
                    help="전국교량표준데이터 CSV(data.go.kr/15081953). --custom-pinn 이 "
                         "최근접 교량의 실 제원·공식 종별등급을 사용.")
+    p.add_argument("--traffic-ex-key", default=None, metavar="KEY",
+                   help="한국도로공사 EX API 인증키(data.ex.co.kr, apiId=0617 일자별 전국 교통량). "
+                        "--custom-pinn 이 취득일별 교통량을 PINN 하중 시간변조로 사용. "
+                        "미지정시 환경변수 EX_API_KEY 사용.")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
@@ -437,8 +442,14 @@ def main() -> None:
             lat, lon = (float(v) for v in args.custom_pinn.split(","))
         except ValueError:
             p.error("--custom-pinn 형식은 LAT,LON 입니다 (예: 37.3634,127.1090)")
+        ex_key = args.traffic_ex_key or os.environ.get("EX_API_KEY")
+        bridge_csv = args.bridge_csv
+        if not bridge_csv:                       # CLI 편의: data/ 에서 표준데이터 CSV 자동탐색
+            from .public_data import default_bridge_csv
+            bridge_csv = default_bridge_csv()
         try:
-            summary = run_custom_pinn(args.out, lat, lon, bridge_csv=args.bridge_csv)
+            summary = run_custom_pinn(args.out, lat, lon, bridge_csv=bridge_csv,
+                                      traffic_ex_key=ex_key)
         except (ValueError, FileNotFoundError) as exc:
             p.error(str(exc))
         _coll = summary['collected']
