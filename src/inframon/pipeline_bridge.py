@@ -143,7 +143,9 @@ def run_bridge_pipeline(
 def _run_heavy(rep, ctx, lat, lon, out, token, snap_count):
     """중량 단계 실제 실행(mode='full') — SNAP 처리→PS/DS→PINN. 실패는 단계별 보고."""
     from .insar.snap_acquire import acquire
-    from .insar.snap_backend import build_bridge_track_ps_ds, run as snap_run
+    from .insar.snap_backend import (build_bridge_track_ps_ds, platform_heading,
+                                     scene_date)
+    from .insar.snap_backend import run as snap_run
     try:
         acq = acquire(lat, lon, str(out), count=snap_count, start="2024-01-01",
                       end="2025-07-01", token=token)
@@ -151,16 +153,53 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count):
         res = snap_run([str(x) for x in Path(acq.slc_dir).glob("*.zip")], lat, lon,
                        out_dir=str(out), out_h5=str(out / "track.h5"),
                        era5_master=True)          # ⑤ ERA5 master·씬 소거 적용
-        wsum = res.as_dict().get("weather")
-        rep.add(StageResult("⑤ERA5필터·master", "done",
-                            f"master {getattr(res.weather, 'selected_master', '?')} · "
-                            f"소거 {getattr(res.weather, 'n_excluded', 0)}장"))
+        if res.weather is not None and hasattr(res.weather, "selected_master"):
+            rep.add(StageResult("⑤ERA5master(실행)", "done",
+                                f"master {res.weather.selected_master} · "
+                                f"악천후 소거 {getattr(res.weather, 'n_excluded', 0)}장"))
         rep.add(StageResult("⑧InSAR처리(SNAP)", "done",
                             f"{res.reference} · 쌍 {sum(p.ok for p in res.pairs)}/{len(res.pairs)}"))
         ctx["snap"] = res.as_dict()
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑧InSAR처리(SNAP)", "error", str(e)[:100]))
         return
-    rep.add(StageResult("⑨PS/DS(교량30m)", "planned",
-                        "데크 geometry + amp_pairs 준비 후 build_bridge_track_ps_ds"))
-    rep.add(StageResult("⑫PINN→FRAM", "planned", "import-track-h5 → custom-pinn"))
+
+    # heading(단일 궤도 기록용) — 기준 SLC 에서
+    ref_scene = next((str(s) for s in Path(acq.slc_dir).glob("*.zip")
+                      if scene_date(str(s)) == res.reference), None)
+    hd = platform_heading(ref_scene, res.burst.subswath) if ref_scene else None
+
+    # ⑨ 교량 데크 30m PS/DS
+    geometry = ctx.get("bridge", {}).get("geometry")
+    deck_h5 = str(out / "track_deck.h5")
+    if geometry:
+        try:
+            r9 = build_bridge_track_ps_ds(res.pairs, res.reference, deck_h5,
+                                          geometry_latlon=geometry, buffer_m=30.0,
+                                          coh_min=0.35, heading=hd)
+            ctx["ps_ds"] = r9
+            rep.add(StageResult("⑨PS/DS(교량30m)", "done",
+                                f"{r9['n_points']}점(PS {r9['n_ps']}/DS {r9['n_ds']}) · "
+                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}"))
+        except Exception as e:  # noqa: BLE001
+            rep.add(StageResult("⑨PS/DS(교량30m)", "error", str(e)[:90]))
+            deck_h5 = res.track_h5
+    else:
+        rep.add(StageResult("⑨PS/DS(교량30m)", "partial", "교량 geometry 없음 → 반경 track 사용"))
+        deck_h5 = res.track_h5
+
+    # ⑫ import → 교량맞춤 PINN → FRAM
+    try:
+        from .contracts.io import ProjectStore
+        from .custom_pinn import run_custom_pinn
+        from .insar.track_reader import import_track_h5
+        proj = str(out / "project.h5")
+        with ProjectStore(proj, mode="a") as store:
+            import_track_h5(store, deck_h5)
+        summ = run_custom_pinn(proj, lat, lon)
+        ctx["pinn"] = {"cri_max": summ["cri_global_max"], "warning": summ["warning_level"],
+                       "project": proj}
+        rep.add(StageResult("⑫PINN→FRAM", "done",
+                            f"CRI {summ['cri_global_max']:.3f} · 경보 {summ['warning_level']} · {proj}"))
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult("⑫PINN→FRAM", "error", str(e)[:100]))
