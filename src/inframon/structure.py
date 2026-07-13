@@ -14,7 +14,48 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, Field
 
-BRIDGE_TYPES = ("girder", "cable_stayed", "suspension", "arch", "truss", "continuous_girder")
+BRIDGE_TYPES = ("girder", "box_girder", "rahmen", "cable_stayed", "suspension",
+                "arch", "truss", "continuous_girder")
+
+# 형식 → 재료 추론(OSM material 태그 없을 때). PSC box·아치·라멘은 콘크리트가 표준.
+_TYPE_MATERIAL = {
+    "box_girder": "prestressed_concrete", "rahmen": "reinforced_concrete",
+    "arch": "reinforced_concrete", "truss": "steel",
+    "cable_stayed": "steel", "suspension": "steel", "girder": "steel",
+}
+# 형식 → 단면높이/스팬 비(대표). 거더 L/20, box L/18, 트러스 L/10, 아치 L/30, 사장·현수 데크 L/40.
+_TYPE_DEPTH_RATIO = {
+    "girder": 1 / 20, "box_girder": 1 / 18, "rahmen": 1 / 22, "truss": 1 / 10,
+    "arch": 1 / 30, "cable_stayed": 1 / 40, "suspension": 1 / 45,
+}
+
+
+def infer_structural_defaults(bridge_type: str, *, has_material_tag: bool,
+                              length_m: float | None, max_span_m: float | None) -> dict:
+    """형식(+경간)으로 재료·단면높이·경계·자중을 추론(명시값 없을 때 채움).
+
+    - 재료: material 태그 없으면 형식별 표준(box/아치/라멘→콘크리트, 트러스/케이블→강재).
+    - 단면높이: 형식별 (최대경간 또는 스팬)×비율, [0.4, 8]m 클램프.
+    - 경계: 라멘→fixed, 다경간(연장/최대경간>1.5)→continuous, 그 외 simply_supported.
+    - 자중 q = ρA·g (재료 밀도 반영).
+    """
+    out: dict = {}
+    if not has_material_tag:
+        out["material"] = _TYPE_MATERIAL.get(bridge_type, "steel")
+    mat = out.get("material", "steel") if not has_material_tag else None
+    span = max_span_m or length_m
+    if span:
+        ratio = _TYPE_DEPTH_RATIO.get(bridge_type, 1 / 20)
+        out["section_depth_m"] = round(min(max(span * ratio, 0.4), 8.0), 2)
+    if bridge_type == "rahmen":
+        out["boundary"] = "fixed"
+    elif length_m and max_span_m and max_span_m > 0 and length_m / max_span_m > 1.5:
+        out["boundary"] = "continuous"
+    else:
+        out["boundary"] = "simply_supported"
+    rho = MATERIAL_RHO_A.get(mat or "steel", 1.0e4)
+    out["load_per_len"] = round(rho * 9.81, 1)          # 자중 [N/m]
+    return out
 
 # 재료별 영률 E [Pa] (대표값)
 MATERIAL_E = {
