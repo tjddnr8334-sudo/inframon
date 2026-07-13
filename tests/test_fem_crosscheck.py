@@ -98,6 +98,36 @@ def test_crosscheck_project_reads_pinn(tmp_path):
     assert "⚠️" in r.assessment                            # 클립/모델 경고
 
 
+def test_effective_boundary_continuous_maps_to_fixed():
+    assert fx._effective_boundary("continuous") == "fixed"
+    assert fx._effective_boundary("simply_supported") == "simply_supported"
+
+
+def test_analytical_continuous_equals_fixed():
+    # 연속교 내부경간은 고정단 근사 → 두 진동수 동일
+    EI, m, L = 1.0e10, 1.0e4, 30.0
+    fc = fx.analytical_frequencies(EI, m, L, "continuous")
+    ff = fx.analytical_frequencies(EI, m, L, "fixed")
+    assert fc == pytest.approx(ff)
+    # 연속(고정) 1차 > 단순지지 1차
+    fs = fx.analytical_frequencies(EI, m, L, "simply_supported")
+    assert fc[0] > fs[0]
+
+
+def test_crosscheck_project_uses_structural_span(tmp_path):
+    # 다경간: structural_span_m(18) 이 span_m(108)보다 우선 사용
+    inputs = {"material": "prestressed_concrete", "span_m": 108.0,
+              "structural_span_m": 18.0, "n_spans": 6, "boundary": "continuous",
+              "EI_global": 1.0e14, "geometric_EI_Nm2": 4.19e10,
+              "q_effective_N_m": 1.4e5, "section_area_m2": 4.19}
+    p = _write_pinn_h5(tmp_path / "multi.h5", inputs, [1073.8, 2960.2, 5805.3])
+    r = fx.crosscheck_project(p)
+    assert r.span_m == 18.0                                # 연장 108 아닌 단일경간 18
+    assert r.boundary == "continuous"
+    # 단일경간 처짐은 물리적(사용성 통과) — 연장 단일SS 모델의 L/18 부적합이 해소
+    assert r.model_plausible
+
+
 def test_crosscheck_project_missing_pinn_raises(tmp_path):
     p = tmp_path / "empty.h5"
     with h5py.File(p, "w") as h:

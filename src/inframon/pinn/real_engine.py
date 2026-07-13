@@ -50,8 +50,13 @@ RHO_A = 1.0e4             # 단위길이 질량 [kg/m] (FEM 모달용 가정)
 
 
 def _fem_beam_frequencies(EI: float, m_per_len: float, L: float,
+                          boundary: str = "simply_supported",
                           n_elem: int = 12, n_modes: int = 3) -> np.ndarray:
-    """Euler-Bernoulli 보 FEM 모달 해석 → 첫 n_modes 고유진동수 [Hz] (단순지지)."""
+    """Euler-Bernoulli 보 FEM 모달 해석 → 첫 n_modes 고유진동수 [Hz].
+
+    boundary: simply_supported(양단 w=0) / fixed·continuous(양단 w=0,θ=0 — 다경간 연속교의
+    내부경간을 고정단으로 근사). L 은 **단일 경간 길이**(다경간이면 연장/경간수).
+    """
     L = float(np.clip(L, 5.0, 5000.0))
     le = L / n_elem
     ndof = 2 * (n_elem + 1)
@@ -71,7 +76,9 @@ def _fem_beam_frequencies(EI: float, m_per_len: float, L: float,
         d = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3]
         K[np.ix_(d, d)] += ke
         Mm[np.ix_(d, d)] += me
-    fixed = [0, 2 * n_elem]                       # 단순지지: 양단 처짐 w=0
+    fixed = [0, 2 * n_elem]                       # 양단 처짐 w=0
+    if boundary in ("fixed", "continuous"):       # 고정단: 양단 회전 θ=0 추가(내부경간 근사)
+        fixed += [1, 2 * n_elem + 1]
     free = [i for i in range(ndof) if i not in fixed]
     Kf, Mf = K[np.ix_(free, free)], Mm[np.ix_(free, free)]
     w2 = np.linalg.eigvals(np.linalg.solve(Mf, Kf)).real
@@ -113,6 +120,21 @@ def _effective_load_for_ei(prof, use_traffic: bool, traffic) -> tuple[float, str
     return float(prof.load_per_len), f"자중 균일하중({prof.load_per_len/1e3:.0f}kN/m)"
 
 
+def _structural_span(prof, L_full: float) -> tuple[float, int]:
+    """빔 역학(모달·설계 처짐)용 단일 경간 길이·경간수.
+
+    다경간 연속교(prof.boundary=='continuous')만 연장을 경간수로 나눠 단일 경간을 쓴다.
+    단경간(단순지지·고정)은 연장 그대로 → 기존 동작 불변(골든 안전).
+    ※ EI 식별(q·L⁴/(w·d4_hat))은 경간 선택에 불변이라 여기서 바꾸지 않는다.
+    """
+    if getattr(prof, "boundary", None) != "continuous" or not L_full:
+        return L_full, 1
+    from ..insar.bridge_meta import max_span_estimate
+    ms = max_span_estimate(prof.bridge_type, L_full) or L_full
+    n = max(1, round(L_full / ms)) if ms > 0 else 1
+    return (round(L_full / n, 2) if n > 1 else L_full), n
+
+
 def _identify_EI_from_pde(
     d4_hat: float, L_m: float, q: float = Q0_NOMINAL, w_scale_m: float = 1.0
 ) -> float:
@@ -149,7 +171,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     # 교량 구조 프로파일(제원) — 하드코딩 가정 대신 교량별 E/단면/질량/자중/스팬
     from ..structure import resolve_profile
     prof = resolve_profile(cfg, xyz)
-    L_m = float(prof.length_m or _span_meters(xyz))                   # 교량 스팬 [m]
+    L_m = float(prof.length_m or _span_meters(xyz))                   # 교량 전체연장 [m]
+    span_m, n_spans = _structural_span(prof, L_m)                     # 단일경간(모달·설계 기준)
 
     # 외생 입력(선택, [M] 정렬): 온도 ΔT → 열팽창 구동, 교통량 → 하중 변조
     temp = getattr(cfg, "pinn_temperature", None)
@@ -308,8 +331,9 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         amp = float(np.hypot(a_th.item(), b_th.item())) * los_scale * 1e-3
         alpha = np.full(N, max(amp / (20.0 * (Lf.max() + 1e-9)), 1e-7))
 
-    # 고유진동수: FEM 모달 (식별 EI_global, 프로파일 ρA, 스팬)
-    natural_freq = _fem_beam_frequencies(EI_global, prof.rho_a(), L_m)
+    # 고유진동수: FEM 모달 (식별 EI_global, 프로파일 ρA, 단일경간·경계) — 다경간 연속교는
+    # 연장이 아니라 단일 경간·고정단 근사로 물리적 진동수를 얻는다.
+    natural_freq = _fem_beam_frequencies(EI_global, prof.rho_a(), span_m, prof.boundary)
 
     # ───────── 가상센싱(virtual sensing): 상부거더 전체 변위장 ─────────
     # InSAR 관측점(N개·희소·불규칙)에서 학습한 PINN 연속장 w(x,t)/anomaly(x,t) 와
@@ -503,6 +527,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "geometric_EI_Nm2": prof.geometric_EI(),
         "width_m": prof.width_m, "section_depth_m": prof.section_depth_m,
         "boundary": prof.boundary, "rho_a_kg_m": prof.rho_a(),   # FEM 교차검증용 경계·질량
+        "structural_span_m": span_m, "n_spans": n_spans,         # 다경간 단일경간·경간수
+        "total_length_m": L_m,
         "pde_form": prof.bridge_type,
         "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),
         "pde_foundation_k": None if p0_pde is None else float(_F.softplus(p0_pde).item()),

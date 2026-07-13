@@ -15,8 +15,10 @@ from inframon.insar.engine import run_insar
 from inframon.pinn.real_engine import (
     _fem_beam_frequencies,
     _identify_EI_from_pde,
+    _structural_span,
     run_pinn_real,
 )
+from inframon.structure import BridgeProfile
 
 
 def test_identify_EI_from_pde_formula():
@@ -44,6 +46,29 @@ def test_fem_matches_analytic_simply_supported():
     assert len(f) == 3
     assert f[0] < f[1] < f[2]
     assert abs(f[0] - fa[0]) / fa[0] < 0.05   # 1차 모드 해석해와 5% 이내
+
+
+def test_fem_fixed_boundary_higher_than_ss():
+    # 고정단(연속교 내부경간 근사) 1차 진동수 > 단순지지
+    EI, m, L = 2.0e10, 1.0e4, 40.0
+    f_ss = _fem_beam_frequencies(EI, m, L, "simply_supported")
+    f_fix = _fem_beam_frequencies(EI, m, L, "fixed")
+    assert f_fix[0] > f_ss[0]
+    # 고정단 1차 계수 ≈ (4.730)²/(π²) ≈ 2.27× 단순지지
+    assert f_fix[0] / f_ss[0] == pytest.approx((4.730041 ** 2) / (np.pi ** 2), rel=0.05)
+
+
+def test_structural_span_single_vs_multi():
+    # 단경간(단순지지·고정): 연장 그대로, n=1 (골든 불변)
+    for bnd in ("simply_supported", "fixed"):
+        prof = BridgeProfile(bridge_type="girder", length_m=40.0, boundary=bnd)
+        span, n = _structural_span(prof, 40.0)
+        assert span == 40.0 and n == 1
+    # 다경간 연속교: 연장을 경간수로 분할(span<length, n>1)
+    prof = BridgeProfile(bridge_type="girder", length_m=108.0, boundary="continuous")
+    span, n = _structural_span(prof, 108.0)
+    assert n > 1 and span < 108.0
+    assert span * n == pytest.approx(108.0, abs=n)     # 균등분할
 
 
 def _pinn(tmp_path, n_points=30, n_dates=10, epochs=60):

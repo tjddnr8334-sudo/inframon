@@ -34,11 +34,16 @@ _DEFL_COEF = {
 }
 
 
+def _effective_boundary(boundary: str) -> str:
+    """다경간 연속교(continuous)의 내부경간은 고정단으로 근사 — FEM 모달과 일치시킨다."""
+    return "fixed" if boundary == "continuous" else boundary
+
+
 def analytical_frequencies(EI: float, m_per_len: float, L: float,
                            boundary: str = "simply_supported",
                            n_modes: int = 3) -> list[float]:
     """경계별 Euler-Bernoulli 보 고유진동수[Hz] 닫힌형 해. f_n=(β_nL)²/(2π)·√(EI/(m·L⁴))."""
-    bl = _BETA_L.get(boundary, _BETA_L["simply_supported"])[:n_modes]
+    bl = _BETA_L.get(_effective_boundary(boundary), _BETA_L["simply_supported"])[:n_modes]
     c = math.sqrt(EI / (m_per_len * L ** 4))
     return [(b ** 2) / (2 * math.pi) * c for b in bl]
 
@@ -46,7 +51,7 @@ def analytical_frequencies(EI: float, m_per_len: float, L: float,
 def midspan_deflection_mm(q_N_m: float, EI: float, L: float,
                           boundary: str = "simply_supported") -> float:
     """등분포하중 q[N/m] 하 최대 정적처짐[mm]. δ=coef·qL⁴/EI."""
-    coef = _DEFL_COEF.get(boundary, _DEFL_COEF["simply_supported"])
+    coef = _DEFL_COEF.get(_effective_boundary(boundary), _DEFL_COEF["simply_supported"])
     return coef * q_N_m * L ** 4 / EI * 1000.0
 
 
@@ -128,11 +133,11 @@ def crosscheck(*, EI_identified: float, EI_geometric: float | None,
                    if EI_geometric else [])
     freq_pinn_fem = list(freq_pinn_fem or [])[:n_modes]
 
-    # 1) 솔버 검증: PINN FEM(식별 EI·단순지지) vs 해석식(식별 EI) — 구현 일치 검증
-    ana_ss = analytical_frequencies(EI_identified, m_per_len, L, "simply_supported", n_modes)
+    # 1) 솔버 검증: PINN FEM(식별 EI·동일 경간·경계) vs 해석식(식별 EI) — 구현 일치 검증
+    ana_ref = analytical_frequencies(EI_identified, m_per_len, L, boundary, n_modes)
     solver_err = []
     for i in range(len(freq_pinn_fem)):
-        ref = ana_ss[i] if i < len(ana_ss) else float("nan")
+        ref = ana_ref[i] if i < len(ana_ref) else float("nan")
         solver_err.append(abs(freq_pinn_fem[i] - ref) / ref * 100.0 if ref else float("nan"))
 
     ei_ratio = (EI_identified / EI_geometric) if EI_geometric else None
@@ -175,6 +180,9 @@ def crosscheck(*, EI_identified: float, EI_geometric: float | None,
         assessment = f"✅ 식별 EI 가 설계 대비 {ei_ratio:.2f}× — 설계 FEM 과 정합"
     else:
         assessment = "설계 EI 미상(단면 폭 없음) — 솔버 검증만 수행"
+    # 설계 1차모드 물리범위 이탈(경간 추정·단면제원 근사 신호) — 부가 경고
+    if freq_design and not first_mode_plausible:
+        assessment += f" · ⚠️설계 1차 {f1_design:.1f}Hz 비정상(경간수·단면제원 근사 점검)"
 
     return FemCrosscheckResult(
         boundary=boundary, span_m=L, m_per_len=m_per_len,
@@ -205,7 +213,8 @@ def crosscheck_project(project_h5, *, boundary: str | None = None,
     EI_id = float(inp.get("EI_global") or 0.0)
     EI_geom = inp.get("geometric_EI_Nm2")
     EI_geom = float(EI_geom) if EI_geom else None
-    span = float(inp.get("span_m") or 0.0)
+    # 다경간 연속교는 단일 경간(structural_span_m)으로 모달·설계 처짐을 평가. 없으면 연장.
+    span = float(inp.get("structural_span_m") or inp.get("span_m") or 0.0)
     q = float(inp.get("q_effective_N_m") or inp.get("load_per_len") or 1.0e4)
     area = inp.get("section_area_m2")
     material = inp.get("material", "steel")
