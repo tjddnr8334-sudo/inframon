@@ -103,6 +103,12 @@ def main() -> None:
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
+    p.add_argument("--fem-crosscheck", default=None, metavar="PROJECT_H5",
+                   help="상용 FEM 교차검증 — /pinn 식별 EI·고유진동수를 설계(기하 EI) FEM "
+                        "벤치마크와 대조(솔버검증·강성상태·처짐).")
+    p.add_argument("--fem-boundary", default=None,
+                   choices=["simply_supported", "continuous", "fixed", "cantilever"],
+                   help="--fem-crosscheck 경계조건 override (기본: /pinn 저장값 또는 단순지지).")
     p.add_argument("--validate", default=None, metavar="PROJECT_H5,REFERENCE_CSV",
                    help="현장 검증: project.h5 의 InSAR 결과를 기준 CSV(계측·FEM: lon,lat,value)와 대조(RMSE·bias·r).")
     p.add_argument("--validate-kind", default="velocity", choices=["velocity", "displacement"],
@@ -404,6 +410,15 @@ def main() -> None:
             print(f"  단일 폴백  : {r['reason']}")
             print(f"  사용 Track : {r['out']}")
         print("=" * 56)
+        return
+
+    if args.fem_crosscheck:
+        from .fem_crosscheck import crosscheck_project
+        try:
+            r = crosscheck_project(args.fem_crosscheck, boundary=args.fem_boundary)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            p.error(str(exc))
+        print(r.summary())
         return
 
     if args.validate:

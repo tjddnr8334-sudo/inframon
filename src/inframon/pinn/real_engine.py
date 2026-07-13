@@ -502,6 +502,7 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "second_moment_I_m4": prof.second_moment_I_m4(),
         "geometric_EI_Nm2": prof.geometric_EI(),
         "width_m": prof.width_m, "section_depth_m": prof.section_depth_m,
+        "boundary": prof.boundary, "rho_a_kg_m": prof.rho_a(),   # FEM 교차검증용 경계·질량
         "pde_form": prof.bridge_type,
         "pde_axial_p2": None if p2_pde is None else float(p2_pde.item()),
         "pde_foundation_k": None if p0_pde is None else float(_F.softplus(p0_pde).item()),
