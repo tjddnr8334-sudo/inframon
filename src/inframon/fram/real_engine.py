@@ -37,6 +37,14 @@ def grade_alert_factor(grade) -> float:
     return {"1종": 0.85, "2종": 1.0, "3종": 1.15, "기타": 1.1}.get(grade, 1.0)
 
 
+def terrain_alert_factor(terrain) -> float:
+    """지형 → CRI 임계 배율. 산지·해상은 바람 노출·환경하중이 커 낮은 임계로 조기경보.
+
+    (개활 지형일수록 풍하중·와류진동 노출↑ → 동적 공명 위험↑. 평지=1.0 기준.)
+    """
+    return {"평지": 1.0, "산지": 0.92, "해상": 0.85}.get(terrain, 1.0)
+
+
 def _sat(x: np.ndarray, scale: float) -> np.ndarray:
     """포화 절대 매핑: x/(x+scale) ∈ [0,1). x=scale 에서 0.5."""
     return x / (np.abs(x) + scale + 1e-12)
@@ -232,9 +240,10 @@ def run_fram_real(
     CRI = np.clip(w1 * A + w2 * R_couple + w3 * R_spatial + w4 * R_div, 0, 1)
 
     cri_max = float(CRI.max())
-    # 교량 종별(1/2/3종) 경보 차등 — 중요 시설(1종)은 낮은 CRI 에서 조기경보.
-    _gf = grade_alert_factor(getattr(cfg, "bridge_grade", None))
-    t_lo, t_mid, t_hi = (min(t * _gf, 1.0) for t in cfg.cri_thresholds)
+    # 경보 차등: 종별(1종 중요) × 지형(산지·해상 바람노출) → 낮은 CRI 에서 조기경보.
+    _ef = (grade_alert_factor(getattr(cfg, "bridge_grade", None))
+           * terrain_alert_factor(getattr(cfg, "bridge_terrain", None)))
+    t_lo, t_mid, t_hi = (min(t * _ef, 1.0) for t in cfg.cri_thresholds)
 
     g = "/fram"
     store.write_array(f"{g}/R_ij", R_ij)

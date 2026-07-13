@@ -95,6 +95,15 @@ def run_custom_pinn(
         _span = max_span_estimate(prof.bridge_type, prof.length_m)
         cfg.bridge_grade = bridge_grade(prof.length_m, _span)      # ⑪ 종별 → FRAM 경보차등
         collected["bridge_grade"] = cfg.bridge_grade
+        try:                                            # ③ 지형(산지/해상)→ FRAM 환경 경보차등
+            from .insar.bridge_meta import terrain_class
+            from .insar.bridge_profile import water_context_for
+            _water = water_context_for(prof.bridge_type, prof.length_m)
+            _terr, _relief = terrain_class(lat, lon, _water)
+            cfg.bridge_terrain = _terr
+            collected["terrain"] = f"{_terr}(기복{_relief}m)" if _relief else _terr
+        except Exception as exc:  # noqa: BLE001 — 표고 조회 실패 시 지형 미반영(폴백)
+            collected["terrain"] = f"실패({exc})"
         cfg.pinn_epochs = pinn_epochs
         cfg.pinn_virtual_sensors = pinn_virtual_sensors
         cfg.pinn_deck_long = pinn_deck_long
