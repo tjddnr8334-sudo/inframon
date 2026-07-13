@@ -86,6 +86,9 @@ def main() -> None:
                    help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
+    p.add_argument("--bridge-csv", default=None, metavar="CSV",
+                   help="전국교량표준데이터 CSV(data.go.kr/15081953). --custom-pinn 이 "
+                        "최근접 교량의 실 제원·공식 종별등급을 사용.")
     p.add_argument("--custom-pinn", default=None, metavar="LAT,LON",
                    help="--out 의 /insar 위에 교량 맞춤형 PINN 실행 — 위치로 제원(OSM)·온도"
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
@@ -435,16 +438,20 @@ def main() -> None:
         except ValueError:
             p.error("--custom-pinn 형식은 LAT,LON 입니다 (예: 37.3634,127.1090)")
         try:
-            summary = run_custom_pinn(args.out, lat, lon)
+            summary = run_custom_pinn(args.out, lat, lon, bridge_csv=args.bridge_csv)
         except (ValueError, FileNotFoundError) as exc:
             p.error(str(exc))
+        _coll = summary['collected']
         print("=" * 56)
         print("  교량 맞춤형 PINN 완료")
         print("=" * 56)
         print(f"  교량       : {summary['bridge_name'] or '-'} ({summary['bridge_type']}/{summary['material']})")
-        print(f"  스팬       : {summary['span_m']} m  · 제원출처 {summary['collected']['profile_source']}")
-        print(f"  온도       : {summary['collected']['temperature']}")
-        print(f"  교통량     : {summary['collected']['traffic']}")
+        print(f"  스팬       : {summary['span_m']} m  · 제원출처 {_coll['profile_source']}")
+        if _coll.get('bridge_csv'):
+            print(f"  표준데이터 : {_coll['bridge_csv']}")
+        print(f"  종별등급   : {_coll.get('bridge_grade', '-')}  · 지형 {_coll.get('terrain', '-')}")
+        print(f"  온도       : {_coll['temperature']}")
+        print(f"  교통량     : {_coll['traffic']}")
         print(f"  최대 CRI   : {summary['cri_global_max']:.3f}  경보 {summary['warning_level']}")
         print("=" * 56)
         return

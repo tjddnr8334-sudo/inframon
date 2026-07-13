@@ -29,6 +29,8 @@ def run_custom_pinn(
     *,
     bridge_name: str | None = None,
     radius_m: float = 200.0,
+    bridge_csv: str | Path | None = None,
+    bridge_csv_max_km: float = 1.0,
     data_go_kr_key: str | None = None,
     data_go_kr_endpoint: str | None = None,
     data_go_kr_params: dict[str, str] | None = None,
@@ -56,12 +58,30 @@ def run_custom_pinn(
         if store.has_array("/insar/date_labels"):
             date_labels = [str(d) for d in store.read_array("/insar/date_labels").astype(str)]
 
-        # 1) 교량 제원
-        from .bridge_info import fetch_bridge_profile
-        prof = fetch_bridge_profile(
-            lat, lon, name=bridge_name, radius_m=radius_m,
-            data_go_kr_key=data_go_kr_key, data_go_kr_endpoint=data_go_kr_endpoint,
-            data_go_kr_params=data_go_kr_params, data_go_kr_field_map=data_go_kr_field_map)
+        # 1) 교량 제원 — 전국교량표준데이터 CSV(최근접) 우선, 없으면 OSM/data.go.kr API
+        prof = None
+        official_grade = None
+        if not bridge_csv:                       # 미지정이면 data/ 에서 자동탐색(turnkey)
+            from .public_data import default_bridge_csv
+            bridge_csv = default_bridge_csv()
+        if bridge_csv:
+            from .public_data import nearest_bridge_profile
+            prof = nearest_bridge_profile(bridge_csv, lat, lon, max_km=bridge_csv_max_km)
+            if prof is not None:
+                official_grade = prof.extra.get("grade")     # 공식 시설물종별등급(추정보다 우선)
+                _dl = prof.extra.get("design_load")
+                collected["bridge_csv"] = (
+                    f"전국교량표준데이터 최근접 {prof.name}"
+                    f"({prof.extra.get('match_dist_m')}m, 설계활하중 {_dl or '-'}, "
+                    f"점검 {prof.extra.get('inspect_grade') or '-'})")
+            else:
+                collected["bridge_csv"] = f"CSV 내 {bridge_csv_max_km}km 이내 교량 없음 → OSM 폴백"
+        if prof is None:
+            from .bridge_info import fetch_bridge_profile
+            prof = fetch_bridge_profile(
+                lat, lon, name=bridge_name, radius_m=radius_m,
+                data_go_kr_key=data_go_kr_key, data_go_kr_endpoint=data_go_kr_endpoint,
+                data_go_kr_params=data_go_kr_params, data_go_kr_field_map=data_go_kr_field_map)
         collected["profile_source"] = prof.source
 
         # 2) 온도 (Open-Meteo, 무키)
@@ -93,8 +113,10 @@ def run_custom_pinn(
         cfg.bridge_profile = prof.model_dump()
         from .insar.bridge_meta import bridge_grade, max_span_estimate
         _span = max_span_estimate(prof.bridge_type, prof.length_m)
-        cfg.bridge_grade = bridge_grade(prof.length_m, _span)      # ⑪ 종별 → FRAM 경보차등
-        collected["bridge_grade"] = cfg.bridge_grade
+        # ⑪ 종별 → FRAM 경보차등. 공식 시설물종별등급구분(CSV) 있으면 추정보다 우선.
+        cfg.bridge_grade = official_grade or bridge_grade(prof.length_m, _span)
+        collected["bridge_grade"] = (
+            f"{cfg.bridge_grade}(공식)" if official_grade else f"{cfg.bridge_grade}(추정)")
         try:                                            # ③ 지형(산지/해상)→ FRAM 환경 경보차등
             from .insar.bridge_meta import terrain_class
             from .insar.bridge_profile import water_context_for

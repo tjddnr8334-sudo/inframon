@@ -102,9 +102,13 @@ def _effective_load_for_ei(prof, use_traffic: bool, traffic) -> tuple[float, str
         tr = np.asarray(traffic, dtype=float).ravel()
         n_lanes = max(1, round((float(prof.width_m) if prof.width_m else 2 * LANE_WIDTH_M)
                                / LANE_WIDTH_M))
+        # 설계활하중 등급(전국교량표준데이터 DB-24/DB-18…)이 있으면 차로당 활하중을 그 배율로 보정.
+        dlf = (prof.extra or {}).get("design_load_factor")
+        per_lane = LIVE_LOAD_PER_LANE_N_M * (dlf if dlf else 1.0)
         peak = float(tr.max() / (tr.mean() + 1e-9))          # 평균 대비 교통 피크비
-        q = LIVE_LOAD_PER_LANE_N_M * n_lanes * peak
-        return q, (f"교통 활하중({n_lanes}차로×{LIVE_LOAD_PER_LANE_N_M/1e3:.1f}kN/m"
+        q = per_lane * n_lanes * peak
+        dl_tag = f"·{prof.extra.get('design_load')}" if dlf else ""
+        return q, (f"교통 활하중({n_lanes}차로×{per_lane/1e3:.1f}kN/m{dl_tag}"
                    f"×피크{peak:.2f}={q/1e3:.0f}kN/m)")
     return float(prof.load_per_len), f"자중 균일하중({prof.load_per_len/1e3:.0f}kN/m)"
 
