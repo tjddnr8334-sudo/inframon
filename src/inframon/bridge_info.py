@@ -19,7 +19,9 @@ from .structure import BridgeProfile
 
 # OSM bridge:structure → inframon 교량 형식
 _OSM_STRUCTURE = {
-    "beam": "girder", "girder": "girder", "box_girder": "girder",
+    "beam": "girder", "girder": "girder",
+    "box_girder": "box_girder", "box-girder": "box_girder", "box": "box_girder",
+    "rahmen": "rahmen", "frame": "rahmen", "rigid_frame": "rahmen",
     "arch": "arch", "suspension": "suspension",
     "cable-stayed": "cable_stayed", "cablestayed": "cable_stayed",
     "truss": "truss", "cantilever": "girder",
@@ -46,14 +48,25 @@ def profile_from_osm(bridge: Any) -> BridgeProfile:
     tags = getattr(bridge, "tags", {}) or {}
     struct = (tags.get("bridge:structure") or tags.get("bridge") or "").lower()
     material_raw = (tags.get("material") or "").lower()
+    btype = _OSM_STRUCTURE.get(struct, "girder")
+    length_m = (getattr(bridge, "length_m", 0.0) or None) or _num(tags.get("length"))
+    # 형식·경간으로 재료(태그 없을 때)·단면높이·경계·자중 추론 — 강재 고정 가정 해소
+    from .insar.bridge_meta import max_span_estimate
+    from .structure import infer_structural_defaults
+    span = max_span_estimate(btype, length_m)
+    inferred = infer_structural_defaults(btype, has_material_tag=bool(material_raw),
+                                         length_m=length_m, max_span_m=span)
+    material = _MATERIAL.get(material_raw) if material_raw else inferred.get("material", "steel")
     return BridgeProfile(
         name=getattr(bridge, "name", None),
-        bridge_type=_OSM_STRUCTURE.get(struct, "girder"),
-        material=_MATERIAL.get(material_raw, "steel"),
-        length_m=(getattr(bridge, "length_m", 0.0) or None) or _num(tags.get("length")),
-        width_m=_num(tags.get("width")),
+        bridge_type=btype, material=material or "steel",
+        length_m=length_m, width_m=_num(tags.get("width")),
+        section_depth_m=inferred.get("section_depth_m", 1.0),
+        load_per_len=inferred.get("load_per_len", 1.0e4),
+        boundary=inferred.get("boundary", "simply_supported"),
         source="osm",
-        extra={"osm_structure": struct or "?", "osm": getattr(bridge, "osm_url", None)},
+        extra={"osm_structure": struct or "?", "max_span_m": span,
+               "osm": getattr(bridge, "osm_url", None)},
     )
 
 
