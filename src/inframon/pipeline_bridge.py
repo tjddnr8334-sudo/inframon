@@ -49,9 +49,12 @@ class PipelineReport:
 def run_bridge_pipeline(
     lat: float, lon: float, *, out_dir: str | Path = "data/pipeline",
     mode: str = "plan", roi_sizes=(2.0, 3.0, 4.0, 5.0),
-    earthdata_token: str | None = None, snap_count: int = 8,
+    earthdata_token: str | None = None, snap_count: int = 8, do_adi: bool = False,
 ) -> PipelineReport:
-    """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행)."""
+    """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).
+
+    do_adi=True 면 ⑨ PS/DS 를 코히런스 1차 대신 **진폭분산 ADI**(쌍별 진폭 ~20분 추가)로.
+    """
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     rep = PipelineReport(lat=lat, lon=lon)
     ctx = rep.context
@@ -132,7 +135,7 @@ def run_bridge_pipeline(
         ("⑫PINN→FRAM", "--custom-pinn (형식별 PINN + FRAM CRI)"),
     ]
     if mode == "full":
-        _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count)
+        _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi)
     else:
         for step, how in heavy:
             rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
@@ -140,11 +143,11 @@ def run_bridge_pipeline(
     return rep
 
 
-def _run_heavy(rep, ctx, lat, lon, out, token, snap_count):
+def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
     """중량 단계 실제 실행(mode='full') — SNAP 처리→PS/DS→PINN. 실패는 단계별 보고."""
     from .insar.snap_acquire import acquire
-    from .insar.snap_backend import (build_bridge_track_ps_ds, platform_heading,
-                                     scene_date)
+    from .insar.snap_backend import (amplitude_pairs, build_bridge_track_ps_ds,
+                                     platform_heading, scene_date)
     from .insar.snap_backend import run as snap_run
     try:
         acq = acquire(lat, lon, str(out), count=snap_count, start="2024-01-01",
@@ -174,9 +177,13 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count):
     deck_h5 = str(out / "track_deck.h5")
     if geometry:
         try:
+            amps = None
+            if do_adi:                              # 진폭쌍 → ADI(~20분 추가)
+                amps = amplitude_pairs([str(x) for x in Path(ctx["slc_dir"]).glob("*.zip")],
+                                       lat, lon, out, reference=res.reference, burst=res.burst)
             r9 = build_bridge_track_ps_ds(res.pairs, res.reference, deck_h5,
                                           geometry_latlon=geometry, buffer_m=30.0,
-                                          coh_min=0.35, heading=hd)
+                                          coh_min=0.35, heading=hd, amp_pairs=amps)
             ctx["ps_ds"] = r9
             rep.add(StageResult("⑨PS/DS(교량30m)", "done",
                                 f"{r9['n_points']}점(PS {r9['n_ps']}/DS {r9['n_ds']}) · "

@@ -93,6 +93,18 @@ def main() -> None:
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
+    p.add_argument("--pipeline-adi", action="store_true",
+                   help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
+    p.add_argument("--validate", default=None, metavar="PROJECT_H5,REFERENCE_CSV",
+                   help="현장 검증: project.h5 의 InSAR 결과를 기준 CSV(계측·FEM: lon,lat,value)와 대조(RMSE·bias·r).")
+    p.add_argument("--validate-kind", default="velocity", choices=["velocity", "displacement"],
+                   help="--validate 기준값 종류(기본 velocity[mm/yr]).")
+    p.add_argument("--validate-vertical", action="store_true",
+                   help="--validate 기준이 연직값이면(레벨링 등) 입사각으로 LOS 투영 후 비교.")
+    p.add_argument("--validate-dist", type=float, default=50.0, metavar="M",
+                   help="--validate 정합 최대거리[m] (기본 50).")
+    p.add_argument("--validate-tol", type=float, default=5.0, metavar="MM",
+                   help="--validate 통과 허용 RMSE[mm] (기본 5).")
     p.add_argument("--snap-insar", default=None, metavar="SLC_DIR",
                    help="SNAP(Windows 네이티브) 백엔드로 SLC_DIR 의 S1 SLC 처리 → Track H5 "
                         "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
@@ -386,6 +398,24 @@ def main() -> None:
         print("=" * 56)
         return
 
+    if args.validate:
+        from .validation import load_reference_csv, validate_project
+        try:
+            _proj, _ref = args.validate.split(",")
+        except ValueError:
+            p.error("--validate 형식은 PROJECT_H5,REFERENCE_CSV 입니다")
+        ref = load_reference_csv(_ref.strip(), kind=args.validate_kind,
+                                 vertical=args.validate_vertical)
+        r = validate_project(_proj.strip(), ref, max_dist_m=args.validate_dist,
+                             tolerance_mm=args.validate_tol,
+                             project_to_los=args.validate_vertical)
+        print("=" * 56)
+        print("  현장 검증 (InSAR/PINN vs 계측·FEM 기준)")
+        print("=" * 56)
+        print("  " + r.summary())
+        print("=" * 56)
+        return
+
     if args.pipeline:
         from .pipeline_bridge import run_bridge_pipeline
         try:
@@ -393,7 +423,7 @@ def main() -> None:
         except ValueError:
             p.error("--pipeline 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
         rep = run_bridge_pipeline(_lat, _lon, mode=args.pipeline_mode,
-                                  earthdata_token=args.earthdata_token)
+                                  earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi)
         print(rep.summary())
         return
 

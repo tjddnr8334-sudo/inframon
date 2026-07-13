@@ -86,6 +86,43 @@ def test_pipeline_full_runs_9_12(monkeypatch, tmp_path):
     assert rep.context["pinn"]["cri_max"] == 0.974
 
 
+def test_pipeline_full_do_adi(monkeypatch, tmp_path):
+    _patch_light(monkeypatch)
+    from inframon.insar import snap_acquire as sa, snap_backend as sb
+
+    class _Acq:
+        slc_dir = str(tmp_path / "SLC")
+    monkeypatch.setattr(sa, "acquire", lambda *a, **k: _Acq())
+    _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
+                            [sb.SnapPairResult("20240107", "20240119", "p.tif", True)])
+    _res.track_h5 = str(tmp_path / "t.h5"); _res.weather = None
+    monkeypatch.setattr(sb, "run", lambda *a, **k: _res)
+    monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)
+    monkeypatch.setattr(sb, "scene_date", lambda s: "20240107")
+    (tmp_path / "SLC").mkdir()
+    (tmp_path / "SLC" / "S1A_IW_SLC__1SDV_20240107T093202_x.zip").write_text("x")
+    amp_called = {}
+    monkeypatch.setattr(sb, "amplitude_pairs",
+                        lambda *a, **k: amp_called.setdefault("v", ["amp1.tif", "amp2.tif"]))
+    got = {}
+
+    def rec_ps_ds(*a, **k):
+        got["amp_pairs"] = k.get("amp_pairs")
+        return {"n_points": 229, "n_ps": 35, "n_ds": 194, "buffer_m": 30.0,
+                "class_method": "ADI<0.25", "deck_dist_max_m": 30.0, "coh_mean": 0.6, "out": "x"}
+    monkeypatch.setattr(sb, "build_bridge_track_ps_ds", rec_ps_ds)
+    monkeypatch.setattr("inframon.contracts.io.ProjectStore", _DummyStore)
+    monkeypatch.setattr("inframon.insar.track_reader.import_track_h5", lambda s, h, **k: None)
+    monkeypatch.setattr("inframon.custom_pinn.run_custom_pinn",
+                        lambda p, la, lo, **k: {"cri_global_max": 0.9, "warning_level": "위험"})
+
+    rep = pb.run_bridge_pipeline(37.32, 127.10, out_dir=str(tmp_path), mode="full", do_adi=True)
+    assert amp_called.get("v") == ["amp1.tif", "amp2.tif"]     # 진폭쌍 실행됨
+    assert got["amp_pairs"] == ["amp1.tif", "amp2.tif"]        # ADI 로 전달
+    byname = {s.step: s for s in rep.stages}
+    assert "ADI<0.25" in byname["⑨PS/DS(교량30m)"].detail
+
+
 def test_pipeline_summary_renders(monkeypatch):
     _patch_light(monkeypatch)
     rep = pb.run_bridge_pipeline(37.3219, 127.1083, mode="plan")
