@@ -57,19 +57,33 @@ def classify_structure(tags: dict, base_class: str) -> str:
     return base_class
 
 
+# 주경간지배형(케이블·아치·트러스): 주경간/연장 비 — 하나의 큰 주경간이 지배
+_MAIN_SPAN_RATIO = {"suspension": 0.75, "cable_stayed": 0.55, "arch": 0.5, "truss": 0.4}
+# 반복경간형(거더·박스·라멘): 한국 실무 대표 경간[m] — 연장을 이 값 근처로 균등분할
+_TYPICAL_SPAN_M = {"girder": 35.0, "box_girder": 50.0, "rahmen": 15.0}
+
+
 def max_span_estimate(structure: str, length_m: float | None,
                       n_spans: int | None = None) -> float | None:
-    """최대경간 추정 — 경간수 있으면 length/n, 없으면 형식별 대표 비율."""
+    """최대경간 추정[m].
+
+    · 경간수(n_spans) 주어지면 연장/n (최우선).
+    · **주경간지배형**(현수·사장·아치·트러스): 연장×주경간비(하나의 큰 주경간).
+    · **반복경간형**(거더·박스·라멘): 형식별 대표경간 근처로 **균등분할**한 실제 단일경간.
+      짧으면(≲1.3×대표) 단경간=연장. 기존 length×작은비율(예 girder 0.18)이 경간을
+      과소평가(108m→19m→모달 22Hz)하던 것을 대표경간 기준으로 정밀화(108m→36m→~5Hz).
+    """
     if length_m is None:
         return None
     if n_spans and n_spans > 0:
         return round(length_m / n_spans, 1)
-    ratio = {"suspension": 0.75, "cable_stayed": 0.55, "arch": 0.5, "truss": 0.4,
-             "box_girder": 0.25, "girder": 0.18, "rahmen": 0.15}.get(structure, 0.2)
-    # 단경간형(거더·box·라멘·트러스)은 장대교라도 다경간이라 최대경간을 현실범위로 캡.
-    cap = {"girder": 60.0, "box_girder": 90.0, "rahmen": 45.0, "truss": 120.0}.get(structure)
-    span = length_m * ratio
-    return round(min(span, cap) if cap else span, 1)
+    if structure in _MAIN_SPAN_RATIO:                     # 주경간지배형
+        return round(length_m * _MAIN_SPAN_RATIO[structure], 1)
+    typ = _TYPICAL_SPAN_M.get(structure, 40.0)            # 반복경간형: 대표경간 균등분할
+    if length_m <= 1.3 * typ:
+        return round(length_m, 1)                         # 단경간
+    n = max(1, round(length_m / typ))
+    return round(length_m / n, 1)
 
 
 def bridge_grade(length_m: float | None, max_span_m: float | None = None) -> str:

@@ -16,8 +16,21 @@ def test_bridge_grade():
 
 def test_max_span_estimate():
     assert bm.max_span_estimate("girder", 650, n_spans=13) == 50.0     # 경간수 우선
-    assert bm.max_span_estimate("cable_stayed", 400) == 220.0          # 형식비율 0.55
+    assert bm.max_span_estimate("cable_stayed", 400) == 220.0          # 주경간지배형 0.55
     assert bm.max_span_estimate("girder", None) is None
+
+
+def test_max_span_estimate_repeated_spans():
+    # 반복경간형: 대표경간(girder 35·box 50·rahmen 15) 근처로 균등분할
+    assert bm.max_span_estimate("girder", 108) == 36.0        # 3경간(108/3) — 22Hz→~5Hz
+    assert bm.max_span_estimate("box_girder", 200) == 50.0    # 4경간
+    assert bm.max_span_estimate("rahmen", 30) == 15.0         # 2경간
+    # 짧으면 단경간=연장
+    assert bm.max_span_estimate("girder", 40) == 40.0
+    assert bm.max_span_estimate("box_girder", 60) == 60.0
+    # 주경간지배형은 비율 유지
+    assert bm.max_span_estimate("arch", 300) == 150.0
+    assert bm.max_span_estimate("suspension", 2000) == 1500.0
 
 
 def test_classify_structure():
