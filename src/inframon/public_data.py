@@ -35,6 +35,8 @@ DATASETS = {
             # 실 데이터셋(15081953) 컬럼은 '교량시작점위도/경도'. generic 후보도 병행.
             "lat": ["교량시작점위도", "위도", "위도시점", "시점위도", "시작지점위도", "LAT", "yCrdnt"],
             "lon": ["교량시작점경도", "경도", "경도시점", "시점경도", "시작지점경도", "LOT", "xCrdnt"],
+            "lat_end": ["교량종료점위도", "종점위도", "종료지점위도"],
+            "lon_end": ["교량종료점경도", "종점경도", "종료지점경도"],
             "grade": ["시설물종별등급구분", "시설물종별", "종별등급", "FCLTY_GRD", "안전등급"],
             "design_load": ["설계활하중", "설계하중", "DSGN_LOAD"],       # DB-24 등 한국 설계활하중
             "inspect_grade": ["최종안전점검결과", "안전점검결과", "안전등급", "INSP_GRD"],  # A~E
@@ -152,6 +154,47 @@ def load_bridges_csv(path, *, encoding: str | None = None) -> list[dict]:
         except (UnicodeDecodeError, LookupError):
             continue
     raise ValueError(f"CSV 를 읽지 못했습니다(인코딩 확인): {path}")
+
+
+def find_bridge_csv(*dirs) -> str | None:
+    """여러 폴더에서 전국교량표준데이터 CSV 자동탐색(최신). dirs 순서 우선."""
+    for d in [*dirs, "data"]:
+        if d and (hit := default_bridge_csv(str(d))):
+            return hit
+    return None
+
+
+def search_bridges_by_name(csv_path, query: str, *, limit: int = 20) -> list[dict]:
+    """교량명 부분일치 검색 → 후보 리스트(이름·좌표·시종점·형식·연장·등급).
+
+    CSV 시점·종점 좌표로 데크 지오메트리 폴리라인까지 구성해 반환(지도 표시·타깃 저장용).
+    """
+    f = DATASETS["national_bridge_standard"]["fields"]
+    q = str(query or "").strip().replace(" ", "")
+    if not q:
+        return []
+    out = []
+    for r in load_bridges_csv(csv_path):
+        name = _pick(r, f["name"])
+        if not name or q not in str(name).replace(" ", ""):
+            continue
+        lat = _num(_pick(r, f["lat"])); lon = _num(_pick(r, f["lon"]))
+        if lat is None or lon is None:
+            continue
+        lat2 = _num(_pick(r, f.get("lat_end", []))); lon2 = _num(_pick(r, f.get("lon_end", [])))
+        geom = [[lat, lon], [lat2, lon2]] if (lat2 and lon2) else [[lat, lon]]
+        out.append({
+            "name": str(name), "lat": lat, "lon": lon,
+            "lat_end": lat2, "lon_end": lon2, "geometry": geom,
+            "structure": _pick(r, f["structure"]),
+            "length_m": _num(_pick(r, f["length_m"])),
+            "width_m": _num(_pick(r, f["width_m"])),
+            "grade": normalize_grade(_pick(r, f["grade"])),
+            "addr": _pick(r, ["소재지지번주소", "소재지도로명주소"]),
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 def nearest_bridge_profile(csv_path, lat: float, lon: float, *,

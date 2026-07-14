@@ -130,6 +130,30 @@ def run_demo(path: str, n_points: int, n_dates: int, engines: dict | None = None
     run_pipeline(path, cfg)
 
 
+def _save_target_from_csv(hit: dict) -> str:
+    """교량명 검색 결과(hit) → bridge_target.json(레시피)로 저장. 시종점 좌표로 데크 지오메트리."""
+    geom = hit.get("geometry") or [[hit["lat"], hit["lon"]]]
+    lats = [p[0] for p in geom]; lons = [p[1] for p in geom]
+    mlat, Mlat, mlon, Mlon = min(lats), max(lats), min(lons), max(lons)
+    mrg = 0.0018    # ~200m AOI 여유
+    tgt = {
+        "name": hit.get("name"), "name_ko": hit.get("name"),
+        "selected_lat": hit["lat"], "selected_lon": hit["lon"],
+        "osm_type": "data_go_kr", "osm_id": None,
+        "bbox": [mlon - mrg, mlat - mrg, Mlon + mrg, Mlat + mrg],
+        "aoi_buffer_m": 200.0,
+        "bridge_bbox": [mlon, mlat, Mlon, Mlat],
+        "length_m": hit.get("length_m"), "distance_m": None,
+        "tags": {"structure": hit.get("structure"), "grade": hit.get("grade")},
+        "geometry": geom, "confirmed": True,
+        "source": "전국교량표준데이터(교량명 검색)",
+    }
+    out = Path(_recipe_dir()); out.mkdir(parents=True, exist_ok=True)
+    p = out / "bridge_target.json"
+    p.write_text(json.dumps(tgt, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(p)
+
+
 def _recipe_dir() -> str:
     """현재 교량 프로젝트의 레시피 폴더 = <데이터 루트>/insar_recipe (상단에서 설정).
 
@@ -1228,7 +1252,9 @@ def tab_pinn(path: str, start: date) -> None:
         st.caption("상용 SW 없이: 단순지지 보 **고유진동수 닫힌해**와 내부 FEM 비교 + EI 복원 검증. "
                    "(무료 대안: OpenSees·PyNite·anastruct 로도 동일 비교 가능)")
         vc1, vc2, vc3 = st.columns(3)
-        EI_v = vc1.number_input("EI [N·m²]", 1e6, 1e14, float(np.mean(EI)) if EI is not None else 5e9,
+        # 식별 EI 가 물리 클립 천장(1e14)에 닿으면 평균이 그 위로 나올 수 있어 max 여유(1e15)+클램프
+        _ei_def = float(np.mean(EI)) if EI is not None else 5e9
+        EI_v = vc1.number_input("EI [N·m²]", 1e6, 1e15, min(max(_ei_def, 1e6), 1e15),
                                 format="%.2e", key="val_EI")
         rhoA_v = vc2.number_input("ρA [kg/m]", 1e2, 1e6, 1.0e4, format="%.1e", key="val_rhoA")
         L_v = vc3.number_input("스팬 L [m]", 5.0, 5000.0, 110.0, 1.0, key="val_L")
@@ -1622,8 +1648,33 @@ def main() -> None:
         st.sidebar.success(f"**{_t.get('name') or '교량'}**  \n"
                            f"{_t['selected_lat']:.5f}, {_t['selected_lon']:.5f}")
     else:
-        st.sidebar.info("교량 위치 미지정 — **① InSAR** 탭의 "
-                        "‘🗺️ 교량 타깃 지정’에서 지도로 지정하세요.")
+        st.sidebar.caption("교량 미지정 — 아래에서 이름으로 검색하거나 ① InSAR 탭 지도로 지정.")
+
+    # 🔎 교량명 검색(전국교량표준데이터 35,593개) → 위치·데크 지오메트리 자동 설정
+    with st.sidebar.expander("🔎 교량명 검색", expanded=not (_t and _t.get("selected_lat"))):
+        from inframon.public_data import find_bridge_csv, search_bridges_by_name
+        _csv = find_bridge_csv(data_root())
+        if not _csv:
+            st.warning("전국교량표준데이터 CSV 없음 — data.go.kr/15081953 에서 받아 "
+                       f"`{data_root()}` 또는 `data/` 에 두세요.")
+        else:
+            _q = st.text_input("교량명 (예: 한강대교, 정자교)", key="bridge_q")
+            if _q and _q.strip():
+                hits = search_bridges_by_name(_csv, _q, limit=20)
+                if not hits:
+                    st.info("일치하는 교량이 없습니다.")
+                else:
+                    def _lbl(i):
+                        h = hits[i]
+                        return (f"{h['name']} · {h.get('structure') or '-'} "
+                                f"{h.get('length_m') or '?'}m ({h['lat']:.3f},{h['lon']:.3f})")
+                    _i = st.radio(f"결과 {len(hits)}건", range(len(hits)), format_func=_lbl,
+                                  key="bridge_hit")
+                    if st.button("📍 이 교량으로 설정", use_container_width=True, key="btn_set_bridge"):
+                        pth = _save_target_from_csv(hits[_i])
+                        st.session_state["recipe_dir"] = _recipe_dir()
+                        st.success(f"설정됨 → {hits[_i]['name']}")
+                        st.rerun()
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()

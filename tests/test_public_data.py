@@ -6,7 +6,7 @@ import csv
 from inframon.public_data import (parse_structure_ko, bridge_profile_from_record,
                                   describe_datasets, DATASETS, normalize_grade,
                                   load_bridges_csv, nearest_bridge_profile,
-                                  design_load_factor)
+                                  design_load_factor, search_bridges_by_name, find_bridge_csv)
 
 
 def test_parse_structure_ko():
@@ -73,12 +73,12 @@ def test_design_load_factor():
 
 # 전국교량표준데이터(15081953) 실 컬럼명 기준 합성 CSV
 _STD_COLS = ["교량명", "상부구조형식", "교량연장", "교량폭", "차로수", "교량높이",
-             "교량준공연도", "교량시작점위도", "교량시작점경도",
+             "교량준공연도", "교량시작점위도", "교량시작점경도", "교량종료점위도", "교량종료점경도",
              "시설물종별등급구분", "설계활하중", "최종안전점검결과"]
 _ROWS = [
-    ["가교", "강판형교", "45", "8.5", "2", "2.0", "1998", "37.10", "127.00", "03", "DB-18", "B"],
-    ["정자대교", "PSC박스거더교", "650.5", "12.5", "4", "3.5", "2005", "37.3634", "127.1090", "01", "DB-24", "A"],
-    ["원교", "RC라멘교", "20", "6", "2", "1.2", "2010", "37.50", "127.30", "99", "미상", "C"],
+    ["가교", "강판형교", "45", "8.5", "2", "2.0", "1998", "37.10", "127.00", "37.101", "127.001", "03", "DB-18", "B"],
+    ["정자대교", "PSC박스거더교", "650.5", "12.5", "4", "3.5", "2005", "37.3634", "127.1090", "37.3640", "127.1100", "01", "DB-24", "A"],
+    ["원교", "RC라멘교", "20", "6", "2", "1.2", "2010", "37.50", "127.30", "37.501", "127.301", "99", "미상", "C"],
 ]
 
 
@@ -122,6 +122,33 @@ def test_nearest_bridge_profile(tmp_path):
 def test_nearest_bridge_profile_out_of_range(tmp_path):
     p = _write_csv(tmp_path / "bridges.csv")
     assert nearest_bridge_profile(p, 35.0, 129.0, max_km=1.0) is None   # 부산 — 근처 없음
+
+
+def test_search_bridges_by_name(tmp_path):
+    p = _write_csv(tmp_path / "bridges.csv")
+    hits = search_bridges_by_name(p, "정자")
+    assert len(hits) == 1 and hits[0]["name"] == "정자대교"
+    h = hits[0]
+    assert h["lat"] == 37.3634 and h["structure"] == "PSC박스거더교"
+    assert h["grade"] == "1종" and h["length_m"] == 650.5
+    # 시점·종점 좌표 → 데크 지오메트리 2점 폴리라인
+    assert len(h["geometry"]) == 2
+    assert h["geometry"][0] == [37.3634, 127.1090] and h["geometry"][1] == [37.364, 127.11]
+    # 공백 무시 부분일치
+    assert search_bridges_by_name(p, " 가교 ")[0]["name"] == "가교"
+    assert search_bridges_by_name(p, "없는교") == []
+    assert search_bridges_by_name(p, "") == []
+
+
+def test_find_bridge_csv(tmp_path):
+    d = tmp_path / "store"; d.mkdir()
+    (d / "national_bridge_standard_20251231.csv").write_text("x", encoding="utf-8")
+    hit = find_bridge_csv(str(d))                       # 지정 폴더 우선
+    assert hit and hit.endswith("national_bridge_standard_20251231.csv")
+    assert str(d) in hit
+    # 지정 폴더에 없으면 data/ 폴백(없으면 None) — 존재하는 폴더만 통과
+    empty = tmp_path / "empty"; empty.mkdir()
+    assert find_bridge_csv(str(empty)) is None or "data" in find_bridge_csv(str(empty))
 
 
 def test_bridge_profile_grade_field_present():
