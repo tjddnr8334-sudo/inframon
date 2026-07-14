@@ -48,7 +48,7 @@ class PipelineReport:
 
 def run_bridge_pipeline(
     lat: float, lon: float, *, out_dir: str | Path = "data/pipeline",
-    mode: str = "plan", roi_sizes=(2.0, 3.0, 4.0, 5.0),
+    mode: str = "plan", roi_sizes=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
     earthdata_token: str | None = None, snap_count: int = 8, do_adi: bool = False,
 ) -> PipelineReport:
     """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).

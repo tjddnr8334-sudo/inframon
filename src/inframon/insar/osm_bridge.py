@@ -121,17 +121,20 @@ def find_bridges_by_name(query: str, *, limit: int = 20) -> list[Bridge]:
     for r in _nominatim_query(query.strip(), limit=limit):
         name = str(r.get("display_name", "")).split(",")[0].strip() or "?"
         typ, cls = str(r.get("type") or ""), str(r.get("class") or "")
-        is_bridge = (typ == "bridge" or cls == "bridge"
-                     or any(h in name.lower() for h in _BRIDGE_HINTS))
-        if not is_bridge:
-            continue
+        # OSM 태그로 교량 확정(man_made=bridge → type/class=bridge) vs 이름만 일치(도로 가능성)
+        tag_confirmed = typ == "bridge" or cls == "bridge"
+        if not (tag_confirmed or any(h in name.lower() for h in _BRIDGE_HINTS)):
+            continue                                    # 교량도 도로도 아님 → 제외
         try:
             lat, lon = float(r["lat"]), float(r["lon"])
         except (KeyError, ValueError):
             continue
+        tags = {str(k): str(v) for k, v in (r.get("extratags") or {}).items()}
+        tags["osm_feature"] = f"{cls}/{typ}"            # 예 man_made/bridge, highway/primary
+        tags["bridge_confirmed"] = "yes" if tag_confirmed else "name_only"
         out.append(Bridge(
             osm_type=str(r.get("osm_type", "node")), osm_id=int(r.get("osm_id", 0)),
-            name=name, name_ko=None, tags={str(k): str(v) for k, v in (r.get("extratags") or {}).items()},
+            name=name, name_ko=None, tags=tags,
             geometry=[(lat, lon)], bbox=(lon, lat, lon, lat), distance_m=0.0, length_m=0.0))
     return out
 

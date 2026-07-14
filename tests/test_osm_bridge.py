@@ -66,10 +66,13 @@ def test_find_bridges_by_name(monkeypatch):
 
     monkeypatch.setattr(osm_bridge, "_nominatim_query", fake)
     out = osm_bridge.find_bridges_by_name("교", limit=10)
-    names = [b.name for b in out]
-    assert "정자교" in names and "한강대교" in names    # type=bridge + 이름에 '교'
-    assert "서울역" not in names                        # 교량 아님 → 필터
-    assert all(b.distance_m == 0.0 for b in out)
+    by = {b.name: b for b in out}
+    assert "정자교" in by and "한강대교" in by          # type=bridge + 이름에 '교'
+    assert "서울역" not in by                           # 교량 아님 → 필터
+    # OSM 태그로 교량 확정 vs 이름만 일치
+    assert by["정자교"].tags["bridge_confirmed"] == "yes"        # type=bridge
+    assert by["한강대교"].tags["bridge_confirmed"] == "name_only"  # type=primary(도로), 이름만
+    assert by["정자교"].tags["osm_feature"] == "man_made/bridge"
     assert captured["q"] == "교"
 
 

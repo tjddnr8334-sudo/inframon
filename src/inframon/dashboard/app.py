@@ -152,9 +152,10 @@ def _combined_bridge_search(query: str, csv_path: str | None,
             if (round(lat, 4), round(lon, 4)) in seen:      # CSV 와 근접 중복 제외
                 continue
             hits.append({"name": b.name, "lat": lat, "lon": lon, "geometry": g,
-                         "structure": b.tags.get("bridge:structure") or b.tags.get("bridge"),
+                         "structure": b.tags.get("bridge:structure") or b.tags.get("osm_feature"),
                          "length_m": b.length_m or None, "width_m": None, "grade": None,
-                         "osm_id": b.osm_id, "osm_type": b.osm_type, "source": "OSM"})
+                         "osm_id": b.osm_id, "osm_type": b.osm_type, "source": "OSM",
+                         "bridge_confirmed": b.tags.get("bridge_confirmed")})
     except Exception as exc:  # noqa: BLE001
         osm_err = f"{type(exc).__name__}: {exc}"
     return hits, osm_err
@@ -1787,7 +1788,10 @@ def main() -> None:
                 def _lbl(i):
                     h = hits[i]
                     ic = "🔵" if h["source"] == "CSV" else "🟢"
-                    return (f"{ic} {h['name']} · {h.get('structure') or '-'} "
+                    # OSM 태그로 교량 확정(✓) vs 이름만 일치(도로 가능성, ~)
+                    bc = h.get("bridge_confirmed")
+                    mark = " ✓교량" if bc == "yes" else (" ~이름" if bc == "name_only" else "")
+                    return (f"{ic} {h['name']}{mark} · {h.get('structure') or '-'} "
                             f"{('%.0fm' % h['length_m']) if h.get('length_m') else '?'} "
                             f"({h['lat']:.3f},{h['lon']:.3f})")
                 _i = st.radio(f"결과 {len(hits)}건", range(len(hits)), format_func=_lbl,

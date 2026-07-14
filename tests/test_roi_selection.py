@@ -53,3 +53,28 @@ def test_select_roi_empty_builtup_returns_zero():
 def test_select_roi_no_sizes_raises():
     with pytest.raises(ValueError):
         select_roi(BLAT, BLON, sizes_km=(), builtup=[(BLON, BLAT)], grid=3)
+
+
+def test_default_sizes_are_1_to_10km():
+    import inspect
+    default = inspect.signature(select_roi).parameters["sizes_km"].default
+    assert min(default) == 1.0 and max(default) == 10.0     # 최소 1×1 ~ 최대 10×10
+
+
+def test_select_roi_uniform_dense_prefers_large_roi():
+    # 넓게(±0.06° ~13km) 균일 조밀 → 밀도 유지되므로 reference point 최대(큰 ROI) 선택
+    import numpy as np
+    rng = np.random.default_rng(1)
+    pts = [(BLON + rng.uniform(-0.06, 0.06), BLAT + rng.uniform(-0.06, 0.06)) for _ in range(4000)]
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0, 5.0, 10.0), builtup=pts, grid=5)
+    assert roi.size_km >= 7.0                    # 균일 도심 → 큰 ROI(reference↑)
+    assert roi.contains_bridge is True
+
+
+def test_select_roi_tight_cluster_prefers_small_roi():
+    # 교량 주변 ~0.8km 조밀 클러스터만, 밖은 비었음 → 밀도 급락하는 큰 ROI 배제 → 작은 ROI
+    import numpy as np
+    rng = np.random.default_rng(2)
+    pts = [(BLON + rng.normal(0, 0.003), BLAT + rng.normal(0, 0.003)) for _ in range(300)]
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0, 5.0, 10.0), builtup=pts, grid=5)
+    assert roi.size_km <= 2.0                    # 좁은 도심 → 작은 ROI(밀도 유지)
