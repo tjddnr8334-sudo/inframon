@@ -97,6 +97,45 @@ def find_bridges_near(lat: float, lon: float, radius_m: float = 200.0) -> list[B
     return bridges
 
 
+# 이름 검색은 Overpass 전국 정규식이 매우 느려(수십초) Nominatim(이름 인덱스)을 쓴다.
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+_BRIDGE_HINTS = ("교", "대교", "육교", "bridge")
+
+
+def _nominatim_query(query: str, *, country: str = "kr", limit: int = 20,
+                     timeout: float = 15.0) -> list:
+    """Nominatim 이름검색(네트워크 격리 지점). 국가 한정·JSON."""
+    params = urllib.parse.urlencode({"q": query, "countrycodes": country,
+                                     "format": "json", "limit": limit, "extratags": 1})
+    req = urllib.request.Request(NOMINATIM_URL + "?" + params,
+                                 headers={"User-Agent": "inframon-insar/0.1"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — 공개 Nominatim
+        return json.loads(resp.read().decode())
+
+
+def find_bridges_by_name(query: str, *, limit: int = 20) -> list[Bridge]:
+    """교량명으로 한국 내 OSM 교량 검색(Nominatim, 빠름). 교량 후보만 필터."""
+    if not str(query or "").strip():
+        return []
+    out: list[Bridge] = []
+    for r in _nominatim_query(query.strip(), limit=limit):
+        name = str(r.get("display_name", "")).split(",")[0].strip() or "?"
+        typ, cls = str(r.get("type") or ""), str(r.get("class") or "")
+        is_bridge = (typ == "bridge" or cls == "bridge"
+                     or any(h in name.lower() for h in _BRIDGE_HINTS))
+        if not is_bridge:
+            continue
+        try:
+            lat, lon = float(r["lat"]), float(r["lon"])
+        except (KeyError, ValueError):
+            continue
+        out.append(Bridge(
+            osm_type=str(r.get("osm_type", "node")), osm_id=int(r.get("osm_id", 0)),
+            name=name, name_ko=None, tags={str(k): str(v) for k, v in (r.get("extratags") or {}).items()},
+            geometry=[(lat, lon)], bbox=(lon, lat, lon, lat), distance_m=0.0, length_m=0.0))
+    return out
+
+
 def confirm_bridge(lat: float, lon: float, radius_m: float = 150.0) -> Bridge | None:
     """위치가 교량인지 확인 — 반경 안에서 가장 가까운 교량(없으면 None)."""
     bridges = find_bridges_near(lat, lon, radius_m)

@@ -47,6 +47,37 @@ def test_find_bridges_parses_response(monkeypatch):
     assert b.osm_url.endswith("/way/123456")
 
 
+_NOMINATIM = [
+    {"display_name": "정자교, 분당구, 성남시", "type": "bridge", "class": "man_made",
+     "osm_type": "way", "osm_id": 111, "lat": "37.3305", "lon": "127.1110", "extratags": {}},
+    {"display_name": "한강대교, 용산구, 서울", "type": "primary", "class": "highway",
+     "osm_type": "way", "osm_id": 222, "lat": "37.514", "lon": "126.956", "extratags": {}},
+    {"display_name": "서울역", "type": "station", "class": "railway",   # 교량 아님 → 제외
+     "osm_type": "node", "osm_id": 333, "lat": "37.55", "lon": "126.97"},
+]
+
+
+def test_find_bridges_by_name(monkeypatch):
+    captured = {}
+
+    def fake(q, **k):
+        captured["q"] = q
+        return _NOMINATIM
+
+    monkeypatch.setattr(osm_bridge, "_nominatim_query", fake)
+    out = osm_bridge.find_bridges_by_name("교", limit=10)
+    names = [b.name for b in out]
+    assert "정자교" in names and "한강대교" in names    # type=bridge + 이름에 '교'
+    assert "서울역" not in names                        # 교량 아님 → 필터
+    assert all(b.distance_m == 0.0 for b in out)
+    assert captured["q"] == "교"
+
+
+def test_find_bridges_by_name_empty_query():
+    assert osm_bridge.find_bridges_by_name("") == []
+    assert osm_bridge.find_bridges_by_name("   ") == []
+
+
 def test_query_includes_bridge_filters(monkeypatch):
     captured = {}
 

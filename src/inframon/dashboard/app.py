@@ -130,6 +130,36 @@ def run_demo(path: str, n_points: int, n_dates: int, engines: dict | None = None
     run_pipeline(path, cfg)
 
 
+def _combined_bridge_search(query: str, csv_path: str | None,
+                            limit: int = 12) -> tuple[list[dict], str | None]:
+    """교량명 검색을 **CSV(전국교량표준데이터) + OSM(Nominatim)** 양쪽에서 → (후보, OSM오류).
+
+    각 후보에 source('CSV'|'OSM')·좌표·데크 지오메트리. 지도 마커·타깃 저장에 공용.
+    """
+    from inframon.public_data import search_bridges_by_name
+    hits: list[dict] = []
+    seen = set()
+    if csv_path:
+        for h in search_bridges_by_name(csv_path, query, limit=limit):
+            seen.add((round(h["lat"], 4), round(h["lon"], 4)))
+            hits.append({**h, "source": "CSV"})
+    osm_err = None
+    try:                                    # OSM 이름검색(네트워크) — 실패해도 CSV 결과 유지
+        from inframon.insar.osm_bridge import find_bridges_by_name
+        for b in find_bridges_by_name(query, limit=limit):
+            g = [[p[0], p[1]] for p in b.geometry]
+            lat, lon = g[0][0], g[0][1]
+            if (round(lat, 4), round(lon, 4)) in seen:      # CSV 와 근접 중복 제외
+                continue
+            hits.append({"name": b.name, "lat": lat, "lon": lon, "geometry": g,
+                         "structure": b.tags.get("bridge:structure") or b.tags.get("bridge"),
+                         "length_m": b.length_m or None, "width_m": None, "grade": None,
+                         "osm_id": b.osm_id, "osm_type": b.osm_type, "source": "OSM"})
+    except Exception as exc:  # noqa: BLE001
+        osm_err = f"{type(exc).__name__}: {exc}"
+    return hits, osm_err
+
+
 def _save_target_from_csv(hit: dict) -> str:
     """교량명 검색 결과(hit) → bridge_target.json(레시피)로 저장. 시종점 좌표로 데크 지오메트리."""
     geom = hit.get("geometry") or [[hit["lat"], hit["lon"]]]
@@ -139,7 +169,8 @@ def _save_target_from_csv(hit: dict) -> str:
     tgt = {
         "name": hit.get("name"), "name_ko": hit.get("name"),
         "selected_lat": hit["lat"], "selected_lon": hit["lon"],
-        "osm_type": "data_go_kr", "osm_id": None,
+        "osm_type": str(hit.get("osm_type") or "data_go_kr"),
+        "osm_id": int(hit.get("osm_id") or 0),          # CSV 는 osm_id 없음 → 0(정수 필수)
         "bbox": [mlon - mrg, mlat - mrg, Mlon + mrg, Mlat + mrg],
         "aoi_buffer_m": 200.0,
         "bridge_bbox": [mlon, mlat, Mlon, Mlat],
@@ -191,8 +222,15 @@ def bridge_target_section() -> None:
         except Exception:  # noqa: BLE001
             existing = None
 
+    # 🔎 사이드바 교량명 검색 결과(CSV+OSM) — 지도에 마커로 표기
+    hits = st.session_state.get("search_hits", [])
+    sel_i = st.session_state.get("search_sel", 0)
+
     click = st.session_state.get("bridge_click")
-    if click:
+    if hits:                                        # 검색결과 있으면 선택 후보로 지도 중심
+        _h = hits[sel_i] if sel_i < len(hits) else hits[0]
+        center, zoom = [_h["lat"], _h["lon"]], 15
+    elif click:
         center, zoom = [click["lat"], click["lng"]], 16
     elif existing:
         center, zoom = [existing.selected_lat, existing.selected_lon], 16
@@ -200,6 +238,17 @@ def bridge_target_section() -> None:
         center, zoom = [36.5, 127.8], 7  # 한국 전역
 
     m = folium.Map(location=center, zoom_start=zoom, tiles="OpenStreetMap")
+    for j, h in enumerate(hits):                    # CSV=파랑, OSM=초록, 선택=별
+        col = "blue" if h["source"] == "CSV" else "green"
+        ic = "star" if j == sel_i else "info-sign"
+        folium.Marker(
+            [h["lat"], h["lon"]], icon=folium.Icon(color=col, icon=ic),
+            tooltip=f"[{h['source']}] {h['name']}",
+            popup=folium.Popup(f"<b>{h['name']}</b><br>{h['source']} · "
+                               f"{h.get('structure') or '-'}<br>"
+                               f"{h['lat']:.5f}, {h['lon']:.5f}", max_width=250)).add_to(m)
+        if len(h.get("geometry") or []) >= 2:       # 데크 폴리라인
+            folium.PolyLine([[p[0], p[1]] for p in h["geometry"]], color=col, weight=4).add_to(m)
     if click:
         folium.Marker([click["lat"], click["lng"]], tooltip="선택 지점",
                       icon=folium.Icon(color="red")).add_to(m)
@@ -1650,31 +1699,49 @@ def main() -> None:
     else:
         st.sidebar.caption("교량 미지정 — 아래에서 이름으로 검색하거나 ① InSAR 탭 지도로 지정.")
 
-    # 🔎 교량명 검색(전국교량표준데이터 35,593개) → 위치·데크 지오메트리 자동 설정
-    with st.sidebar.expander("🔎 교량명 검색", expanded=not (_t and _t.get("selected_lat"))):
-        from inframon.public_data import find_bridge_csv, search_bridges_by_name
+    # 🔎 교량명 검색 — CSV(전국교량표준데이터) + OSM 양쪽 → 지도(① InSAR)에 마커로 표기
+    with st.sidebar.expander("🔎 교량명 검색 (CSV+OSM)", expanded=not (_t and _t.get("selected_lat"))):
+        from inframon.public_data import find_bridge_csv
         _csv = find_bridge_csv(data_root())
         if not _csv:
-            st.warning("전국교량표준데이터 CSV 없음 — data.go.kr/15081953 에서 받아 "
-                       f"`{data_root()}` 또는 `data/` 에 두세요.")
+            st.caption("⚠️ 전국교량표준데이터 CSV 없음 — OSM 만 검색됩니다. "
+                       f"CSV 는 data.go.kr/15081953 에서 받아 `{data_root()}` 에 두세요.")
+        _q = st.text_input("교량명 (예: 한강대교, 정자교)", key="bridge_q")
+        if _q and _q.strip():
+            # 같은 질의는 재검색 안 함(OSM 네트워크 절약)
+            if st.session_state.get("_last_q") != _q.strip():
+                with st.spinner("CSV + OSM 검색 중…"):
+                    _h, _e = _combined_bridge_search(_q.strip(), _csv)
+                    st.session_state["search_hits"] = _h
+                    st.session_state["search_osm_err"] = _e
+                    st.session_state["_last_q"] = _q.strip()
+            hits = st.session_state.get("search_hits", [])
+            _oerr = st.session_state.get("search_osm_err")
+            if _oerr:
+                st.warning(f"OSM 조회 실패(재시도 권장): {_oerr}")
+            if not hits:
+                st.info("일치하는 교량이 없습니다 (CSV·OSM).")
+            else:
+                n_csv = sum(1 for h in hits if h["source"] == "CSV")
+                n_osm = sum(1 for h in hits if h["source"] == "OSM")
+                st.caption(f"🔵 CSV {n_csv} · 🟢 OSM {n_osm} — 아래 선택, ① InSAR 지도에 표기됨")
+
+                def _lbl(i):
+                    h = hits[i]
+                    ic = "🔵" if h["source"] == "CSV" else "🟢"
+                    return (f"{ic} {h['name']} · {h.get('structure') or '-'} "
+                            f"{('%.0fm' % h['length_m']) if h.get('length_m') else '?'} "
+                            f"({h['lat']:.3f},{h['lon']:.3f})")
+                _i = st.radio(f"결과 {len(hits)}건", range(len(hits)), format_func=_lbl,
+                              key="bridge_hit")
+                st.session_state["search_sel"] = _i        # 지도 강조용
+                if st.button("📍 이 교량으로 설정", use_container_width=True, key="btn_set_bridge"):
+                    _save_target_from_csv(hits[_i])
+                    st.session_state["recipe_dir"] = _recipe_dir()
+                    st.success(f"설정됨 → {hits[_i]['name']} ({hits[_i]['source']})")
+                    st.rerun()
         else:
-            _q = st.text_input("교량명 (예: 한강대교, 정자교)", key="bridge_q")
-            if _q and _q.strip():
-                hits = search_bridges_by_name(_csv, _q, limit=20)
-                if not hits:
-                    st.info("일치하는 교량이 없습니다.")
-                else:
-                    def _lbl(i):
-                        h = hits[i]
-                        return (f"{h['name']} · {h.get('structure') or '-'} "
-                                f"{h.get('length_m') or '?'}m ({h['lat']:.3f},{h['lon']:.3f})")
-                    _i = st.radio(f"결과 {len(hits)}건", range(len(hits)), format_func=_lbl,
-                                  key="bridge_hit")
-                    if st.button("📍 이 교량으로 설정", use_container_width=True, key="btn_set_bridge"):
-                        pth = _save_target_from_csv(hits[_i])
-                        st.session_state["recipe_dir"] = _recipe_dir()
-                        st.success(f"설정됨 → {hits[_i]['name']}")
-                        st.rerun()
+            st.session_state.pop("search_hits", None)
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
