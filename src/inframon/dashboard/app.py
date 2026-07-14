@@ -545,6 +545,17 @@ def slc_search_section() -> None:
             saved.append(("", out, sel.n_scenes))
             st.success(f"저장됨 → `{out}` (SARvey 처리 대상 {sel.n_scenes}장)")
 
+    # 다운로드 대상 장면: 선택 트랙(들)의 장면 — 양방향이면 asc+desc 합집합
+    chosen = []
+    _seen = set()
+    for grp, chs, _tag in picks:
+        if not grp:
+            continue
+        for s in chs:
+            key = (s.date, grp.flight_direction)
+            if key not in _seen:
+                _seen.add(key); chosen.append(s)
+
     # ── ⬇️ 실제 SLC 다운로드 (선택 트랙 장면) — WSL 우선 ──
     st.markdown("**⬇️ 선택 트랙 SLC 다운로드** (실제 Sentinel-1 SLC, GB급)")
     st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 WSL2 에서 하므로, SLC 도 WSL 에 받는 것이 정석입니다. "
