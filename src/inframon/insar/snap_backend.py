@@ -607,6 +607,8 @@ def build_bridge_track_ps_ds(
     ps_coh: float = 0.7, heading: float | None = None,
     adi_tif: str | Path | None = None, adi_max: float = 0.25,
     amp_pairs: list | None = None,
+    apply_reference: bool = True, roi_bbox: tuple | None = None,
+    ref_min_coh: float = 0.98,
 ) -> dict:
     """**교량 데크(폴리라인) buffer_m 이내**의 PS/DS 점 선별 → Track H5.
 
@@ -670,6 +672,31 @@ def build_bridge_track_ps_ds(
     incidence = inc0.ravel()[idx].astype(np.float32)
     deck_dist_m = (dist_km.ravel()[idx] * 1000.0).astype(np.float32)
 
+    # ── 기준점 자동 선정·적용: ROI 내·데크 밖 초안정 PS(coh≥ref_min_coh)로 상대변위화 ──
+    # 데크 점은 열·하중으로 coh 낮아 기준 부적합 → 교량 밖 안정 지반/건물 PS 를 기준점으로.
+    ref_meta = {"applied": False}
+    if apply_reference:
+        rmask = np.isfinite(coh_mean) & (coh_mean > 0.0)
+        if roi_bbox:                                    # ROI(도심) 범위로 제한
+            w, s, e, no = roi_bbox
+            rmask &= (glon >= w) & (glon <= e) & (glat >= s) & (glat <= no)
+        rmask &= ~(dist_km <= max(buffer_m, 60.0) / 1000.0)   # 데크 버퍼 밖(inf 포함)
+        rpool = np.where(rmask.ravel())[0]
+        cm = coh_mean.ravel()
+        if rpool.size:
+            rcand = rpool[cm[rpool] >= ref_min_coh]
+            rbi = int(rcand[np.argmax(cm[rcand])]) if rcand.size \
+                else int(rpool[np.argmax(cm[rpool])])
+            ref_los = np.array([0.0] + [ph.ravel()[rbi] * scale for ph in ph_list])
+            los = los - ref_los[None, :]                # 데크 LOS − 기준점 LOS = 상대변위
+            r_lon, r_lat = float(glon.ravel()[rbi]), float(glat.ravel()[rbi])
+            r_dist_m = float(_polyline_dist_km(
+                np.array([r_lon]), np.array([r_lat]), geom)[0] * 1000.0)
+            ref_meta = {"applied": True, "lon": r_lon, "lat": r_lat,
+                        "coherence": float(cm[rbi]), "meets_098": bool(cm[rbi] >= ref_min_coh),
+                        "n_candidates": int(rcand.size), "min_coh": float(ref_min_coh),
+                        "deck_dist_m": r_dist_m}
+
     # PS/DS 분류: ADI 가 있으면 **진폭분산 ADI<adi_max=PS**(엄밀, Ferretti 2001),
     # 없으면 코히런스(γ̄≥ps_coh=PS) 1차 분류.
     if amp_pairs:                                   # 쌍별 진폭 → 점별 ADI
@@ -712,12 +739,17 @@ def build_bridge_track_ps_ds(
         f.attrs["source"] = "SNAP bridge-deck PS/DS (deck buffer, temporal-coherence)"
         f.attrs["RADAR_WAVELENGTH"] = WAVELENGTH_M
         f.attrs["deck_buffer_m"] = float(buffer_m)
+        if ref_meta.get("applied"):                     # 기준점(상대변위 기준) 메타
+            f.attrs["reference_lonlat"] = [ref_meta["lon"], ref_meta["lat"]]
+            f.attrs["reference_coherence"] = ref_meta["coherence"]
+            f.attrs["reference_meets_098"] = ref_meta["meets_098"]
+            f.attrs["reference_applied"] = True
     n_ps = int((scatter_class == 1).sum())
     return {"n_points": N, "n_ps": n_ps, "n_ds": N - n_ps,
             "buffer_m": buffer_m, "deck_dist_max_m": float(deck_dist_m.max()),
             "coh_mean": float(gbar.mean()), "class_method": adi_method,
             "adi_median": (float(np.nanmedian(adi_pt)) if np.isfinite(adi_pt).any() else None),
-            "out": str(out_h5)}
+            "reference": ref_meta, "out": str(out_h5)}
 
 
 def select_master_era5(

@@ -77,7 +77,7 @@ def run_bridge_pipeline(
     try:
         from .insar.roi_selection import select_roi
         roi = select_roi(lat, lon, sizes_km=roi_sizes)
-        ctx["roi"] = roi.as_dict(); ctx["roi_wkt"] = roi.wkt()
+        ctx["roi"] = roi.as_dict(); ctx["roi_wkt"] = roi.wkt(); ctx["roi_bbox"] = roi.bbox
         rep.add(StageResult("③ROI도심지가중", "done",
                             f"{roi.size_km:.0f}km · 건물 {roi.n_buildings} · {roi.density_per_km2:.0f}/km²"))
     except Exception as e:  # noqa: BLE001
@@ -183,11 +183,15 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
                                        lat, lon, out, reference=res.reference, burst=res.burst)
             r9 = build_bridge_track_ps_ds(res.pairs, res.reference, deck_h5,
                                           geometry_latlon=geometry, buffer_m=30.0,
-                                          coh_min=0.35, heading=hd, amp_pairs=amps)
+                                          coh_min=0.35, heading=hd, amp_pairs=amps,
+                                          apply_reference=True, roi_bbox=ctx.get("roi_bbox"))
             ctx["ps_ds"] = r9
+            _rf = r9.get("reference", {})
+            _rft = (f" · 기준점 coh {_rf['coherence']:.3f}"
+                    f"{'✓0.98' if _rf.get('meets_098') else '⚠<0.98'}") if _rf.get("applied") else ""
             rep.add(StageResult("⑨PS/DS(교량30m)", "done",
                                 f"{r9['n_points']}점(PS {r9['n_ps']}/DS {r9['n_ds']}) · "
-                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}"))
+                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}{_rft}"))
         except Exception as e:  # noqa: BLE001
             rep.add(StageResult("⑨PS/DS(교량30m)", "error", str(e)[:90]))
             deck_h5 = res.track_h5
