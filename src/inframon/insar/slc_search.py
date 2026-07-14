@@ -141,6 +141,47 @@ def perpendicular_baselines(scene_names: list[str]) -> dict[str, float]:
     return out
 
 
+def filter_slaves_by_baseline(dates, master_date, *, bperp: dict | None = None,
+                              max_temporal_days: float = 72.0, max_perp_m: float = 150.0,
+                              min_keep: int = 3) -> tuple[list, list]:
+    """마스터 대비 **시공간 baseline** 초과 slave 제거(a priori — 처리·다운로드 전).
+
+    · 시간 baseline = |날짜차|(일): 길수록 시간 비간섭(식생·계절) → max_temporal_days 초과 제거.
+    · 공간 baseline B⊥ = |bperp_slave − bperp_master|(m): 클수록 기하 비간섭·DEM오차 →
+      max_perp_m 초과 제거(S1 궤도관 좁아 대개 ≤150m). bperp 없으면 시간만.
+    과다제거 방지: 위반이 없는 slave 우선 유지, 최소 min_keep 미달이면 baseline 작은
+    순으로 보충. 반환: (유지 날짜[정렬], 제거 [{date, reason, temporal_days, perp_m}]).
+    """
+    from datetime import datetime
+    md = datetime.strptime(str(master_date), "%Y%m%d")
+    bref = (bperp or {}).get(str(master_date))
+    rows = []
+    for d in dates:
+        if str(d) == str(master_date):
+            continue
+        tb = abs((datetime.strptime(str(d), "%Y%m%d") - md).days)
+        pb = (abs(bperp[str(d)] - bref)
+              if bperp and str(d) in bperp and bref is not None else None)
+        over = []
+        if tb > max_temporal_days:
+            over.append(f"시간 {tb}일>{max_temporal_days:.0f}")
+        if pb is not None and pb > max_perp_m:
+            over.append(f"수직 {pb:.0f}m>{max_perp_m:.0f}")
+        score = tb / max_temporal_days + (pb / max_perp_m if pb is not None else 0.0)
+        rows.append({"date": str(d), "tb": tb, "pb": pb, "over": over, "score": score})
+
+    good = [r for r in rows if not r["over"]]
+    bad = sorted((r for r in rows if r["over"]), key=lambda r: r["score"])
+    kept = [str(master_date)] + [r["date"] for r in good]
+    i = 0
+    while len(kept) - 1 < min_keep and i < len(bad):      # min_keep 보충(덜 나쁜 것부터)
+        kept.append(bad[i]["date"]); i += 1
+    rejected = [{"date": r["date"], "reason": " · ".join(r["over"]),
+                 "temporal_days": r["tb"], "perp_m": (round(r["pb"], 1) if r["pb"] is not None else None)}
+                for r in bad[i:]]
+    return sorted(kept), rejected
+
+
 def group_tracks(scenes: list[Scene]) -> list[TrackGroup]:
     """(방향, path, frame) 별로 묶어 취득 많은 순으로 정렬."""
     buckets: dict[tuple[str, int, int], list[Scene]] = {}

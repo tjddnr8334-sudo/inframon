@@ -84,3 +84,31 @@ def test_select_track_empty(monkeypatch):
     scenes = slc_search.search_slc(BBOX)
     best, chosen, groups = slc_search.select_track(scenes)
     assert best is None and chosen == [] and groups == []
+
+
+def test_filter_slaves_by_baseline_temporal_only():
+    # bperp 없으면 시간 baseline 만: master 20240101, max 72일
+    dates = ["20240101", "20240113", "20240301", "20240601"]  # 차이 0·12·60·152일
+    keep, rej = slc_search.filter_slaves_by_baseline(dates, "20240101", max_temporal_days=72,
+                                                     min_keep=2)
+    assert "20240601" not in keep and "20240113" in keep and "20240301" in keep
+    assert any(r["date"] == "20240601" and r["temporal_days"] == 152 for r in rej)
+
+
+def test_filter_slaves_by_baseline_perp():
+    # 공간 baseline: master bperp 0, 초과분 제거
+    dates = ["20240101", "20240113", "20240125"]
+    bperp = {"20240101": 0.0, "20240113": 50.0, "20240125": 300.0}   # 50·300m
+    keep, rej = slc_search.filter_slaves_by_baseline(
+        dates, "20240101", bperp=bperp, max_perp_m=150, min_keep=1)
+    assert "20240113" in keep and "20240125" not in keep
+    assert rej[0]["date"] == "20240125" and rej[0]["perp_m"] == 300.0
+
+
+def test_filter_slaves_min_keep_prevents_overreject():
+    # 전부 위반이어도 min_keep 만큼은 baseline 작은 순으로 유지
+    dates = ["20240101", "20240401", "20240501", "20240601"]  # 전부 시간 초과(>72)
+    keep, rej = slc_search.filter_slaves_by_baseline(dates, "20240101",
+                                                     max_temporal_days=30, min_keep=2)
+    assert len(keep) - 1 >= 2                          # master 외 최소 2개 유지
+    assert "20240401" in keep                          # 가장 가까운 것 유지
