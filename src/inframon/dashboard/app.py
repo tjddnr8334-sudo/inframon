@@ -175,7 +175,10 @@ def _save_target_from_csv(hit: dict) -> str:
         "aoi_buffer_m": 200.0,
         "bridge_bbox": [mlon, mlat, Mlon, Mlat],
         "length_m": hit.get("length_m"), "distance_m": None,
-        "tags": {"structure": hit.get("structure"), "grade": hit.get("grade")},
+        # tags 값은 문자열만(None 제외) — BridgeTarget 검증
+        "tags": {k: str(v) for k, v in (("structure", hit.get("structure")),
+                                        ("grade", hit.get("grade")),
+                                        ("source", hit.get("source"))) if v is not None},
         "geometry": geom, "confirmed": True,
         "source": "전국교량표준데이터(교량명 검색)",
     }
@@ -275,8 +278,7 @@ def bridge_target_section() -> None:
                        + (h["lon"] - obj["lng"]) ** 2)
             d = ((best["lat"] - obj["lat"]) ** 2 + (best["lon"] - obj["lng"]) ** 2) ** 0.5
             if d < 0.002:                       # ~200m 이내 마커와 매칭
-                _save_target_from_csv(best)
-                st.session_state["recipe_dir"] = _recipe_dir()
+                _save_target_from_csv(best)     # recipe_dir 위젯 기설정 → 별도 세팅 불필요
                 st.success(f"지도에서 선택 → {best['name']} ({best['source']})")
                 st.rerun()
     if state and state.get("last_clicked"):
