@@ -112,3 +112,13 @@ def test_filter_slaves_min_keep_prevents_overreject():
                                                      max_temporal_days=30, min_keep=2)
     assert len(keep) - 1 >= 2                          # master 외 최소 2개 유지
     assert "20240401" in keep                          # 가장 가까운 것 유지
+
+
+def test_filter_slaves_by_doppler():
+    # 도플러 ΔfDC 초과 slave 제거 (master fDC=0)
+    dates = ["20240101", "20240113", "20240125"]
+    dop = {"20240101": 0.0, "20240113": 100.0, "20240125": 800.0}   # 100·800 Hz
+    keep, rej = slc_search.filter_slaves_by_baseline(
+        dates, "20240101", doppler=dop, max_doppler_hz=500, min_keep=1)
+    assert "20240113" in keep and "20240125" not in keep
+    assert rej[0]["date"] == "20240125" and rej[0]["doppler_hz"] == 800.0

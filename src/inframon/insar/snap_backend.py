@@ -71,6 +71,7 @@ class SnapRunResult:
     track_h5: str | None = None
     n_points: int = 0
     weather: object = None            # ⑤ ERA5 MasterSelection(사용시) 또는 사유 문자열
+    rejected_slaves: list = field(default_factory=list)   # baseline·도플러 사전필터 제거
 
     def as_dict(self) -> dict:
         w = self.weather
@@ -85,6 +86,7 @@ class SnapRunResult:
                       "distance_km": round(self.burst.distance_km, 2)},
             "pairs": [{"ref": p.ref_date, "sec": p.sec_date, "ok": p.ok} for p in self.pairs],
             "track_h5": self.track_h5, "n_points": self.n_points, "weather": wsum,
+            "rejected_slaves": self.rejected_slaves,
         }
 
 
@@ -158,6 +160,43 @@ def _point_in_poly(lon: float, lat: float, poly: list[tuple[float, float]]) -> b
             inside = not inside
         j = i
     return inside
+
+
+def doppler_centroid_hz(slc_zip: str | Path, subswath: str) -> float | None:
+    """SLC 애노테이션의 대표 도플러 중심 주파수 fDC[Hz] — dataDcPolynomial 상수항 평균.
+
+    ASF 검색 API 는 fDC 를 안 주므로(다운로드 후 애노테이션에만 존재) 여기서 파싱.
+    슬레이브-마스터 |ΔfDC| 가 크면 방위 스펙트럼 비간섭 → slave 품질 저하 판정에 사용.
+    """
+    try:
+        with zipfile.ZipFile(str(slc_zip)) as z:
+            root = _annotation_xml(z, subswath)
+    except (OSError, zipfile.BadZipFile, KeyError, ValueError):
+        return None
+    vals = []
+    for dc in root.iter("dcEstimate"):
+        poly = dc.find("dataDcPolynomial")
+        if poly is None or not (poly.text and poly.text.strip()):
+            poly = dc.find("geometryDcPolynomial")
+        if poly is not None and poly.text and poly.text.strip():
+            try:
+                vals.append(float(poly.text.split()[0]))       # 상수항 = fDC 기준값
+            except (ValueError, IndexError):
+                continue
+    if not vals:
+        return None
+    import numpy as np
+    return float(np.mean(vals))
+
+
+def doppler_centroids(slc_zips: list, subswath: str) -> dict:
+    """장면들의 fDC[Hz] → {YYYYMMDD: fDC}. 파싱 실패 장면은 생략."""
+    out: dict = {}
+    for s in slc_zips:
+        f = doppler_centroid_hz(s, subswath)
+        if f is not None:
+            out[scene_date(str(s))] = f
+    return out
 
 
 def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
@@ -258,11 +297,16 @@ def process_star_network(
     *, reference: str | Path | None = None, dem: str = "SRTM 1Sec HGT",
     graph_dir: str | Path | None = None, gpt: str | None = None,
     burst: BurstLoc | None = None, skip_existing: bool = True,
+    filter_baseline: bool = True, bperp: dict | None = None,
+    max_temporal_days: float = 72.0, max_perp_m: float = 150.0,
+    max_doppler_hz: float = 500.0, min_keep: int = 3,
 ) -> SnapRunResult:
     """스타 네트워크(기준 vs 각 보조) 코레지+간섭도+TC. reference 기본=최이른 날짜.
 
     burst 를 주면 자동판별을 건너뛴다(배치에서 같은 burst 재사용). skip_existing 이면
     이미 만든 지오코딩 산출물(.tif)은 gpt 를 다시 돌리지 않고 재사용(멱등 재개).
+    filter_baseline 이면 처리 전에 **시공간 baseline·도플러** 초과 slave 를 제거
+    (도플러는 SLC 애노테이션 로컬 파싱, B⊥ 는 bperp 주면 사용). min_keep 유지.
     """
     scenes = [str(s) for s in scenes]
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -275,6 +319,18 @@ def process_star_network(
         burst = find_bridge_burst(ref, lat, lon)
 
     res = SnapRunResult(reference=scene_date(ref), burst=burst)
+
+    # ── 사전 필터: 시공간 baseline·도플러 초과 slave 제거(비싼 간섭처리 전) ──
+    if filter_baseline and len(secs) >= 2:
+        from .slc_search import filter_slaves_by_baseline
+        by_date = {scene_date(s): s for s in [ref, *secs]}
+        dop = doppler_centroids([ref, *secs], burst.subswath)
+        keep_dates, rejected = filter_slaves_by_baseline(
+            list(by_date), scene_date(ref), bperp=bperp, doppler=dop,
+            max_temporal_days=max_temporal_days, max_perp_m=max_perp_m,
+            max_doppler_hz=max_doppler_hz, min_keep=min_keep)
+        secs = [by_date[d] for d in keep_dates if d != scene_date(ref)]
+        res.rejected_slaves = rejected
     for sec in sorted(secs, key=scene_date):
         rd, sd = scene_date(ref), scene_date(sec)
         tif = str(out / f"tc_{rd}_{sd}.tif")

@@ -160,8 +160,11 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
             rep.add(StageResult("⑤ERA5master(실행)", "done",
                                 f"master {res.weather.selected_master} · "
                                 f"악천후 소거 {getattr(res.weather, 'n_excluded', 0)}장"))
+        _bl = getattr(res, "rejected_slaves", [])
+        _blt = f" · baseline/도플러 사전제거 {len(_bl)}장" if _bl else ""
         rep.add(StageResult("⑧InSAR처리(SNAP)", "done",
-                            f"{res.reference} · 쌍 {sum(p.ok for p in res.pairs)}/{len(res.pairs)}"))
+                            f"{res.reference} · 쌍 {sum(p.ok for p in res.pairs)}/"
+                            f"{len(res.pairs)}{_blt}"))
         ctx["snap"] = res.as_dict()
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑧InSAR처리(SNAP)", "error", str(e)[:100]))
