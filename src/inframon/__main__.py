@@ -103,6 +103,14 @@ def main() -> None:
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
+    p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
+                   help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
+    p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
+                   help="--gnss-validate GNSS 탐색 반경(기본 50km).")
+    p.add_argument("--gnss-incidence", type=float, default=39.0, metavar="DEG",
+                   help="--gnss-validate InSAR 입사각(기본 39° S1 IW 중앙).")
+    p.add_argument("--gnss-heading", type=float, default=None, metavar="DEG",
+                   help="--gnss-validate 위성 헤딩 override(기본 /insar 저장값 또는 S1 상승).")
     p.add_argument("--fem-crosscheck", default=None, metavar="PROJECT_H5",
                    help="상용 FEM 교차검증 — /pinn 식별 EI·고유진동수를 설계(기하 EI) FEM "
                         "벤치마크와 대조(솔버검증·강성상태·처짐).")
@@ -410,6 +418,16 @@ def main() -> None:
             print(f"  단일 폴백  : {r['reason']}")
             print(f"  사용 Track : {r['out']}")
         print("=" * 56)
+        return
+
+    if args.gnss_validate:
+        from .gnss_ngl import validate_insar_vs_gnss
+        try:
+            r = validate_insar_vs_gnss(args.gnss_validate, incidence_deg=args.gnss_incidence,
+                                       heading_deg=args.gnss_heading, max_km=args.gnss_km)
+        except (ValueError, FileNotFoundError, OSError) as exc:
+            p.error(str(exc))
+        print(r.summary())
         return
 
     if args.fem_crosscheck:
