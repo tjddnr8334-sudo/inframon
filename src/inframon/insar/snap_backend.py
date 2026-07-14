@@ -549,6 +549,58 @@ def _polyline_dist_km(plon, plat, geom_lonlat):
     return best
 
 
+def find_reference_point(
+    pairs: list, *, roi_bbox: tuple | None = None, deck_geometry: list | None = None,
+    deck_buffer_m: float = 60.0, min_coh: float = 0.98,
+) -> dict | None:
+    """간섭도에서 **교량 밖·ROI 내 초안정 기준점**(시간평균 coherence ≥ min_coh) 선정.
+
+    reference point 는 데크(움직임) 밖 안정 지반·건물 PS(coh≥0.98)여야 상대변위 기준이 된다.
+    데크 점은 열·하중으로 coh 가 낮아(≈0.85) 기준점 부적합 → **도심밀도 ROI 의 건물 PS**에서
+    고른다. roi_bbox=(w,s,e,n) 안, deck 폴리라인 버퍼 밖에서 coh 최대 픽셀.
+    반환: {lon,lat,coherence,n_candidates,meets_threshold} 또는 None(간섭도 없음).
+    """
+    import numpy as np
+    import rasterio
+
+    ok = [p for p in pairs if p.ok and Path(p.product).exists()]
+    if not ok:
+        return None
+    with rasterio.open(ok[0].product) as ds0:
+        coh_stack = [ds0.read(2).astype(np.float64)]
+        H, W = coh_stack[0].shape
+        rows, cols = np.mgrid[0:H, 0:W]
+        xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
+        glon = np.asarray(xs).reshape(H, W); glat = np.asarray(ys).reshape(H, W)
+    for p in ok[1:]:
+        with rasterio.open(p.product) as ds:
+            coh_stack.append(ds.read(2).astype(np.float64))
+    coh_mean = np.mean(coh_stack, axis=0)
+
+    mask = np.isfinite(coh_mean) & (coh_mean > 0.0)
+    if roi_bbox:                                       # ROI(도심) 범위로 제한
+        w, s, e, n = roi_bbox
+        mask &= (glon >= w) & (glon <= e) & (glat >= s) & (glat <= n)
+    if deck_geometry:                                  # 데크 버퍼 밖만(교량 위 제외)
+        geom = [(float(lon), float(lat)) for lat, lon in deck_geometry]
+        d = np.full((H, W), np.inf)
+        d.ravel()[mask.ravel()] = _polyline_dist_km(
+            glon.ravel()[mask.ravel()], glat.ravel()[mask.ravel()], geom)
+        mask &= d > (deck_buffer_m / 1000.0)
+    pool = np.where(mask.ravel())[0]
+    if pool.size == 0:
+        return None
+    cm = coh_mean.ravel()
+    cand = pool[cm[pool] >= min_coh]
+    if cand.size:
+        bi = int(cand[np.argmax(cm[cand])]); met = True
+    else:
+        bi = int(pool[np.argmax(cm[pool])]); met = False   # 폴백: 데크 밖 최고 coh
+    return {"lon": float(glon.ravel()[bi]), "lat": float(glat.ravel()[bi]),
+            "coherence": float(cm[bi]), "n_candidates": int(cand.size),
+            "meets_threshold": met, "min_coh": float(min_coh)}
+
+
 def build_bridge_track_ps_ds(
     pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
     *, geometry_latlon: list, buffer_m: float = 30.0, coh_min: float = 0.35,

@@ -25,6 +25,34 @@ def most_stable_index(los: np.ndarray, coherence: np.ndarray | None = None) -> i
     return int(np.argmin(score))
 
 
+# 기준점은 초안정 PS 여야 정확한 상대변위 기준이 된다. 시간 결맞음 임계(권장 0.98).
+REF_MIN_COHERENCE = 0.98
+
+
+def select_reference_point(los: np.ndarray, coherence: np.ndarray, *,
+                           min_coh: float = REF_MIN_COHERENCE) -> dict:
+    """기준점 선정 — **시간 결맞음 ≥ min_coh(기본 0.98)** 인 초안정 점 중 시간변동 최소.
+
+    reference point 는 전역 위상 기준이라 아주 안정된 PS(coh≥0.98)여야 상대변위가 신뢰된다.
+    coh≥min_coh 후보가 없으면(=ROI 도심밀도 부족 신호) 최고 coherence 점으로 폴백하되
+    meets_threshold=False 로 알린다 → ROI 를 도심 쪽으로 넓혀 재선정 필요.
+
+    반환: index·coherence·temporal_std·meets_threshold·n_candidates·min_coh.
+    """
+    los = np.asarray(los, dtype=np.float64)
+    coh = np.asarray(coherence, dtype=np.float64).ravel()
+    var = los.std(axis=1)
+    elig = np.where(coh >= min_coh)[0]
+    if elig.size:
+        idx = int(elig[np.argmin(var[elig])])       # 초안정 후보 중 시간변동 최소
+        met = True
+    else:
+        idx = int(np.argmax(coh))                    # 폴백: 최고 coherence(임계 미달)
+        met = False
+    return {"index": idx, "coherence": float(coh[idx]), "temporal_std": float(var[idx]),
+            "meets_threshold": met, "n_candidates": int(elig.size), "min_coh": float(min_coh)}
+
+
 def temporal_decompose(los: np.ndarray, days: np.ndarray,
                        temperature: np.ndarray | None = None) -> dict:
     """점별 los(t)=a+b·t(yr)[+c·T] 최소제곱. 반환: 속도 b[mm/yr]·열계수 c·비열팽창 변형.

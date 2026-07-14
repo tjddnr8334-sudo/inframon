@@ -4,9 +4,11 @@ from __future__ import annotations
 import numpy as np
 
 from inframon.insar.atmo import (
+    REF_MIN_COHERENCE,
     height_correlated_correction,
     most_stable_index,
     reference_correction,
+    select_reference_point,
     temporal_decompose,
 )
 
@@ -23,6 +25,45 @@ def test_most_stable_index_prefers_low_variance():
     los = rng.normal(0, 5, (10, 20))
     los[3] = np.linspace(0, 0.1, 20)                    # 거의 안 변하는 점
     assert most_stable_index(los) == 3
+
+
+def test_default_ref_coherence_is_098():
+    assert REF_MIN_COHERENCE == 0.98
+
+
+def test_select_reference_point_requires_098():
+    rng = np.random.default_rng(1)
+    los = rng.normal(0, 3, (6, 20))
+    los[4] = np.linspace(0, 0.05, 20)                   # 초안정 점
+    coh = np.array([0.6, 0.7, 0.95, 0.97, 0.99, 0.90])  # 0.98 넘는 건 idx4(0.99)
+    rp = select_reference_point(los, coh)               # min_coh=0.98 기본
+    assert rp["meets_threshold"] is True
+    assert rp["index"] == 4 and rp["coherence"] == 0.99
+    assert rp["n_candidates"] == 1
+
+
+def test_select_reference_point_lowest_std_among_eligible():
+    # 0.98 이상 후보 여럿 → 시간변동 최소 선택
+    los = np.zeros((4, 10))
+    los[0] = np.linspace(0, 10, 10)                     # 변동 큼
+    los[2] = np.linspace(0, 0.1, 10)                    # 변동 작음(선택)
+    coh = np.array([0.99, 0.5, 0.985, 0.5])
+    rp = select_reference_point(los, coh)
+    assert rp["meets_threshold"] is True and rp["index"] == 2   # 0.985·저변동
+
+
+def test_select_reference_point_fallback_when_none_meet():
+    los = np.random.default_rng(2).normal(0, 1, (5, 10))
+    coh = np.array([0.5, 0.6, 0.9, 0.7, 0.8])           # 아무도 0.98 미달
+    rp = select_reference_point(los, coh)
+    assert rp["meets_threshold"] is False
+    assert rp["index"] == 2 and rp["coherence"] == 0.9  # 최고 coherence 폴백
+    assert rp["n_candidates"] == 0
+
+
+def test_find_reference_point_empty_pairs():
+    from inframon.insar.snap_backend import find_reference_point
+    assert find_reference_point([]) is None            # 간섭도 없음 → None
 
 
 def test_temporal_decompose_recovers_velocity_and_thermal():

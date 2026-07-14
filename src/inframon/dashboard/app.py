@@ -815,15 +815,34 @@ def support_zone_section(path: str, times) -> None:
 def accuracy_section(path: str, times) -> None:
     """InSAR 정확도 보정 — 기준점 정합 + 온도회귀(열팽창 분리) → 순 변형속도."""
     from inframon.insar.atmo import (
-        height_correlated_correction, most_stable_index, reference_correction, temporal_decompose,
+        height_correlated_correction, reference_correction, select_reference_point,
+        temporal_decompose,
     )
     los, xyz, coh = read(path, "/insar/los", "/insar/xyz", "/insar/coherence")
+    # 시간 결맞음(temporal coherence) 우선 — 없으면 공간 coherence 폴백
+    ref_coh = coh
+    try:
+        _tc = read(path, "/insar/temporal_coherence")
+        if _tc is not None and np.size(_tc) == los.shape[0]:
+            ref_coh = _tc
+    except (KeyError, ValueError, OSError):
+        pass
     N, M = los.shape
     days = np.array([(t - times[0]).days for t in times], dtype=float)
     st.caption("기준점 대비 상대변위 + 온도회귀로 열팽창 분리 → **순 변형속도(mm/yr)**. "
                "InSAR 절대·계절 편향을 줄입니다.")
-    auto = most_stable_index(los, coh)
-    ref = st.number_input(f"기준점 index (안정점 자동추천 #{auto})", 0, N - 1, int(auto), key="ref_idx")
+    # 기준점: 시간 결맞음 ≥ 0.98 인 초안정 PS (도심 고밀도에서 확보)
+    min_coh = st.slider("기준점 최소 시간결맞음", 0.80, 0.999, 0.98, 0.01, key="ref_min_coh",
+                        help="reference point 는 이 값 이상의 초안정 PS 여야 상대변위가 신뢰됩니다.")
+    rp = select_reference_point(los, ref_coh, min_coh=float(min_coh))
+    auto = rp["index"]
+    if rp["meets_threshold"]:
+        st.success(f"기준점 #{auto} · 결맞음 {rp['coherence']:.3f} ≥ {min_coh:.2f} "
+                   f"(초안정 후보 {rp['n_candidates']}개)")
+    else:
+        st.warning(f"⚠️ 결맞음 ≥ {min_coh:.2f} 기준점 없음 — 최고 {rp['coherence']:.3f} 사용. "
+                   "**ROI 를 도심(고밀도) 쪽으로 넓혀** 초안정 기준점을 확보하세요.")
+    ref = st.number_input(f"기준점 index (0.98 자동추천 #{auto})", 0, N - 1, int(auto), key="ref_idx")
     use_T = st.checkbox("🌡️ 온도 회귀로 열팽창 분리", value=True, key="acc_T")
     use_tropo = st.checkbox("🌫️ 고도상관 대기보정 (GACOS 대안)", value=False, key="acc_tropo")
     if not st.button("🎯 정확도 보정 실행", key="btn_accuracy"):
