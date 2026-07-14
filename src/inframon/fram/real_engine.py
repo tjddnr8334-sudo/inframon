@@ -45,6 +45,34 @@ def terrain_alert_factor(terrain) -> float:
     return {"평지": 1.0, "산지": 0.92, "해상": 0.85}.get(terrain, 1.0)
 
 
+def inspection_alert_factor(inspect_grade) -> float:
+    """최종안전점검결과(A~E) → CRI 임계 배율. 상태등급이 낮을수록(손상·열화) 낮은 임계로
+    조기경보. A(우수)1.0·B(양호)0.97·C(보통)0.90·D(미흡)0.80·E(불량)0.70. 미상=1.0."""
+    key = str(inspect_grade or "").strip().upper()[:1]
+    return {"A": 1.0, "B": 0.97, "C": 0.90, "D": 0.80, "E": 0.70}.get(key, 1.0)
+
+
+def _current_year() -> int:
+    from datetime import date
+    return date.today().year
+
+
+def age_alert_factor(build_year, as_of_year: int | None = None) -> float:
+    """공용연수 → CRI 임계 배율. 노후화(강성저하·피로누적)로 오래될수록 낮은 임계로 조기경보.
+
+    공용 10년 이내 1.0, 이후 80년에 걸쳐 0.82까지 선형 감소. 준공연도 미상=1.0.
+    (준공연도 문자열/일자에서 앞 4자리 연도 추출.)
+    """
+    digits = "".join(ch for ch in str(build_year or "") if ch.isdigit())
+    if len(digits) < 4:
+        return 1.0
+    by = int(digits[:4])
+    if by < 1800 or by > 2200:
+        return 1.0
+    age = max(0, (as_of_year or _current_year()) - by)
+    return round(1.0 - min(max(age - 10, 0) / 80.0, 1.0) * 0.18, 3)
+
+
 def _sat(x: np.ndarray, scale: float) -> np.ndarray:
     """포화 절대 매핑: x/(x+scale) ∈ [0,1). x=scale 에서 0.5."""
     return x / (np.abs(x) + scale + 1e-12)
@@ -240,9 +268,13 @@ def run_fram_real(
     CRI = np.clip(w1 * A + w2 * R_couple + w3 * R_spatial + w4 * R_div, 0, 1)
 
     cri_max = float(CRI.max())
-    # 경보 차등: 종별(1종 중요) × 지형(산지·해상 바람노출) → 낮은 CRI 에서 조기경보.
+    # 경보 차등: 종별(1종 중요) × 지형(산지·해상 바람노출) × 안전점검(A~E 상태) × 노후화
+    # (공용연수) → 낮은 CRI 에서 조기경보. 미상 인자는 1.0(불변).
     _ef = (grade_alert_factor(getattr(cfg, "bridge_grade", None))
-           * terrain_alert_factor(getattr(cfg, "bridge_terrain", None)))
+           * terrain_alert_factor(getattr(cfg, "bridge_terrain", None))
+           * inspection_alert_factor(getattr(cfg, "bridge_inspect_grade", None))
+           * age_alert_factor(getattr(cfg, "bridge_build_year", None),
+                              getattr(cfg, "bridge_as_of_year", None)))
     t_lo, t_mid, t_hi = (min(t * _ef, 1.0) for t in cfg.cri_thresholds)
 
     g = "/fram"

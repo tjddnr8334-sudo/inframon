@@ -476,6 +476,7 @@ def main() -> None:
         if _coll.get('bridge_csv'):
             print(f"  표준데이터 : {_coll['bridge_csv']}")
         print(f"  종별등급   : {_coll.get('bridge_grade', '-')}  · 지형 {_coll.get('terrain', '-')}")
+        print(f"  상태·노후  : 안전점검 {_coll.get('inspect_grade', '-')}  · 준공 {_coll.get('build_year', '-')}")
         print(f"  온도       : {_coll['temperature']}")
         print(f"  교통량     : {_coll['traffic']}")
         print(f"  최대 CRI   : {summary['cri_global_max']:.3f}  경보 {summary['warning_level']}")

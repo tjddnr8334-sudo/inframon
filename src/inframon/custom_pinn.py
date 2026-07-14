@@ -131,6 +131,13 @@ def run_custom_pinn(
             collected["terrain"] = f"{_terr}(기복{_relief}m)" if _relief else _terr
         except Exception as exc:  # noqa: BLE001 — 표고 조회 실패 시 지형 미반영(폴백)
             collected["terrain"] = f"실패({exc})"
+        # 상태·노후화 → FRAM 경보차등: 안전점검결과(A~E)·준공연도(공용연수). CSV 있을 때만.
+        _insp = prof.extra.get("inspect_grade")
+        _built = prof.extra.get("completion")
+        cfg.bridge_inspect_grade = _insp
+        cfg.bridge_build_year = _built
+        collected["inspect_grade"] = _insp or "-"
+        collected["build_year"] = _built or "-"
         cfg.pinn_epochs = pinn_epochs
         cfg.pinn_virtual_sensors = pinn_virtual_sensors
         cfg.pinn_deck_long = pinn_deck_long
