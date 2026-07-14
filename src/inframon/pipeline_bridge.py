@@ -189,9 +189,11 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
             _rf = r9.get("reference", {})
             _rft = (f" · 기준점 coh {_rf['coherence']:.3f}"
                     f"{'✓0.98' if _rf.get('meets_098') else '⚠<0.98'}") if _rf.get("applied") else ""
+            _rej = r9.get("rejected_slaves", [])
+            _rjt = f" · 튀는 slave {len(_rej)}개 제거" if _rej else ""
             rep.add(StageResult("⑨PS/DS(교량30m)", "done",
                                 f"{r9['n_points']}점(PS {r9['n_ps']}/DS {r9['n_ds']}) · "
-                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}{_rft}"))
+                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}{_rft}{_rjt}"))
         except Exception as e:  # noqa: BLE001
             rep.add(StageResult("⑨PS/DS(교량30m)", "error", str(e)[:90]))
             deck_h5 = res.track_h5

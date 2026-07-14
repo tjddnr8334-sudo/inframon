@@ -609,6 +609,8 @@ def build_bridge_track_ps_ds(
     amp_pairs: list | None = None,
     apply_reference: bool = True, roi_bbox: tuple | None = None,
     ref_min_coh: float = 0.98,
+    reject_outliers: bool = True, outlier_k: float = 3.0,
+    coh_floor: float = 0.2, min_keep: int = 3,
 ) -> dict:
     """**교량 데크(폴리라인) buffer_m 이내**의 PS/DS 점 선별 → Track H5.
 
@@ -643,13 +645,33 @@ def build_bridge_track_ps_ds(
     dist_km = np.full((H, W), np.inf)
     dist_km[near] = _polyline_dist_km(glon[near], glat[near], geom)
 
-    # 시간평균 코히런스(모든 쌍)
+    # 각 쌍(master-slave) coherence·위상 (coh_stack[i]↔ph_list[i]↔ok[i])
     coh_stack = [coh0.astype(np.float64)]
     ph_list = [ph0.astype(np.float64)]
     for p in ok[1:]:
         with rasterio.open(p.product) as ds:
             coh_stack.append(ds.read(2).astype(np.float64))
             ph_list.append(ds.read(1).astype(np.float64))
+
+    # ── 튀는 슬레이브 자동 제거: master 대비 (데크 근방) 평균 coherence 로버스트 이상치 ──
+    # 대기교란·비간섭·궤도이상 등으로 간섭도가 급락한 slave 는 시계열을 오염 → MAD 하한
+    # (중앙값−k·MAD) 또는 절대 floor 미만이면 제거. 과다제거 방지로 최소 min_keep 유지.
+    rejected_slaves: list = []
+    if reject_outliers and len(ok) >= max(4, min_keep + 1):
+        region = dist_km <= (buffer_m / 1000.0 * 3.0)      # 데크 근방(없으면 전역)
+        if not region.any():
+            region = np.isfinite(coh_stack[0])
+        pcoh = np.array([float(np.nanmean(np.where(region, c, np.nan))) for c in coh_stack])
+        med = float(np.median(pcoh)); mad = float(np.median(np.abs(pcoh - med)))
+        lo = max(med - outlier_k * 1.4826 * mad, coh_floor)
+        keep = pcoh >= lo
+        if int(keep.sum()) >= min_keep and int((~keep).sum()) > 0:
+            rejected_slaves = [{"date": ok[i].sec_date, "coh": round(float(pcoh[i]), 3),
+                                "reason": f"deck coh {pcoh[i]:.2f} < {lo:.2f}"}
+                               for i in range(len(ok)) if not keep[i]]
+            ok = [ok[i] for i in range(len(ok)) if keep[i]]
+            coh_stack = [coh_stack[i] for i in range(len(coh_stack)) if keep[i]]
+            ph_list = [ph_list[i] for i in range(len(ph_list)) if keep[i]]
     coh_mean = np.mean(coh_stack, axis=0)
 
     within = dist_km <= (buffer_m / 1000.0)
@@ -668,6 +690,31 @@ def build_bridge_track_ps_ds(
     for k, phk in enumerate(ph_list, start=1):
         dates.append(ok[k - 1].sec_date)
         los[:, k] = phk.ravel()[idx] * scale
+
+    # ── 튀는 슬레이브 2차: 변위 시계열 이상치 epoch(대기교란 등) 자동 제거 ──
+    # 각 시점 공간중앙 변위가 로버스트 선형추세에서 크게 벗어나면(대기 스파이크) 그 slave 제거.
+    if reject_outliers and M >= max(6, min_keep + 2):
+        from datetime import datetime as _dt
+        dd = np.array([(_dt.strptime(d, "%Y%m%d") - _dt.strptime(ref_date, "%Y%m%d")).days
+                       for d in dates], float)
+        emed = np.median(los, axis=0)                  # [M] 시점별 공간중앙 변위
+        A0 = np.vstack([dd, np.ones_like(dd)]).T
+        resid = emed - A0 @ np.linalg.lstsq(A0, emed, rcond=None)[0]
+        rmad = float(np.median(np.abs(resid - np.median(resid))))
+        thr = outlier_k * 1.4826 * rmad
+        bad = np.abs(resid) > thr
+        bad[0] = False                                 # master(기준시점) 제외
+        if thr > 0 and int((~bad).sum()) >= min_keep and int(bad.sum()) > 0:
+            for i in range(1, M):
+                if bad[i]:
+                    rejected_slaves.append({"date": dates[i], "coh": None,
+                                            "reason": f"LOS 이상 {resid[i]:+.1f}mm(>{thr:.1f})"})
+            keepc = ~bad
+            los = los[:, keepc]
+            dates = [dates[i] for i in range(M) if keepc[i]]
+            ok = [ok[i - 1] for i in range(1, M) if keepc[i]]
+            ph_list = [ph_list[i - 1] for i in range(1, M) if keepc[i]]
+            M = len(dates)
     gbar = coh_mean.ravel()[idx].astype(np.float32)
     incidence = inc0.ravel()[idx].astype(np.float32)
     deck_dist_m = (dist_km.ravel()[idx] * 1000.0).astype(np.float32)
@@ -749,7 +796,8 @@ def build_bridge_track_ps_ds(
             "buffer_m": buffer_m, "deck_dist_max_m": float(deck_dist_m.max()),
             "coh_mean": float(gbar.mean()), "class_method": adi_method,
             "adi_median": (float(np.nanmedian(adi_pt)) if np.isfinite(adi_pt).any() else None),
-            "reference": ref_meta, "out": str(out_h5)}
+            "reference": ref_meta, "n_epochs_used": len(ok),
+            "rejected_slaves": rejected_slaves, "out": str(out_h5)}
 
 
 def select_master_era5(
