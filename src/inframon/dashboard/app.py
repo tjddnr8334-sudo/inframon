@@ -10,6 +10,8 @@ FRAM 탭은 기능 공명 다이어그램(4기능 변동 레이더 + R_ij 결합
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import sys
 from datetime import date, datetime, timedelta
@@ -30,21 +32,54 @@ from inframon.dashboard.data import (
 from inframon.dashboard.data import read_arrays as read
 
 DEFAULT_H5 = "data/project.h5"
+_CONFIG_FILE = Path.home() / ".inframon" / "config.json"
+
+
+def _config_load() -> dict:
+    try:
+        return json.loads(_CONFIG_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _config_save(**kv) -> None:
+    """설정을 ~/.inframon/config.json 에 병합 저장(재시작 후에도 유지)."""
+    cfg = _config_load(); cfg.update({k: v for k, v in kv.items() if v is not None})
+    try:
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def data_root() -> str:
+    """모든 저장(project.h5·레시피·SLC·결과)의 루트 폴더.
+
+    우선순위: 세션 설정 → 저장된 config → 환경변수 INFRAMON_DATA_ROOT →
+    (frozen exe: exe 옆 data/) → 작업폴더 data/. 사용자가 F:\\inframon 등으로 지정 가능.
+    """
+    for v in (st.session_state.get("data_root"),
+              _config_load().get("data_root"),
+              os.environ.get("INFRAMON_DATA_ROOT")):
+        if v and str(v).strip():
+            return str(v).strip()
+    if getattr(sys, "frozen", False):
+        return str(Path(sys.executable).parent / "data")
+    return "data"
 
 
 def default_project_path() -> str:
-    """기본 project.h5 경로.
+    """기본 project.h5 경로 = <데이터 루트>/project.h5.
 
-    소스 실행: 작업폴더의 `data/project.h5`.
-    frozen(.exe): exe 옆 `data/project.h5`(쓰기 가능). 없으면 번들에 동봉한 데모를
-    한 번 복사해 시드 → 더블클릭 첫 실행에서 바로 채워진 대시보드가 보인다.
+    루트가 없으면 만들고, frozen(.exe) 최초 실행이면 번들 데모를 시드해 바로 보이게 한다.
     """
-    if not getattr(sys, "frozen", False):
+    root = Path(data_root())
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
         return DEFAULT_H5
-    data_dir = Path(sys.executable).parent / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    target = data_dir / "project.h5"
-    if not target.exists():
+    target = root / "project.h5"
+    if not target.exists() and getattr(sys, "frozen", False):
         seed = Path(getattr(sys, "_MEIPASS", "")) / "data" / "project.h5"
         if seed.exists():
             try:
@@ -96,8 +131,12 @@ def run_demo(path: str, n_points: int, n_dates: int, engines: dict | None = None
 
 
 def _recipe_dir() -> str:
-    """현재 교량 프로젝트의 레시피 폴더(상단에서 설정). 교량마다 분리해 여러 개를 관리."""
-    return (st.session_state.get("recipe_dir") or "data/insar_recipe").strip() or "data/insar_recipe"
+    """현재 교량 프로젝트의 레시피 폴더 = <데이터 루트>/insar_recipe (상단에서 설정).
+
+    교량마다 분리해 여러 개를 관리하려면 recipe_dir 세션값으로 개별 지정 가능.
+    """
+    ss = (st.session_state.get("recipe_dir") or "").strip()
+    return ss or str(Path(data_root()) / "insar_recipe")
 
 
 def project_times(path: str, start: date):
@@ -983,11 +1022,14 @@ def tab_insar(path: str, start: date) -> None:
 
     # 교량 프로젝트(레시피 폴더) — 교량마다 다른 폴더를 쓰면 여러 교량을 따로 관리한다.
     # 아래 A~F 단계의 모든 레시피 경로가 이 폴더를 기준으로 자동 구성된다.
-    st.text_input("🌉 교량 프로젝트 (레시피 폴더)", "data/insar_recipe", key="recipe_dir",
-                  help="교량마다 다른 폴더명을 쓰세요. 예: data/insar_recipe/한강대교 · "
-                       "data/insar_recipe/마포대교 — 여러 교량을 덮어쓰지 않고 따로 보관합니다.")
+    st.text_input("🌉 교량 프로젝트 (레시피 폴더)", str(Path(data_root()) / "insar_recipe"),
+                  key="recipe_dir",
+                  help="저장 루트 아래 교량별 폴더. 예: <루트>/한강대교 · <루트>/마포대교 — "
+                       "여러 교량을 덮어쓰지 않고 따로 보관합니다.")
 
-    with st.expander("🗺️ 교량 타깃 지정 (지도 + OSM 확인)  · A·B 단계", expanded=False):
+    _has_target = (Path(_recipe_dir()) / "bridge_target.json").exists()
+    with st.expander("🗺️ 교량 타깃 지정 (지도 + OSM 확인)  · A·B 단계",
+                     expanded=not _has_target):     # 미지정이면 펼쳐서 먼저 안내
         bridge_target_section()
 
     with st.expander("⚙️ SLC 선별 기준 (baseline · 편파 · 트랙)  · C·D 단계", expanded=False):
@@ -1547,6 +1589,41 @@ def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
+
+    # 📁 저장 폴더(데이터 루트) — project·레시피·SLC·결과가 모두 여기에 저장된다.
+    st.sidebar.markdown("### 📁 저장 폴더")
+    _cur_root = data_root()
+    _root_in = st.sidebar.text_input(
+        "데이터 루트", _cur_root, key="data_root_input",
+        help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
+             "(대용량 SLC는 외장드라이브 권장).")
+    if _root_in.strip() and _root_in.strip() != _cur_root:
+        st.session_state["data_root"] = _root_in.strip()
+        _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
+        try:
+            Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            st.sidebar.error(f"폴더 생성 실패: {exc}")
+        st.rerun()
+    try:
+        _free_gb = shutil.disk_usage(data_root()).free / 1e9
+        st.sidebar.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
+    except OSError:
+        st.sidebar.caption(f"저장 위치: `{data_root()}`")
+
+    # 📍 현재 교량(위치) — 레시피가 있으면 이름·좌표 표시, 없으면 지정 안내
+    st.sidebar.markdown("### 📍 현재 교량")
+    _tgt = Path(_recipe_dir()) / "bridge_target.json"
+    try:
+        _t = json.loads(_tgt.read_text(encoding="utf-8")) if _tgt.exists() else None
+    except (OSError, ValueError):
+        _t = None
+    if _t and _t.get("selected_lat") is not None:
+        st.sidebar.success(f"**{_t.get('name') or '교량'}**  \n"
+                           f"{_t['selected_lat']:.5f}, {_t['selected_lon']:.5f}")
+    else:
+        st.sidebar.info("교량 위치 미지정 — **① InSAR** 탭의 "
+                        "‘🗺️ 교량 타깃 지정’에서 지도로 지정하세요.")
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
