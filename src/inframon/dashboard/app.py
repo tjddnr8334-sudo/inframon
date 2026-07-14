@@ -261,7 +261,24 @@ def bridge_target_section() -> None:
             folium.Rectangle([[bn_lat, bn_lon], [bx_lat, bx_lon]], color="orange", weight=2,
                              tooltip="교량 자체 extent").add_to(m)
 
+    if hits:
+        st.caption("🔵 CSV · 🟢 OSM 마커를 **클릭하면 그 교량으로 바로 설정**됩니다.")
     state = st_folium(m, height=420, key="bridge_map")
+
+    # 검색결과 마커 클릭 → 해당 교량 직접 선택(타깃 저장)
+    obj = state.get("last_object_clicked") if state else None
+    if obj and hits:
+        okey = (round(obj["lat"], 6), round(obj["lng"], 6))
+        if st.session_state.get("_last_obj_click") != okey:
+            st.session_state["_last_obj_click"] = okey
+            best = min(hits, key=lambda h: (h["lat"] - obj["lat"]) ** 2
+                       + (h["lon"] - obj["lng"]) ** 2)
+            d = ((best["lat"] - obj["lat"]) ** 2 + (best["lon"] - obj["lng"]) ** 2) ** 0.5
+            if d < 0.002:                       # ~200m 이내 마커와 매칭
+                _save_target_from_csv(best)
+                st.session_state["recipe_dir"] = _recipe_dir()
+                st.success(f"지도에서 선택 → {best['name']} ({best['source']})")
+                st.rerun()
     if state and state.get("last_clicked"):
         st.session_state["bridge_click"] = state["last_clicked"]
         click = state["last_clicked"]
