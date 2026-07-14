@@ -449,8 +449,12 @@ def slc_search_section() -> None:
         except Exception:  # noqa: BLE001
             pass
 
+    both_dir = st.checkbox("🔀 상승(ASC)+하강(DESC) 둘 다 선택 (각 1트랙 · 연직분해용)",
+                           value=False, key="both_dir",
+                           help="켜면 상승 최다 트랙과 하강 최다 트랙을 각각 골라 둘 다 저장 "
+                                "(track_selection_asc/desc.json) — Asc+Desc 연직변위 분해에 사용.")
     st.caption(f"대상: **{target.name}** · bbox={tuple(round(v, 4) for v in target.bbox)} · "
-               f"편파 {pol} · 궤도 {orbit or '자동(최다)'}")
+               f"편파 {pol} · 궤도 " + ("ASC+DESC 둘 다" if both_dir else (orbit or '자동(최다)')))
     c1, c2 = st.columns(2)
     use_range = c1.checkbox("취득 기간 제한", value=False, key="slc_use_range")
     start_d = c1.date_input("시작", value=date(2018, 1, 1), key="slc_start", disabled=not use_range)
@@ -465,28 +469,45 @@ def slc_search_section() -> None:
                     end=end_d.isoformat() if use_range else None,
                     polarization=pol,
                 )
-                best, chosen, groups = select_track(scenes, orbit_direction=orbit)
-                st.session_state["slc_result"] = (best, chosen, groups, len(scenes))
+                st.session_state["slc_scenes"] = scenes
+                st.session_state["slc_ntotal"] = len(scenes)
             except Exception as exc:  # noqa: BLE001
-                st.session_state.pop("slc_result", None)
+                st.session_state.pop("slc_scenes", None)
                 st.error(f"검색 실패: {exc}")
 
-    result = st.session_state.get("slc_result")
-    if not result:
+    scenes = st.session_state.get("slc_scenes")
+    if scenes is None:
         return
-    best, chosen, groups, n_total = result
+    n_total = st.session_state.get("slc_ntotal", len(scenes))
+
+    # 양방향: ASC 최다 + DESC 최다 각각 / 단방향: 기존 최다(또는 criteria 방향)
+    if both_dir:
+        a_best, a_chosen, groups = select_track(scenes, orbit_direction="ASCENDING")
+        d_best, d_chosen, _ = select_track(scenes, orbit_direction="DESCENDING")
+        _, _, groups = select_track(scenes)          # 표시는 전체 그룹
+        picks = [(a_best, a_chosen, "ASC"), (d_best, d_chosen, "DESC")]
+        pick_keys = {p[0].key for p in picks if p[0]}
+    else:
+        best, chosen, groups = select_track(scenes, orbit_direction=orbit)
+        picks = [(best, chosen, best.flight_direction[:4] if best else "")]
+        pick_keys = {best.key} if best else set()
+
     st.write(f"총 **{n_total}** 장면({pol}) · 트랙 후보 **{len(groups)}** 개")
-    if not best:
-        st.warning("조건에 맞는 트랙이 없습니다.")
+    if not any(p[0] for p in picks):
+        st.warning("조건에 맞는 트랙이 없습니다"
+                   + (" (상승·하강 중 하나가 없을 수 있음)" if both_dir else "") + ".")
         return
 
-    rows = [{"선택": "✅" if g.key == best.key else "", "방향": g.flight_direction,
+    rows = [{"선택": "✅" if g.key in pick_keys else "", "방향": g.flight_direction,
              "path": g.path, "frame": g.frame, "장면수": g.n_scenes,
              "시작": g.first_date, "끝": g.last_date} for g in groups]
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    st.success(f"선택 트랙: **{best.flight_direction} path {best.path}/frame {best.frame}** "
-               f"— {best.n_scenes}장 ({best.first_date}~{best.last_date})")
-    st.caption("취득일: " + ", ".join(s.date for s in chosen))
+    for grp, chs, tag in picks:
+        if grp:
+            st.success(f"[{tag}] **{grp.flight_direction} path {grp.path}/frame {grp.frame}** "
+                       f"— {grp.n_scenes}장 ({grp.first_date}~{grp.last_date})")
+        else:
+            st.warning(f"[{tag}] 해당 방향 트랙 없음")
 
     # 데이터 가용성 자동 판정 (asc/desc 장면·시간겹침 → 처리 모드 추천)
     from inframon.insar.availability import assess_availability
@@ -500,10 +521,28 @@ def slc_search_section() -> None:
             f"시간겹침 {adv['overlap_days']}일\n- {adv['reason']}")
 
     if st.button("💾 트랙 선별 저장 (레시피)", key="btn_save_track"):
-        sel = TrackSelection.from_selection(best, chosen, polarization=pol)
-        out = save_track_selection(f"{_recipe_dir()}/track_selection.json", sel)
-        st.success(f"저장됨 → `{out}` (SARvey 처리 대상 {sel.n_scenes}장)")
-        st.json(sel.model_dump())
+        saved = []
+        if both_dir:
+            for grp, chs, tag in picks:
+                if not grp:
+                    continue
+                sel = TrackSelection.from_selection(grp, chs, polarization=pol)
+                out = save_track_selection(
+                    f"{_recipe_dir()}/track_selection_{tag.lower()}.json", sel)
+                saved.append((tag, out, sel.n_scenes))
+            # 기본 track_selection.json = 장면 많은 쪽(하위호환)
+            primary = max((p for p in picks if p[0]), key=lambda p: p[0].n_scenes)
+            save_track_selection(f"{_recipe_dir()}/track_selection.json",
+                                 TrackSelection.from_selection(primary[0], primary[1], polarization=pol))
+            st.success("저장됨 → " + " · ".join(f"track_selection_{t.lower()}.json({n}장)"
+                                                for t, _, n in saved)
+                       + f"  · 기본 track_selection.json = {primary[2]}({primary[0].n_scenes}장)")
+        else:
+            grp, chs, _ = picks[0]
+            sel = TrackSelection.from_selection(grp, chs, polarization=pol)
+            out = save_track_selection(f"{_recipe_dir()}/track_selection.json", sel)
+            saved.append(("", out, sel.n_scenes))
+            st.success(f"저장됨 → `{out}` (SARvey 처리 대상 {sel.n_scenes}장)")
 
     # ── ⬇️ 실제 SLC 다운로드 (선택 트랙 장면) — WSL 우선 ──
     st.markdown("**⬇️ 선택 트랙 SLC 다운로드** (실제 Sentinel-1 SLC, GB급)")
