@@ -103,6 +103,13 @@ def main() -> None:
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
+    p.add_argument("--export-bim", default=None, metavar="H5,OUT_PREFIX",
+                   help="InSAR/PSI H5 → BIM/IFC 오버레이(GeoJSON+CSV). 값(LOS속도·연직·누적)+"
+                        "값별 색+EPSG:5186 투영좌표. 예: data/psi.h5,data/bridge_bim")
+    p.add_argument("--bim-crs", default="EPSG:5186",
+                   help="--export-bim IFC 좌표계(기본 EPSG:5186 한국 중부원점).")
+    p.add_argument("--bim-incidence", type=float, default=39.0, metavar="DEG",
+                   help="--export-bim LOS→연직 투영 입사각(H5에 없을 때, 기본 39°).")
     p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
                    help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
     p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
@@ -417,6 +424,24 @@ def main() -> None:
         else:
             print(f"  단일 폴백  : {r['reason']}")
             print(f"  사용 Track : {r['out']}")
+        print("=" * 56)
+        return
+
+    if args.export_bim:
+        from .insar.bim_export import export_insar_for_bim
+        try:
+            _h5, _pref = args.export_bim.split(",")
+        except ValueError:
+            p.error("--export-bim 형식은 H5,OUT_PREFIX 입니다")
+        r = export_insar_for_bim(_h5.strip(), _pref.strip(), ifc_crs=args.bim_crs,
+                                 incidence_deg=args.bim_incidence)
+        print("=" * 56)
+        print("  InSAR → BIM/IFC 오버레이 내보내기")
+        print("=" * 56)
+        print(f"  점 {r['n_points']}개 · CRS {r['ifc_crs']}")
+        print(f"  값(UI 토글): {', '.join(r['values'])}")
+        print(f"  GeoJSON: {r['geojson']}")
+        print(f"  CSV    : {r['csv']}")
         print("=" * 56)
         return
 
