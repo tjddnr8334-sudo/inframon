@@ -1749,6 +1749,65 @@ def status_header(path: str) -> None:
 
 
 # ───────────────────────────────── main ───────────────────────────────
+def tab_psi(start: date) -> None:
+    """④ PSI 방법론 비교 — PS(ADI)·SBAS/DS(소baseline)·QPS(하이브리드) 데크 결과."""
+    st.subheader("④ PSI 방법론 비교 — PS · SBAS(DS) · QPS")
+    st.caption("같은 교량 데크를 세 시계열 방법론으로 처리한 결과. **PS**=진폭분산 ADI<0.25 "
+               "점같은 영구산란체(단일마스터) · **SBAS/DS**=소baseline 네트워크 역산(분포산란체) · "
+               "**QPS**=PS∪DS 하이브리드.")
+    default_h5 = str(Path(data_root()) / "jeongjagyo_psi_compare.h5")
+    if not Path(default_h5).exists():
+        default_h5 = "data/jeongjagyo_psi_compare.h5"
+    h5 = st.text_input("PSI 비교 H5", default_h5, key="psi_h5")
+    if not Path(h5).exists():
+        st.info("PSI 비교 H5 가 없습니다. `psi_pipeline.build_psi_comparison_h5` 로 생성하세요 "
+                "(소baseline 간섭도 + 진폭 tif).")
+        return
+
+    with h5py.File(h5, "r") as f:
+        at = {k: f.attrs[k] for k in f.attrs}
+        lonlat = f["pixel_lonlat"][()]
+        ts = f["ts_sbas_mm"][()]; epochs = [str(e) for e in f["epochs"][()]]
+        vel = f["velocity_mm_yr"][()]; adi = f["adi"][()]
+        coh = f["sbas_coherence"][()]; qps = f["qps_class"][()]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("데크 점", int(at.get("n_points", len(qps))))
+    c2.metric("PS (ADI<0.25)", int(at.get("n_ps", 0)))
+    c3.metric("DS (SBAS γ)", int(at.get("n_ds", 0)))
+    c4.metric("QPS (PS∪DS)", int(at.get("n_qps", 0)))
+    st.caption(f"SBAS 네트워크: rank {int(at.get('network_rank', 0))} · "
+               f"{'완전연결 ✅' if at.get('network_connected') else '⚠️ 미연결'} · "
+               f"epoch당 최소 {int(at.get('min_pairs_per_epoch', 0))}쌍 · "
+               f"임계 ADI<{at.get('ps_adi_max', 0.25):.2f}·γ≥{at.get('ds_coh_min', 0.7):.2f}")
+    if int(at.get("n_ps", 0)) == 0:
+        st.info("ℹ️ **PS 0점** — 교량 데크(도로면)는 점같은 영구산란체가 없어 PS 로는 안 잡힙니다. "
+                "데크에는 **SBAS/DS** 가 적합(분포산란체). PS 는 건물·구조물(강볼트·신축이음)에서 잡힙니다.")
+
+    import numpy as np
+    st.markdown("**SBAS 누적 변위 시계열 (DS/QPS 점)**")
+    sel = qps > 0
+    if sel.any():
+        base = datetime(start.year, start.month, start.day)
+        dts = [datetime.strptime(e, "%Y%m%d") for e in epochs]
+        df = pd.DataFrame({"중앙값": np.median(ts[sel], axis=0),
+                           "평균": ts[sel].mean(axis=0)}, index=dts)
+        st.line_chart(df, height=240)
+        st.caption(f"LOS 누적 변위(mm) · 속도 중앙값 {np.median(vel[sel]):+.2f} mm/yr")
+    else:
+        st.warning("QPS 점이 없습니다.")
+
+    st.markdown("**산란체 분류 (ADI vs SBAS 위상결맞음)**")
+    lbl = np.where(qps == 2, "PS", np.where(qps == 1, "DS", "제외"))
+    sc = pd.DataFrame({"ADI(진폭분산)": adi, "SBAS γ(위상결맞음)": coh, "분류": lbl,
+                       "lon": lonlat[:, 0], "lat": lonlat[:, 1], "속도mm/yr": vel})
+    st.scatter_chart(sc, x="ADI(진폭분산)", y="SBAS γ(위상결맞음)", color="분류", height=300)
+    st.caption("PS 는 ADI<0.25(왼쪽), DS 는 γ≥0.7(위쪽·PS 아님). 데크는 ADI 가 높아 대부분 DS.")
+
+    with st.expander("점별 표 (좌표·속도·분류)"):
+        st.dataframe(sc.round(3), hide_index=True, use_container_width=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
     st.title("🌉 inframon — 통합 인프라 모니터링")
@@ -1857,7 +1916,7 @@ def main() -> None:
     status_header(path)
     st.divider()
 
-    tabs = st.tabs(["① InSAR", "② PINN", "③ FRAM"])
+    tabs = st.tabs(["① InSAR", "② PINN", "③ FRAM", "④ PSI 방법론"])
     with tabs[0]:
         tab_insar(path, start)
     with tabs[1]:
@@ -1870,6 +1929,8 @@ def main() -> None:
             tab_fram(path, start)
         else:
             st.info("project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요.")
+    with tabs[3]:
+        tab_psi(start)
 
 
 if __name__ == "__main__":
