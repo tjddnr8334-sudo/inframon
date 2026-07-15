@@ -1966,20 +1966,22 @@ def main() -> None:
     status_header(path)
     st.divider()
 
-    tabs = st.tabs(["① InSAR", "② PINN", "③ FRAM", "④ PSI 방법론"])
-    with tabs[0]:
+    # 섹션 선택 — st.tabs 는 rerun 시 첫 탭으로 리셋되므로, session_state 에 유지되는
+    # 라디오(key='active_tab')로 대체. 위젯 조작으로 rerun 돼도 현재 섹션이 유지된다.
+    _SECTIONS = ["① InSAR", "② PINN", "③ FRAM", "④ PSI 방법론"]
+    active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
+                      label_visibility="collapsed")
+    st.divider()
+
+    if active == _SECTIONS[0]:
         tab_insar(path, start)
-    with tabs[1]:
-        if Path(path).exists():
-            tab_pinn(path, start)
-        else:
+    elif active == _SECTIONS[1]:
+        tab_pinn(path, start) if Path(path).exists() else \
             st.info("project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요.")
-    with tabs[2]:
-        if Path(path).exists():
-            tab_fram(path, start)
-        else:
+    elif active == _SECTIONS[2]:
+        tab_fram(path, start) if Path(path).exists() else \
             st.info("project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요.")
-    with tabs[3]:
+    elif active == _SECTIONS[3]:
         tab_psi(start)
 
 
