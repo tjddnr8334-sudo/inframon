@@ -1807,6 +1807,41 @@ def tab_psi(start: date) -> None:
     with st.expander("점별 표 (좌표·속도·분류)"):
         st.dataframe(sc.round(3), hide_index=True, use_container_width=True)
 
+    # 🗺️ 변위 색 오버레이 지도 (BIM/IFC 얹기 전 웹지도 미리보기, 값 토글)
+    st.markdown("**🗺️ 변위 색 오버레이 지도** — 값 선택 시 그 값으로 점을 색칠(BIM/IFC 오버레이 프리뷰)")
+    try:
+        import folium
+        from streamlit_folium import st_folium
+        from inframon.insar.bim_export import _hex_colors, _VALUE_SPECS
+    except ImportError:
+        st.info("지도에는 folium·streamlit-folium 이 필요합니다: `pip install -e .[dashboard]`")
+        return
+
+    # 값 계산: LOS 속도·연직(입사각 39° 가정)·누적 변위
+    cum = (ts[:, -1] - ts[:, 0]) if ts.ndim == 2 else np.full(len(vel), np.nan)
+    vert = vel / np.cos(np.radians(39.0))
+    valmap = {"LOS 속도(mm/yr)": ("los_velocity_mm_yr", vel),
+              "연직 속도(mm/yr)": ("vertical_velocity_mm_yr", vert),
+              "누적 변위(mm)": ("cumulative_mm", cum)}
+    vlabel = st.radio("색 기준 값", list(valmap), horizontal=True, key="bim_val")
+    vkey, varr = valmap[vlabel]
+    cmap_name, kind, _ = _VALUE_SPECS[vkey]
+    cols, vmin, vmax = _hex_colors(varr, cmap_name, kind)
+
+    lat0 = float(np.median(lonlat[:, 1])); lon0 = float(np.median(lonlat[:, 0]))
+    m = folium.Map(location=[lat0, lon0], zoom_start=16, tiles="OpenStreetMap")
+    for i in range(len(varr)):
+        c = cols[i]
+        folium.CircleMarker(
+            [float(lonlat[i, 1]), float(lonlat[i, 0])], radius=5, color=c, weight=1,
+            fill=True, fill_color=c, fill_opacity=0.85,
+            tooltip=f"{lbl[i]} · {vlabel} {varr[i]:+.2f}").add_to(m)
+    st_folium(m, height=430, key="bim_map", returned_objects=[])
+    # 색 범례(발산맵: 파랑=+ / 빨강=−)
+    st.caption(f"🎨 {vlabel} · 범위 [{vmin:+.1f}, {vmax:+.1f}] · 발산맵 RdBu"
+               "(🔵파랑=+상승/접근, 🔴빨강=−침하/이격) · **LOS 기준**. "
+               "IFC 지오레퍼런싱(IfcMapConversion) 오면 이 좌표를 IFC 로컬로 정합해 부재 색칠.")
+
 
 def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
