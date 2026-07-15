@@ -110,6 +110,8 @@ def main() -> None:
                    help="--export-bim IFC 좌표계(기본 EPSG:5186 한국 중부원점).")
     p.add_argument("--bim-incidence", type=float, default=39.0, metavar="DEG",
                    help="--export-bim LOS→연직 투영 입사각(H5에 없을 때, 기본 39°).")
+    p.add_argument("--bim-fram", default=None, metavar="PROJECT_H5",
+                   help="--export-bim CRI 색: /fram/CRI 있는 project.h5 를 InSAR 점에 최근접 매핑.")
     p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
                    help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
     p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
@@ -434,7 +436,8 @@ def main() -> None:
         except ValueError:
             p.error("--export-bim 형식은 H5,OUT_PREFIX 입니다")
         r = export_insar_for_bim(_h5.strip(), _pref.strip(), ifc_crs=args.bim_crs,
-                                 incidence_deg=args.bim_incidence)
+                                 incidence_deg=args.bim_incidence,
+                                 fram_project_h5=args.bim_fram)
         print("=" * 56)
         print("  InSAR → BIM/IFC 오버레이 내보내기")
         print("=" * 56)

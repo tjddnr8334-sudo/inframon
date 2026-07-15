@@ -67,8 +67,40 @@ def _load_points(h5) -> dict:
             "cls": cls, "inc": inc, "epochs": epochs, "attrs": attrs}
 
 
+def map_cri_to_points(lonlat, fram_project_h5, *, reduce: str = "max",
+                      max_dist_m: float = 150.0) -> np.ndarray:
+    """FRAM CRI(점별×시점, /fram/CRI)를 임의 점(lonlat)에 **최근접 매핑**.
+
+    project.h5 의 /insar/xyz(lon,lat) + /fram/CRI[N,M] 에서 시점 축소(max=최악·last·mean)
+    후, 각 입력 점을 최근접 FRAM 점의 CRI 로 채운다. max_dist_m 초과는 NaN. PSI/BIM 점군이
+    FRAM 을 돌린 점군과 달라도(부분집합·다른 밀도) 공간 정합해 위험도 색을 얻는다.
+    """
+    import h5py
+
+    lonlat = np.asarray(lonlat, float)
+    with h5py.File(str(fram_project_h5), "r") as f:
+        if "fram" not in f or "CRI" not in f["fram"]:
+            raise ValueError("project.h5 에 /fram/CRI 가 없습니다 — 먼저 FRAM 을 실행하세요.")
+        cri = np.asarray(f["fram"]["CRI"][()], float)             # [N,M]
+        xyz = np.asarray(f["insar"]["xyz"][()], float)            # [N,3] (lon,lat,..)
+    per_pt = ({"max": cri.max, "mean": cri.mean}.get(reduce, None)
+              or (lambda axis: cri[:, -1]))(axis=1) if cri.ndim == 2 else cri
+    flon, flat = xyz[:, 0], xyz[:, 1]
+    out = np.full(len(lonlat), np.nan)
+    lat0 = float(np.median(flat))
+    cosl = np.cos(np.radians(lat0))
+    for i, (lo, la) in enumerate(lonlat):
+        d2 = ((flon - lo) * cosl) ** 2 + (flat - la) ** 2
+        j = int(np.argmin(d2))
+        dist_m = float(np.sqrt(d2[j])) * 111000.0
+        if dist_m <= max_dist_m:
+            out[i] = per_pt[j]
+    return out
+
+
 def export_insar_for_bim(h5, out_prefix, *, ifc_crs: str = "EPSG:5186",
-                         cri=None, incidence_deg: float | None = None) -> dict:
+                         cri=None, fram_project_h5=None,
+                         incidence_deg: float | None = None) -> dict:
     """InSAR H5 → BIM 오버레이 GeoJSON+CSV. 반환: 요약(경로·값범위·범례).
 
     · WGS84 lon/lat + IFC CRS(기본 EPSG:5186) 투영좌표 동시 저장.
@@ -87,7 +119,12 @@ def export_insar_for_bim(h5, out_prefix, *, ifc_crs: str = "EPSG:5186",
     inc_arr = (np.asarray(inc, float) if inc is not None
                else (np.full(n, incidence_deg) if incidence_deg else None))
     vertical = (vel / np.cos(np.radians(inc_arr)) if inc_arr is not None else np.full(n, np.nan))
-    cri_arr = (np.asarray(cri, float) if cri is not None else np.full(n, np.nan))
+    if cri is not None:
+        cri_arr = np.asarray(cri, float)
+    elif fram_project_h5:                                 # FRAM 프로젝트에서 점별 CRI 최근접 매핑
+        cri_arr = map_cri_to_points(np.column_stack([lon, lat]), fram_project_h5)
+    else:
+        cri_arr = np.full(n, np.nan)
 
     values = {"los_velocity_mm_yr": vel, "vertical_velocity_mm_yr": vertical,
               "cumulative_mm": cumulative, "cri": cri_arr}

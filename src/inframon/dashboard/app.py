@@ -1823,6 +1823,17 @@ def tab_psi(start: date) -> None:
     valmap = {"LOS 속도(mm/yr)": ("los_velocity_mm_yr", vel),
               "연직 속도(mm/yr)": ("vertical_velocity_mm_yr", vert),
               "누적 변위(mm)": ("cumulative_mm", cum)}
+    # CRI(FRAM 위험도) 색 옵션 — FRAM project.h5(/fram/CRI) 주면 점별 최근접 매핑
+    fram_h5 = st.text_input("FRAM project.h5 (CRI 색, 선택)", "data/jeongjagyo_fram.h5",
+                            key="bim_fram", help="/fram/CRI 를 InSAR 점에 최근접 매핑해 위험도로 색칠.")
+    if fram_h5 and Path(fram_h5).exists():
+        try:
+            from inframon.insar.bim_export import map_cri_to_points
+            cri_arr = map_cri_to_points(lonlat, fram_h5, reduce="max")
+            if np.isfinite(cri_arr).any():
+                valmap["CRI(FRAM 위험도)"] = ("cri", cri_arr)
+        except (ValueError, OSError) as exc:
+            st.caption(f"CRI 매핑 불가: {exc}")
     vlabel = st.radio("색 기준 값", list(valmap), horizontal=True, key="bim_val")
     vkey, varr = valmap[vlabel]
     cmap_name, kind, _ = _VALUE_SPECS[vkey]
@@ -1837,10 +1848,14 @@ def tab_psi(start: date) -> None:
             fill=True, fill_color=c, fill_opacity=0.85,
             tooltip=f"{lbl[i]} · {vlabel} {varr[i]:+.2f}").add_to(m)
     st_folium(m, height=430, key="bim_map", returned_objects=[])
-    # 색 범례(발산맵: 파랑=+ / 빨강=−)
-    st.caption(f"🎨 {vlabel} · 범위 [{vmin:+.1f}, {vmax:+.1f}] · 발산맵 RdBu"
-               "(🔵파랑=+상승/접근, 🔴빨강=−침하/이격) · **LOS 기준**. "
-               "IFC 지오레퍼런싱(IfcMapConversion) 오면 이 좌표를 IFC 로컬로 정합해 부재 색칠.")
+    if kind == "unit":      # CRI: 초록=안전 / 빨강=위험
+        st.caption(f"🎨 {vlabel} · 범위 [{vmin:.1f}, {vmax:.1f}] · RdYlGn_r"
+                   "(🟢초록=안전, 🔴빨강=위험) · FRAM 위험도. "
+                   "IFC 지오레퍼런싱 오면 이 좌표를 IFC 로컬로 정합해 부재 색칠.")
+    else:                   # 변위/속도: 발산맵
+        st.caption(f"🎨 {vlabel} · 범위 [{vmin:+.1f}, {vmax:+.1f}] · 발산맵 RdBu"
+                   "(🔵파랑=+상승/접근, 🔴빨강=−침하/이격) · **LOS 기준**. "
+                   "IFC 지오레퍼런싱(IfcMapConversion) 오면 이 좌표를 IFC 로컬로 정합해 부재 색칠.")
 
 
 def main() -> None:
