@@ -393,29 +393,69 @@ def _win2wsl(p: str) -> str:
     return p.replace("\\", "/")
 
 
-def wsl_status(target_dir: str = "~") -> dict:
-    """WSL2 가용성·도구·Earthdata 인증 + 다운로드 폴더 여유 용량(GB)을 점검."""
+def linux_shell() -> tuple[list[str], str] | None:
+    """리눅스 셸 명령을 실행할 (argv 접두, 모드). 도달 불가면 None.
+
+    ISCE2/SARvey 는 리눅스 도구다. Windows 에서는 WSL2 를 경유해야 하지만,
+    **네이티브 리눅스에서는 그냥 bash 로 직접** 실행하면 된다. `wsl` 실행파일
+    유무만 보고 판단하면 정작 리눅스에서 "환경 없음"이 되므로 OS 를 먼저 본다.
+    """
+    if sys.platform != "win32":
+        bash = shutil.which("bash")
+        return ([bash, "-lc"], "native") if bash else None
+    if shutil.which("wsl"):
+        return (["wsl", "-e", "bash", "-lc"], "wsl")
+    return None
+
+
+def _host2linux(p: str) -> str:
+    """호스트 경로 → 리눅스 셸에서 보이는 경로. 네이티브면 그대로, Windows 면 /mnt/…."""
+    return _win2wsl(p) if sys.platform == "win32" else str(Path(p).resolve())
+
+
+def linux_status(target_dir: str = "~") -> dict:
+    """리눅스 처리환경(네이티브 또는 WSL2) 가용성·도구·Earthdata 인증·여유 용량(GB) 점검.
+
+    반환 `mode`: "native"(리눅스에서 직접) | "wsl"(Windows→WSL2) | ""(도달 불가).
+    """
     import re
     import subprocess
-    out = {"wsl": False, "asf": False, "netrc": False, "free_gb": None, "detail": ""}
-    try:
-        r = subprocess.run(
-            ["wsl", "-e", "bash", "-lc",
-             "echo WSL_OK; python3 -c 'import asf_search' 2>/dev/null && echo ASF_OK; "
+    out = {"linux": False, "mode": "", "asf": False, "netrc": False,
+           "free_gb": None, "detail": ""}
+    shell = linux_shell()
+    if shell is None:
+        out["detail"] = ("리눅스 셸에 도달할 수 없습니다"
+                         + (" — WSL2 를 설치하세요(`wsl --install`)."
+                            if sys.platform == "win32" else " — bash 를 찾을 수 없습니다."))
+        return out
+    prefix, mode = shell
+    probe = ("echo LINUX_OK; python3 -c 'import asf_search' 2>/dev/null && echo ASF_OK; "
              "grep -q urs.earthdata ~/.netrc 2>/dev/null && echo NETRC_OK; "
              f"mkdir -p {target_dir} 2>/dev/null; "
-             f"echo FREEGB:$(df -BG --output=avail {target_dir} 2>/dev/null | tail -1 | tr -dc '0-9')"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+             f"echo FREEGB:$(df -BG --output=avail {target_dir} 2>/dev/null | tail -1 | tr -dc '0-9')")
+    try:
+        r = subprocess.run([*prefix, probe], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
         s = r.stdout or ""
-        out["wsl"] = "WSL_OK" in s
+        out["linux"] = "LINUX_OK" in s
+        out["mode"] = mode if out["linux"] else ""
         out["asf"] = "ASF_OK" in s
         out["netrc"] = "NETRC_OK" in s
         mfree = re.search(r"FREEGB:(\d+)", s)
         out["free_gb"] = int(mfree.group(1)) if mfree and mfree.group(1) else None
         out["detail"] = s.strip() or (r.stderr or "").strip()
-    except Exception as exc:  # noqa: BLE001 (wsl 미설치 등)
+    except Exception as exc:  # noqa: BLE001 (셸 미설치·타임아웃 등)
         out["detail"] = str(exc)
     return out
+
+
+def bundled_script(name: str) -> Path:
+    """패키지에 동봉된 보조 스크립트(inframon/insar/wsl_scripts/<name>) 경로.
+
+    CWD 상대경로로 찾으면 더블클릭 실행(작업폴더가 임의)에서 깨지므로 패키지 기준으로 찾는다.
+    """
+    from inframon import insar
+    return Path(insar.__file__).resolve().parent / "wsl_scripts" / name
 
 
 def slc_search_section() -> None:
@@ -558,17 +598,18 @@ def slc_search_section() -> None:
 
     # ── ⬇️ 실제 SLC 다운로드 (선택 트랙 장면) — WSL 우선 ──
     st.markdown("**⬇️ 선택 트랙 SLC 다운로드** (실제 Sentinel-1 SLC, GB급)")
-    st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 WSL2 에서 하므로, SLC 도 WSL 에 받는 것이 정석입니다. "
-               "먼저 WSL 가용성을 확인합니다.")
-    if st.button("WSL 환경 확인", key="btn_wsl_check"):
-        with st.spinner("WSL2 점검 중…"):
-            st.session_state["wsl_status"] = wsl_status()
-    wsl = st.session_state.get("wsl_status")
+    st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 리눅스 도구입니다. 리눅스에서는 그대로, "
+               "Windows 에서는 WSL2 를 거쳐 처리하며 SLC 도 그 쪽에 받는 것이 정석입니다.")
+    if st.button("처리환경 확인", key="btn_wsl_check"):
+        with st.spinner("리눅스 처리환경 점검 중…"):
+            st.session_state["linux_status"] = linux_status()
+    wsl = st.session_state.get("linux_status")
     if wsl is None:
-        st.info("‘WSL 환경 확인’을 눌러 WSL2·asf_search·Earthdata 인증 준비도를 점검하세요.")
+        st.info("‘처리환경 확인’을 눌러 리눅스(또는 WSL2)·asf_search·Earthdata 인증 준비도를 점검하세요.")
         return
     free = wsl.get("free_gb")
-    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · asf_search {'✅' if wsl['asf'] else '❌'} · "
+    envlabel = {"native": "리눅스(네이티브)", "wsl": "WSL2"}.get(wsl.get("mode"), "리눅스 환경")
+    st.write(f"{envlabel} {'✅' if wsl['linux'] else '❌'} · asf_search {'✅' if wsl['asf'] else '❌'} · "
              f"Earthdata(~/.netrc) {'✅' if wsl['netrc'] else '❌'} · "
              f"여유 용량 {'❓' if free is None else f'{free} GB'}")
 
@@ -616,49 +657,56 @@ def slc_search_section() -> None:
                  f"장면 수를 {max(1, int((free-5)//4))}장 이하로 줄이거나 공간을 확보하세요.")
     st.caption("※ 다운로드 후 ISCE2 코레지·MiaplPy 처리엔 SLC 대비 추가 공간(대략 2~3배)이 더 필요합니다.")
 
-    if wsl["wsl"]:
-        # ── WSL 경로: WSL 의 asf_search + ~/.netrc 로 WSL 폴더에 다운로드(처리 위치) ──
-        wsl_dir = st.text_input("WSL 다운로드 폴더", "~/insar_dl/SLC", key="wsl_dl_dir")
+    if wsl["linux"]:
+        # ── 리눅스 경로(네이티브 또는 WSL): 그 쪽 asf_search + ~/.netrc 로 처리 위치에 직접 받는다 ──
+        wsl_dir = st.text_input(f"{envlabel} 다운로드 폴더", "~/insar_dl/SLC", key="wsl_dl_dir")
         ready = wsl["asf"] and wsl["netrc"] and enough and bool(urls)
         if not (wsl["asf"] and wsl["netrc"]):
-            st.warning("WSL 에 asf_search 또는 Earthdata ~/.netrc 가 없습니다. "
+            st.warning(f"{envlabel} 에 asf_search 또는 Earthdata ~/.netrc 가 없습니다. "
                        "`python3 -m pip install --user asf_search` + ~/.netrc(urs.earthdata) 설정 필요.")
         if not urls:
             st.info("다운로드할 장면을 선택하세요.")
-        if st.button(f"⬇️ WSL 로 {len(sel_scenes)}장 다운로드", key="btn_wsl_dl", type="primary", disabled=not ready):
+        if st.button(f"⬇️ {envlabel} 로 {len(sel_scenes)}장 다운로드", key="btn_wsl_dl",
+                     type="primary", disabled=not ready):
             import subprocess
-            urls_win = Path("data/_dl_urls.txt"); urls_win.parent.mkdir(parents=True, exist_ok=True)
-            urls_win.write_text("\n".join(urls), encoding="utf-8")
-            dl_py = _win2wsl(str(Path("scripts/wsl_sarvey/dl_urls.py")))
-            urls_wsl = _win2wsl(str(urls_win))
-            cmd = ["wsl", "-e", "bash", "-lc",
-                   f"python3 {dl_py} --urls {urls_wsl} --out {wsl_dir}"]
-            if not urls:
-                st.error("다운로드 URL이 없습니다(검색·선별 먼저).")
-            else:
-                with st.spinner(f"WSL 에서 {len(urls)}장 다운로드 중… (~{est_gb:.0f}GB, 시간 소요)"):
-                    try:
-                        r = subprocess.run(cmd, capture_output=True, text=True,
-                                           encoding="utf-8", errors="replace", timeout=7200)
-                        out = (r.stdout or "") + (r.stderr or "")
-                        tail = out.strip().splitlines()[-8:]
-                        if "DONE" in (r.stdout or ""):
-                            st.success(f"완료 → WSL `{wsl_dir}`")
-                        elif r.returncode != 0:
-                            st.warning(f"WSL 종료코드 {r.returncode} — 로그 확인:")
-                        else:
-                            st.warning("종료(완료 표식 없음) — 로그 확인:")
-                        st.code("\n".join(tail) or "(출력 없음)")
-                        st.caption("다음(WSL): `scripts/wsl_sarvey/20_stack_isce.sh` (ISCE2) → MiaplPy → SARvey.")
-                    except Exception as exc:  # noqa: BLE001
-                        st.error(f"WSL 다운로드 실패: {exc}")
+
+            # 데이터 루트 기준으로 쓴다 — CWD 상대경로는 더블클릭 실행에서 엉뚱한 곳에 떨어진다.
+            urls_host = Path(data_root()) / "_dl_urls.txt"
+            urls_host.parent.mkdir(parents=True, exist_ok=True)
+            urls_host.write_text("\n".join(urls), encoding="utf-8")
+            dl_py = _host2linux(str(bundled_script("dl_urls.py")))
+            urls_lin = _host2linux(str(urls_host))
+            prefix, _mode = linux_shell()
+            cmd = [*prefix, f"python3 {dl_py} --urls {urls_lin} --out {wsl_dir}"]
+            with st.spinner(f"{envlabel} 에서 {len(urls)}장 다운로드 중… (~{est_gb:.0f}GB, 시간 소요)"):
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       encoding="utf-8", errors="replace", timeout=7200)
+                    out = (r.stdout or "") + (r.stderr or "")
+                    tail = out.strip().splitlines()[-8:]
+                    if "DONE" in (r.stdout or ""):
+                        st.success(f"완료 → `{wsl_dir}`")
+                    elif r.returncode != 0:
+                        st.warning(f"종료코드 {r.returncode} — 로그 확인:")
+                    else:
+                        st.warning("종료(완료 표식 없음) — 로그 확인:")
+                    st.code("\n".join(tail) or "(출력 없음)")
+                    st.caption("다음: `scripts/wsl_sarvey/20_stack_isce.sh` (ISCE2) → MiaplPy → SARvey.")
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"다운로드 실패: {exc}")
     else:
-        st.warning("WSL2 가 없어 실 SAR 처리(ISCE2/SARvey)는 불가합니다. 임시로 Windows 에 받을 수는 있으나 "
-                   "처리하려면 결국 WSL2 가 필요합니다.")
-        with st.expander("Windows 로 받기(폴백, 토큰 필요)"):
+        st.warning("리눅스 처리환경에 도달할 수 없어 실 SAR 처리(ISCE2/SARvey)는 불가합니다. "
+                   + ("WSL2 를 설치하세요(`wsl --install`). 임시로 Windows 에 받을 수는 있으나 "
+                      "처리하려면 결국 WSL2 가 필요합니다."
+                      if sys.platform == "win32" else
+                      "bash 를 찾을 수 없습니다. 아래로 직접 받을 수는 있습니다."))
+        if wsl.get("detail"):
+            with st.expander("진단 상세"):
+                st.code(wsl["detail"])
+        with st.expander("이 컴퓨터로 직접 받기(폴백, 토큰 필요)"):
             dl_dir = st.text_input("다운로드 폴더", "data/slc", key="slc_dl_dir")
             token = st.text_input("Earthdata 토큰", type="password", key="edl_token")
-            if st.button(f"⬇️ Windows 로 {len(sel_scenes)}장 다운로드", key="btn_slc_dl_win",
+            if st.button(f"⬇️ 이 컴퓨터로 {len(sel_scenes)}장 다운로드", key="btn_slc_dl_win",
                          disabled=not (enough and urls)):
                 import os
 
@@ -1014,29 +1062,32 @@ def asc_desc_section() -> None:
 
 
 def aux_data_section() -> None:
-    """F 준비 — ISCE2/SARvey 보조데이터(궤도·DEM·AUX_CAL) 준비. 실 처리는 WSL2."""
+    """F 준비 — ISCE2/SARvey 보조데이터(궤도·DEM·AUX_CAL) 준비. 실 처리는 리눅스(또는 WSL2)."""
     import subprocess
-    st.caption("ISCE2 코레지에 필요: **궤도(POEORB)·DEM·AUX_CAL**. SLC 처럼 WSL 에 준비합니다. "
+    st.caption("ISCE2 코레지에 필요: **궤도(POEORB)·DEM·AUX_CAL**. SLC 와 같은 리눅스 쪽에 준비합니다. "
                "(ERA5 온도·강수·습도는 🌧️ master 섹션 + PINN 🌡️ 열팽창에서 처리)")
-    if st.button("WSL 환경 확인", key="btn_wsl_aux"):
-        with st.spinner("WSL 점검 중…"):
-            st.session_state["wsl_status"] = wsl_status()
-    wsl = st.session_state.get("wsl_status")
+    if st.button("처리환경 확인", key="btn_wsl_aux"):
+        with st.spinner("리눅스 처리환경 점검 중…"):
+            st.session_state["linux_status"] = linux_status()
+    wsl = st.session_state.get("linux_status")
     if not wsl:
-        st.info("‘WSL 환경 확인’을 눌러 WSL2 준비도·여유 용량을 점검하세요.")
+        st.info("‘처리환경 확인’을 눌러 리눅스(또는 WSL2) 준비도·여유 용량을 점검하세요.")
         return
-    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · 여유 {wsl.get('free_gb', '?')} GB")
-    if not wsl["wsl"]:
-        st.warning("WSL2 가 없어 ISCE2 보조데이터 준비 불가.")
+    envlabel = {"native": "리눅스(네이티브)", "wsl": "WSL2"}.get(wsl.get("mode"), "리눅스 환경")
+    st.write(f"{envlabel} {'✅' if wsl['linux'] else '❌'} · 여유 {wsl.get('free_gb', '?')} GB")
+    if not wsl["linux"]:
+        st.warning("리눅스 처리환경에 도달할 수 없어 ISCE2 보조데이터 준비 불가."
+                   + (" WSL2 를 설치하세요(`wsl --install`)." if sys.platform == "win32" else ""))
         return
 
     slc_dir = st.text_input("SLC 폴더(궤도 날짜 기준)", "~/insar_dl/SLC", key="aux_slc")
     orbit_dir, dem_dir = "~/insar_dl/orbits", "~/insar_dl/DEM"
 
     def _run(title, cmd):
-        with st.spinner(f"{title} 실행 중… (WSL)"):
+        prefix, _mode = linux_shell()
+        with st.spinner(f"{title} 실행 중… ({envlabel})"):
             try:
-                r = subprocess.run(["wsl", "-e", "bash", "-lc", cmd], capture_output=True,
+                r = subprocess.run([*prefix, cmd], capture_output=True,
                                    text=True, encoding="utf-8", errors="replace", timeout=3600)
                 out = (r.stdout or "") + (r.stderr or "")
                 (st.success if r.returncode == 0 else st.warning)(f"{title} 종료코드 {r.returncode}")

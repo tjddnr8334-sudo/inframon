@@ -39,8 +39,18 @@ for pkg in ("streamlit", "numpy", "pandas", "pyarrow", "plotly", "altair",
     except Exception:  # noqa: BLE001 — 설치 안 된 선택 의존성은 건너뜀
         pass
 
-# 3) 우리 패키지(.py 포함) — streamlit 이 app.py 를 '스크립트'로 실행하므로 .py 도 데이터로 동봉
-datas += collect_data_files("inframon", include_py_files=True)
+# 3) 우리 패키지(.py 포함) — streamlit 이 app.py 를 '스크립트'로 실행하므로 .py 도 데이터로 동봉.
+#    collect_data_files("inframon") 는 **설치된** 패키지를 보므로, editable 설치가 다른
+#    체크아웃을 가리키면 엉뚱한 소스를 번들한다. 항상 이 spec 옆의 src/ 를 쓴다.
+from pathlib import Path as _Path
+
+_PKG = _Path(SPECPATH) / "src" / "inframon"
+if not _PKG.is_dir():
+    raise SystemExit(f"소스를 찾을 수 없습니다: {_PKG}")
+for _f in _PKG.rglob("*"):
+    if _f.is_file() and "__pycache__" not in _f.parts:
+        datas.append((str(_f), str(_Path("inframon") / _f.relative_to(_PKG).parent)))
+
 try:
     datas += copy_metadata("inframon")
 except Exception:  # noqa: BLE001
@@ -66,16 +76,53 @@ a = Analysis(
               "prefect",
               # asf_search 의 '다운로드 전용' 무거운 의존(검색엔 불필요·지연로드) → 제외해 용량 절감
               "zarr", "s3fs", "rioxarray", "xarray", "fsspec", "remotezip",
-              "h5netcdf", "dask"],  # (uvicorn·h5py 는 필요하므로 제외 금지!)
+              "h5netcdf", "dask",
+              # ── 아래는 inframon 이 import 하지 않는데도 빌드환경에 깔려 있다는 이유만으로
+              #    PyInstaller 훅이 쓸어담던 것들(뷰어 용량의 절반가량). 코드 근거:
+              #    cv2·polars·geopandas·fiona·pyogrio·sklearn·skimage → src 전체에 참조 0건.
+              #    scipy → gnss_ngl.py 의 theilslopes(try/except + 순수 파이썬 폴백)와
+              #            doctor.py 의 가용성 '이름 조회'뿐이라 없어도 동작한다.
+              #    실 CV/PINN 기능은 어차피 torch 를 제외한 뷰어 빌드의 범위 밖이다.
+              "cv2", "polars", "geopandas", "fiona", "pyogrio", "sklearn",
+              "skimage", "scipy", "sympy", "numba", "llvmlite",
+              "IPython", "notebook", "jupyter", "pytest", "setuptools",
+              ],  # (uvicorn·h5py·pyarrow·pandas 는 streamlit 이 쓰므로 제외 금지!)
     noarchive=False,
 )
+
+# 5) 훅이 끌어온 바이너리 중 **런타임에 절대 안 쓰이는 것**을 덜어낸다.
+#    excludes 는 파이썬 모듈 단위라 이런 동반 DLL 은 걸러지지 않는다.
+_DROP_BINARIES = (
+    "arrow_flight",      # Arrow Flight = gRPC 원격전송. st.dataframe 직렬화와 무관.
+    "arrow_substrait",   # Substrait 쿼리계획 IR. 미사용.
+    "arrow_dataset",     # 파일시스템 데이터셋 스캔. 미사용.
+    "arrow_acero",       # 스트리밍 실행엔진. 미사용.
+)
+
+
+def _keep(entry) -> bool:
+    name = entry[0].lower().replace("\\", "/").split("/")[-1]
+    if name.endswith(".lib"):
+        return False  # 링크타임 import 라이브러리 — 런타임엔 죽은 무게
+    return not any(d in name for d in _DROP_BINARIES)
+
+
+_before = len(a.binaries)
+a.binaries = [b for b in a.binaries if _keep(b)]
+print(f"[inframon.spec] 불필요 바이너리 {_before - len(a.binaries)}개 제외")
+
 pyz = PYZ(a.pure)
+
+# 아이콘: Windows 는 .ico, macOS 는 .icns, 리눅스 ELF 는 아이콘 임베드 개념이 없다
+# (.desktop 파일이 .png 를 가리킨다) → 리눅스에선 넘기지 않는다.
+import sys as _sys
+_icon = "assets/inframon.ico" if _sys.platform in ("win32", "darwin") else None
 
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
     name="inframon",
     console=False,         # 뷰어 = windowed(더블클릭 시 콘솔창 없이 앱 창만).
-    icon="assets/inframon.ico",
+    icon=_icon,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="inframon")

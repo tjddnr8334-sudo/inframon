@@ -35,7 +35,12 @@ Repository = "https://github.com/tjddnr8334-sudo/inframon"
 cv = ["scipy>=1.11", "scikit-image>=0.22", "imageio>=2.31", "pillow>=10",
       "transformers>=4.40", "timm>=0.9", "torch>=2.2"]
 pinn = ["torch>=2.2"]
+# ⚠ 리눅스(또는 WSL2) + conda 전용. gdal·mintpy 는 Windows 용 PyPI 휠이 없어
+#   `pip install .[insar]` 가 Windows 에서 실패한다 → environment.yml 로 conda 설치할 것.
+#   Windows 네이티브에서 InSAR 상류를 돌리려면 대신 ESA SNAP 백엔드(--snap-insar)를 쓴다.
 insar = ["mintpy", "rasterio>=1.3", "gdal"]
+# Windows 네이티브 InSAR 경로(SNAP gpt 호출) — pip 로 설치 가능한 것만.
+snap = ["rasterio>=1.3"]
 # SLC 검색·선별(C·D)만 — 가벼운 pip 패키지라 Windows 에서도 설치 가능(insar 본체와 분리)
 search = ["asf_search>=7.0"]
 dashboard = ["streamlit>=1.33", "plotly>=5.20", "folium>=0.16", "streamlit-folium>=0.20"]
@@ -52,6 +57,14 @@ inframon = "inframon.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# 런타임에 실제로 열리는 비-파이썬 자산 — 반드시 함께 설치돼야 한다.
+# (누락되면 wheel/frozen 설치에서 gpt 그래프를 못 찾아 "gpt rc=1" 로만 실패한다)
+[tool.setuptools.package-data]
+# graphs/*.xml  = SNAP gpt 그래프
+# wsl_scripts/  = 리눅스/WSL 쪽 python3 이 '스크립트로' 실행하는 파일(우리가 import 하지 않음)
+"inframon.insar" = ["graphs/*.xml", "wsl_scripts/*.py"]
+"inframon.fram" = ["*.json"]
 
 [tool.ruff]
 line-length = 100

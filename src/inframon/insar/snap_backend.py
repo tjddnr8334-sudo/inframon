@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 WAVELENGTH_M = 0.05546576  # Sentinel-1 C-band
-_GRAPH_TC = "coreg_ifg_tc.xml"  # scripts/snap/ 의 코레지+간섭도+TC 그래프
+_GRAPH_TC = "coreg_ifg_tc.xml"  # graphs/ 의 코레지+간섭도+TC 그래프
 
 # gpt 실행파일 후보(Windows 우선, 리눅스/PATH 폴백).
 _GPT_CANDIDATES = (
@@ -288,7 +288,10 @@ def run_pair(gpt: str, graph: str, ref: str, sec: str, burst: BurstLoc,
         with open(log_file, "w", encoding="utf-8") as lf:
             p = subprocess.run(args, stdout=lf, stderr=subprocess.STDOUT, timeout=timeout)
         return p.returncode
-    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    # encoding 명시 필수 — 한글 Windows 는 locale(cp949)로 디코딩하는데 gpt 출력은 UTF-8
+    # 이라 UnicodeDecodeError 가 subprocess.run 안에서 터진다.
+    p = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
+                       encoding="utf-8", errors="replace")
     return p.returncode
 
 
@@ -311,7 +314,7 @@ def process_star_network(
     scenes = [str(s) for s in scenes]
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     gpt = gpt or find_gpt()
-    graph = str((Path(graph_dir) if graph_dir else _default_graph_dir()) / _GRAPH_TC)
+    graph = _resolve_graph(graph_dir, _GRAPH_TC)
 
     ref = str(reference) if reference else min(scenes, key=scene_date)
     secs = [s for s in scenes if str(s) != str(ref)]
@@ -341,16 +344,78 @@ def process_star_network(
                 continue
             rc = run_pair(gpt, graph, ref, sec, burst, dem, tif, log_file=log)
             ok = rc == 0 and Path(tif).exists()
-            res.pairs.append(SnapPairResult(rd, sd, tif, ok,
-                                            "" if ok else f"gpt rc={rc}"))
+            if ok:
+                note = ""
+            elif rc == 0:  # gpt 는 성공했다는데 산출물이 없다 — 조용한 실패
+                note = f"gpt 는 성공(rc=0)했으나 산출물이 없습니다: {tif} — 로그: {log}"
+            else:
+                note = explain_gpt_failure(rc, log)
+            res.pairs.append(SnapPairResult(rd, sd, tif, ok, note))
         except (OSError, subprocess.SubprocessError) as e:
             res.pairs.append(SnapPairResult(rd, sd, tif, False, str(e)))
     return res
 
 
+#: gpt 로그에서 실패 원인을 담고 있을 법한 줄(대소문자 무시).
+_GPT_ERROR_MARKERS = ("error:", "exception", "severe", "cannot ", "unable to",
+                      "no such file", "out of memory", "java.lang.")
+
+
+def explain_gpt_failure(rc: int, log_file: str | Path | None) -> str:
+    """gpt 실패를 사람이 읽을 수 있는 사유로 바꾼다.
+
+    `gpt rc=1` 만으로는 사용자가 아무것도 할 수 없다. 로그에서 에러 표식이 있는
+    마지막 줄을 뽑아 붙이고, 흔한 원인은 조치까지 덧붙인다. 로그가 없거나 표식을
+    못 찾으면 최소한 로그 경로를 알려 준다.
+    """
+    hint = ""
+    tail = ""
+    try:
+        if log_file and Path(log_file).exists():
+            lines = [ln.strip() for ln in
+                     Path(log_file).read_text(encoding="utf-8", errors="replace").splitlines()
+                     if ln.strip()]
+            hits = [ln for ln in lines if any(m in ln.lower() for m in _GPT_ERROR_MARKERS)]
+            tail = (hits[-1] if hits else lines[-1])[:300] if lines else ""
+    except OSError:
+        tail = ""
+
+    low = tail.lower()
+    if "out of memory" in low or "java.lang.OutOfMemory".lower() in low:
+        hint = " → SNAP 힙을 늘리세요(gpt.vmoptions 의 -Xmx)."
+    elif "no such file" in low or "cannot read" in low:
+        hint = " → 입력 SLC/DEM 경로를 확인하세요."
+    elif "dem" in low and ("download" in low or "not available" in low):
+        hint = " → DEM 자동 다운로드 실패. 네트워크나 DEM 이름을 확인하세요."
+
+    if tail:
+        return f"gpt 실패(rc={rc}): {tail}{hint}"
+    return (f"gpt 실패(rc={rc}) — 원인 표식을 찾지 못했습니다. 전체 로그: {log_file}"
+            if log_file else f"gpt 실패(rc={rc})")
+
+
+def _resolve_graph(graph_dir: str | Path | None, name: str) -> str:
+    """그래프 경로를 확정하고 존재를 확인한다.
+
+    없으면 gpt 가 매번 rc≠0 으로 죽어 "gpt 실패"만 반복되므로, 처리 시작 전에
+    패키징 문제라는 사실을 분명히 알린다.
+    """
+    path = (Path(graph_dir) if graph_dir else _default_graph_dir()) / name
+    if not path.exists():
+        raise FileNotFoundError(
+            f"gpt 그래프를 찾을 수 없습니다: {path}\n"
+            "패키지 데이터(inframon/insar/graphs/*.xml)가 설치되지 않았을 수 있습니다 "
+            "— 재설치하거나 graph_dir 로 직접 지정하세요.")
+    return str(path)
+
+
 def _default_graph_dir() -> Path:
-    # 리포 루트 추정: src/inframon/insar/snap_backend.py → 리포/scripts/snap
-    return Path(__file__).resolve().parents[3] / "scripts" / "snap"
+    """동봉된 gpt 그래프(.xml) 디렉터리.
+
+    그래프는 패키지 데이터(`inframon/insar/graphs/`)이므로 소스 체크아웃·wheel 설치·
+    PyInstaller 번들 어디서든 패키지 옆에 함께 존재한다.
+    """
+    return Path(__file__).resolve().parent / "graphs"
 
 
 # ── 지오코딩 결과 → Track H5 계약 ────────────────────────────────────────
@@ -957,7 +1022,8 @@ def amplitude_pairs(
     ref = str(reference) if reference else min(scenes, key=scene_date)
     if burst is None:
         burst = find_bridge_burst(ref, lat, lon)
-    graph = str((Path(graph_dir) if graph_dir else _default_graph_dir()) / _GRAPH_AMP)
+    # 없으면 아래 루프가 매 쌍마다 조용히 실패해 빈 리스트만 돌려준다 — 즉시 알린다.
+    graph = _resolve_graph(graph_dir, _GRAPH_AMP)
     rd = scene_date(ref)
     amps: list[str] = []
     for sec in sorted([s for s in scenes if str(s) != ref], key=scene_date):
