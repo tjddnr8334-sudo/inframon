@@ -16,7 +16,7 @@ datas, binaries, hiddenimports = [], [], []
 #    altair 차트 검증 → jsonschema IRI 포맷검사 → rfc3987_syntax(.lark 문법파일) 까지 필요.
 #    asf_search(C·D SLC 검색)는 shapely(GEOS)·dateparser(언어데이터)·networkx 를 끌어온다.
 for pkg in ("streamlit", "plotly", "folium", "streamlit_folium", "altair",
-            "pyarrow", "pydeck", "webview", "uvicorn", "starlette",
+            "pyarrow", "webview", "uvicorn", "starlette",
             "jsonschema", "jsonschema_specifications", "referencing",
             "rfc3987_syntax", "lark",
             "asf_search", "shapely", "dateparser", "dateparser_data", "networkx",
@@ -28,7 +28,7 @@ for pkg in ("streamlit", "plotly", "folium", "streamlit_folium", "altair",
 
 # 2) streamlit 이 importlib.metadata 로 버전을 조회하는 패키지들 — 메타데이터 동봉 필수
 for pkg in ("streamlit", "numpy", "pandas", "pyarrow", "plotly", "altair",
-            "packaging", "tornado", "watchdog", "gitpython", "pydeck",
+            "packaging", "tornado", "watchdog", "gitpython",
             "tenacity", "toml", "click", "blinker", "cachetools", "rich",
             "protobuf", "pillow", "jsonschema", "narwhals", "uvicorn", "starlette",
             "jsonschema_specifications", "referencing", "rfc3987_syntax", "lark",
@@ -86,7 +86,11 @@ a = Analysis(
               "cv2", "polars", "geopandas", "fiona", "pyogrio", "sklearn",
               "skimage", "scipy", "sympy", "numba", "llvmlite",
               "IPython", "notebook", "jupyter", "pytest", "setuptools",
-              ],  # (uvicorn·h5py·pyarrow·pandas 는 streamlit 이 쓰므로 제외 금지!)
+              # ── 추가 정리(코드 근거로 뷰어가 안 쓰는 것) ──
+              #    pydeck: st.map/st.pydeck_chart 미사용(지도는 folium). 차트는 altair(st.line_chart).
+              #    hf_xet·huggingface_hub·tokenizers·safetensors: torch/transformers 제외했으므로 죽은 무게.
+              "pydeck", "hf_xet", "huggingface_hub", "tokenizers", "safetensors",
+              ],  # (uvicorn·h5py·pyarrow·pandas·altair 는 streamlit 이 쓰므로 제외 금지!)
     noarchive=False,
 )
 

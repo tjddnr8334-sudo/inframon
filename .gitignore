@@ -22,3 +22,7 @@ data/
 
 # 로컬 Claude 세션·잡 데이터 전체
 .claude/
+
+# 로컬 슬림 빌드 산출물(커밋 금지)
+dist_slim/
+build_slim/
