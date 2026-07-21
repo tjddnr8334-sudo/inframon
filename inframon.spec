@@ -19,7 +19,7 @@ for pkg in ("streamlit", "folium", "streamlit_folium", "altair",
             "pyarrow", "webview", "uvicorn", "starlette",
             "jsonschema", "jsonschema_specifications", "referencing",
             "rfc3987_syntax", "lark",
-            "asf_search", "shapely", "dateparser", "dateparser_data", "networkx",
+            "asf_search", "shapely", "dateparser", "dateparser_data",
             "tzlocal", "requests", "urllib3", "idna", "charset_normalizer"):
     d, b, h = collect_all(pkg)
     datas += d
@@ -32,7 +32,7 @@ for pkg in ("streamlit", "numpy", "pandas", "pyarrow", "altair",
             "tenacity", "toml", "click", "blinker", "cachetools", "rich",
             "protobuf", "pillow", "jsonschema", "narwhals", "uvicorn", "starlette",
             "jsonschema_specifications", "referencing", "rfc3987_syntax", "lark",
-            "asf_search", "shapely", "dateparser", "networkx", "tzlocal", "regex",
+            "asf_search", "shapely", "dateparser", "tzlocal", "regex",
             "requests", "certifi"):
     try:
         datas += copy_metadata(pkg)
@@ -92,6 +92,12 @@ a = Analysis(
               "pydeck", "hf_xet", "huggingface_hub", "tokenizers", "safetensors",
               # plotly(40MB): FRAM 레이더차트 1곳만 썼는데 matplotlib(이미 번들) 폴라로 대체.
               "plotly",
+              # pyproj(25MB): insar 좌표투영(bim_export·geo·dem)에서만 쓰는데, bim_export 투영은
+              #   try/except 가드(없으면 투영 생략)이고 geo/dem 은 rasterio 필요한 처리경로(뷰어 밖).
+              #   뷰어가 실제 import 하는 건 색·CRI 매핑뿐이라 pyproj 불필요.
+              # networkx(8MB): fram 임계경로(try/except ImportError 폴백, 뷰어는 h5 값 읽기만)와
+              #   asf_search SBAS 플롯(find_spec 가드 → 없으면 nx=None)에서만 쓰여 뷰어엔 죽은 무게.
+              "pyproj", "networkx",
               ],  # (uvicorn·h5py·pyarrow·pandas·altair 는 streamlit 이 쓰므로 제외 금지!)
     noarchive=False,
 )
