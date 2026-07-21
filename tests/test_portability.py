@@ -198,3 +198,48 @@ def test_log_path_matches_app_entry_convention():
 
     expected = Path(tempfile.gettempdir()) / "inframon" / "inframon_app.log"
     assert desktop._log_path() == expected
+
+
+# ── 단일 인스턴스 락: 중복 실행 방지 ──────────────────────────────────────
+def test_singleton_lock_blocks_a_second_instance():
+    """한 inframon 이 락을 잡으면 두 번째 획득은 None(차단), 해제하면 다시 가능."""
+    from inframon import desktop
+
+    p = 47771  # 테스트 전용 포트(실제 sentinel 과 분리)
+    first = desktop._acquire_singleton(p)
+    assert first is not None and first is not desktop._FOREIGN_PORT, "첫 인스턴스는 락을 잡아야 한다"
+    try:
+        # 두 번째는 신원 확인(handshake) 후 '우리 인스턴스'라 판단 → None(차단)
+        assert desktop._acquire_singleton(p) is None, "두 번째 inframon 은 막혀야 한다"
+    finally:
+        first.close()
+    again = desktop._acquire_singleton(p)
+    assert again is not None, "락 해제 후 재획득이 가능해야 한다(stale 락 없음)"
+    again.close()
+
+
+def test_singleton_ignores_a_foreign_port_holder():
+    """그 포트를 무관한 프로그램이 점유하면(신원 토큰 없음) 앱은 그냥 실행돼야 한다.
+
+    (고정 sentinel 포트 우연 충돌로 앱이 아예 안 열리는 오탐 방지.)
+    """
+    import socket
+
+    from inframon import desktop
+
+    p = 47772
+    foreign = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    foreign.bind(("127.0.0.1", p)); foreign.listen(1)  # inframon 토큰 응답 없음
+    try:
+        result = desktop._acquire_singleton(p)
+        assert result is desktop._FOREIGN_PORT, "남의 포트면 차단이 아니라 통과여야 한다"
+    finally:
+        foreign.close()
+
+
+def test_already_running_html_tells_user_to_use_existing_window():
+    from inframon import desktop
+
+    html = desktop._already_running_html()
+    assert "이미 실행 중" in html
+    assert "http://" not in html and "https://" not in html  # 자체 완결

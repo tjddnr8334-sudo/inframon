@@ -33,10 +33,99 @@ APP_TITLE = "inframon — 통합 인프라 모니터링"
 RUN_SERVER_FLAG = "--_run-streamlit"
 
 
+#: 단일 인스턴스 판별용 sentinel 포트(inframon 전용 임의 고포트).
+#: 이 포트를 bind·listen 으로 '점유'한 프로세스가 유일한 인스턴스다. 프로세스가
+#: 죽으면 OS 가 포트를 회수하므로 stale 락(파일락의 고질병)이 남지 않는다.
+_SINGLETON_PORT = 47615
+#: 점유자가 '진짜 inframon' 인지 확인하는 신원 토큰(포트 우연 충돌과 구분).
+_SINGLETON_TOKEN = b"inframon-singleton\n"
+
+#: bind 실패인데 점유자가 inframon 이 아닐 때(=남의 프로그램이 그 포트 사용) —
+#: 이 경우엔 락 없이 그냥 앱을 연다(오탐으로 앱이 안 열리는 것 방지).
+_FOREIGN_PORT = object()
+
+
+def _start_identity_responder(sock) -> None:
+    """락 소켓으로 들어오는 접속에 신원 토큰을 응답(두 번째 인스턴스의 확인용)."""
+    import threading
+
+    def _serve() -> None:
+        while True:
+            try:
+                conn, _ = sock.accept()
+            except OSError:
+                return  # 소켓이 닫힘(앱 종료) → 응답 스레드 종료
+            try:
+                conn.sendall(_SINGLETON_TOKEN)
+            except OSError:
+                pass
+            finally:
+                conn.close()
+
+    threading.Thread(target=_serve, daemon=True).start()
+
+
+def _port_holder_is_inframon(port: int) -> bool:
+    """그 포트의 점유자가 우리(inframon) 인스턴스인지 신원 토큰으로 확인."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1.0) as c:
+            c.settimeout(1.0)
+            return c.recv(len(_SINGLETON_TOKEN)).startswith(b"inframon-singleton")
+    except OSError:
+        return False
+
+
+def _acquire_singleton(port: int = _SINGLETON_PORT):
+    """단일 인스턴스 락 획득 시도.
+
+    반환:
+      * 소켓         — 우리가 유일한 인스턴스(앱이 사는 동안 계속 잡아야 함).
+      * None         — 이미 다른 inframon 이 실행 중(두 번째 창을 열지 말 것).
+      * _FOREIGN_PORT — 그 포트를 무관한 프로그램이 점유(락 없이 그냥 실행).
+
+    SO_REUSEADDR 을 켜지 않으므로 두 번째 bind 는 Windows·Linux 모두 실패한다.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", port))
+        s.listen(1)
+    except OSError:
+        s.close()
+        return None if _port_holder_is_inframon(port) else _FOREIGN_PORT
+    _start_identity_responder(s)
+    return s
+
+
 def _log_path() -> Path:
     """windowed(.exe)에서 stdout/stderr 가 향하는 로그 파일 경로(_app_entry 와 동일 규칙)."""
     import tempfile
     return Path(tempfile.gettempdir()) / "inframon" / "inframon_app.log"
+
+
+def _already_running_html() -> str:
+    """두 번째 실행 시 띄우는 안내(새 서버를 또 띄우지 않고 기존 창을 쓰라고)."""
+    return """<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark;
+    --bg:#e9eef3; --card:#fff; --ink:#152230; --muted:#5d7385; --accent:#0d8ca3; --line:#d0dbe4; }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0c131b; --card:#121d28; --ink:#e7eef4; --muted:#859bad; --accent:#45c8de; --line:#253544; } }
+  * { box-sizing:border-box; } html,body { height:100%; margin:0; }
+  body { background:var(--bg); color:var(--ink); display:grid; place-items:center;
+    font-family:system-ui,"Malgun Gothic","Apple SD Gothic Neo",sans-serif; padding:24px; }
+  .box { max-width:460px; text-align:center; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:32px; }
+  .brand { font-family:ui-monospace,Consolas,monospace; letter-spacing:.2em; text-transform:uppercase;
+    font-size:12px; color:var(--accent); margin-bottom:14px; }
+  h1 { font-size:19px; margin:0 0 10px; letter-spacing:-.01em; }
+  p { font-size:13.5px; color:var(--muted); line-height:1.6; margin:0; }
+</style></head>
+<body><div class="box">
+  <div class="brand">🛰 inframon</div>
+  <h1>이미 실행 중입니다</h1>
+  <p>inframon 대시보드가 이미 열려 있습니다. 기존 창을 사용하세요.<br>이 창은 닫으셔도 됩니다.</p>
+</div></body></html>"""
 
 
 def _splash_html(message: str = "대시보드를 준비하고 있어요…",
@@ -181,6 +270,19 @@ def run_app() -> int:
         print(f"대시보드를 찾을 수 없습니다: {_dashboard_path()}", file=sys.stderr)
         return 1
 
+    # 단일 인스턴스: 이미 실행 중이면 새 서버를 또 띄우지 않고 안내만 하고 끝낸다.
+    # (windowed exe 는 stdout 이 로그로 가 사용자가 못 보므로, 작은 안내 창을 띄운다.)
+    lock = _acquire_singleton()
+    if lock is None:
+        print("[inframon] 이미 실행 중 — 두 번째 인스턴스는 열지 않습니다.")
+        try:
+            webview.create_window(APP_TITLE, html=_already_running_html(),
+                                  width=480, height=320)
+            webview.start()
+        except Exception:  # noqa: BLE001 — 안내 창 실패해도 조용히 종료
+            pass
+        return 0
+
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
 
@@ -222,6 +324,8 @@ def run_app() -> int:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        if hasattr(lock, "close"):
+            lock.close()  # 단일 인스턴스 락 해제(다음 실행이 다시 획득 가능)
         print("[inframon] 종료.")
 
 
