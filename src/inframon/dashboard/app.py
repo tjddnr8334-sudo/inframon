@@ -23,13 +23,57 @@ import pandas as pd
 import streamlit as st
 
 from inframon.contracts.schema import MEMBER_TYPES
-from inframon.dashboard.data import (
-    fram_function_diagram,
-    fram_panel_data,
-    has_group,
-    read_meta,
-)
-from inframon.dashboard.data import read_arrays as read
+from inframon.dashboard import data as _data
+from inframon.dashboard.data import has_group
+
+
+def _h5_mtime(path: str) -> float:
+    """project.h5 수정시각 — 캐시 무효화 키(파일이 갱신되면 캐시도 자동 갱신)."""
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+# 아래 읽기 함수들은 매 rerun(탭 전환·위젯 조작)마다 호출된다. 파일 mtime 을 키로
+# @st.cache_data 캐시해, 같은 project.h5 를 반복해 열고 큰 배열([N,M])을 재파싱하던
+# 비용을 없앤다. cache_data 는 호출마다 '복사본'을 돌려주므로 변형(in-place) 안전.
+# (mtime 은 언더스코어 없는 인자 → 해시 키에 포함되어 파일 갱신 시 캐시가 무효화됨.)
+@st.cache_data(show_spinner=False, max_entries=128)
+def _read_arrays_cached(path: str, mtime: float, names: tuple):
+    return _data.read_arrays(path, *names)
+
+
+def read(path: str, *names: str):
+    """project.h5 배열 읽기(mtime 키 캐시). data.read_arrays 와 동일 시그니처."""
+    return _read_arrays_cached(path, _h5_mtime(path), tuple(names))
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _fram_panel_cached(path: str, mtime: float) -> dict:
+    return _data.fram_panel_data(path)
+
+
+def fram_panel_data(path: str) -> dict:
+    return _fram_panel_cached(path, _h5_mtime(path))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _read_meta_cached(path: str, group: str, mtime: float) -> dict:
+    return _data.read_meta(path, group)
+
+
+def read_meta(path: str, group: str) -> dict:
+    return _read_meta_cached(path, group, _h5_mtime(path))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _fram_diagram_cached(path: str, k, mtime: float):
+    return _data.fram_function_diagram(path, k)
+
+
+def fram_function_diagram(path: str, k=None):
+    return _fram_diagram_cached(path, k, _h5_mtime(path))
 
 DEFAULT_H5 = "data/project.h5"
 _CONFIG_FILE = Path.home() / ".inframon" / "config.json"

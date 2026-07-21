@@ -230,6 +230,13 @@ def _run_streamlit_server(port: int) -> None:
         "server_headless": True,
         "browser_gatherUsageStats": False,
         "global_developmentMode": False,
+        # ── 속도: 배포(frozen) 뷰어에 불필요한 개발용 오버헤드 제거 ──
+        # 파일 워처: 사용자는 app.py 를 편집하지 않으므로 자동 리로드가 불필요하다.
+        # 기본값(auto)은 번들 트리를 감시하며 상시 CPU 를 먹는다 → 완전히 끈다.
+        "server_fileWatcherType": "none",
+        # magic: 명시적 st.* 호출만 쓰므로(맨줄 표현식 자동표시 미사용), 매 실행마다
+        # 스크립트 AST 를 파싱하는 magic 을 꺼 스크립트 컴파일 비용을 줄인다.
+        "runner_magicEnabled": False,
     }
     # config/secret 파일 탐색 기준이 되는 메인 스크립트 경로(load 전에 설정해야 함)
     st_config._main_script_path = app_py
