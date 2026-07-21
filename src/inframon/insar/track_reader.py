@@ -221,6 +221,7 @@ def import_track_h5(
     geometry_latlon=None,
     apply_corrections: bool = False,
     ref_min_coherence: float = 0.9,
+    dem_geotiff: str | Path | None = None,
 ) -> InSAROutput:
     """Track A/B/C/D export HDF5를 /insar 데이터셋으로 적재한다(CLI 단독 변환용).
 
@@ -229,6 +230,7 @@ def import_track_h5(
     **호길이 station**(곡선 교량 대응)으로 l_from_fixed·deck_station 을 채운다. 없으면
     점군 주곡선으로 station 을 추정한다(직선이면 X거리와 동등).
 
+    z(고도): ① Track 점별 height → ② `dem_geotiff`(WGS84 lon/lat 로 샘플) → ③ 0.
     `apply_corrections=True` 면 LOS 시계열에 기준점 정합 + 고도상관 성층대기 보정을 적용하고
     (`atmo.correct_los_field`), 보정된 los/longitudinal + /insar/velocity_mm_yr 를 저장한다.
     """
@@ -236,7 +238,23 @@ def import_track_h5(
     td = read_track_h5(track_h5)
     n_points, _ = td.los.shape
 
-    z = td.height.astype(np.float64) if td.height is not None else np.zeros(n_points)
+    # z(고도): Track height 우선, 없으면 DEM GeoTIFF 샘플(lon/lat=WGS84), 그도 없으면 0.
+    dem_meta = None
+    z_source = "zero"
+    if td.height is not None:
+        z = td.height.astype(np.float64)
+        z_source = "track_height"
+    elif dem_geotiff is not None:
+        from .dem import DemError, sample_dem
+        try:
+            ds = sample_dem(td.lonlat[:, :2], "EPSG:4326", str(dem_geotiff))
+            z = ds.z.astype(np.float64)
+            z_source, dem_meta = "dem_raster", ds.meta
+        except DemError as exc:                  # DEM 실패 → z=0 폴백(변환 계속)
+            z = np.zeros(n_points)
+            dem_meta = {"ok": False, "reason": str(exc), "path": str(dem_geotiff)}
+    else:
+        z = np.zeros(n_points)
     los = td.los
     corr_meta = None
     if apply_corrections:
@@ -267,6 +285,8 @@ def import_track_h5(
             "path": str(Path(track_h5)),
             "attrs": td.attrs,
             "unit": "mm",
+            "z_source": z_source,
+            "dem": dem_meta,
             "mode": "import",
             "date_labels_ds": "/insar/date_labels",
             "velocity_ds": "/insar/velocity_mm_yr",

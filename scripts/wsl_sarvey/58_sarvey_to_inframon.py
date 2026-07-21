@@ -62,18 +62,38 @@ def main() -> None:
     ux, uy = cu[0, rows, cols], cu[1, rows, cols]
     coh = tc[rows, cols].astype(np.float32)
 
-    # 입사각(geometryRadar) — 점별 샘플
+    # 입사각·고도(geometryRadar) — 점별 샘플
     incidence = None
+    height = None                                    # [N] 점별 고도(m) — DEM z 연계·구조분리·대기보정
     try:
         with h5py.File(os.path.join(I, "geometryRadar.h5"), "r") as f:
             if "incidenceAngle" in f:
                 inc_grid = f["incidenceAngle"][()]
                 if inc_grid.shape == (H, W):
                     incidence = inc_grid[rows, cols].astype(np.float32)
+            if "height" in f:                        # MintPy/MiaplPy 지오메트리 고도(DEM in radar)
+                h_grid = f["height"][()]
+                if h_grid.shape == (H, W):
+                    height = h_grid[rows, cols].astype(np.float32)
             if not math.isfinite(heading) and "HEADING" in f.attrs:
                 heading = float(f.attrs["HEADING"])
     except Exception as e:  # noqa: BLE001
-        print("geometryRadar 입사각 읽기 경고:", e)
+        print("geometryRadar 입사각/고도 읽기 경고:", e)
+
+    # SARvey 가 점별 DEM error(잔차 지형, 상부구조 반영)를 추정하면 절대고도 = 기준고도 + dem_error.
+    # ts 파일에 있으면 더해 정밀화한다(없으면 기준 고도만).
+    if height is not None:
+        try:
+            with h5py.File(os.path.join(O, a.ts), "r") as f:
+                for key in ("dem_error", "demErr", "residual_height"):
+                    if key in f:
+                        de = np.asarray(f[key][()], dtype=np.float32).ravel()
+                        if de.shape[0] == height.shape[0]:
+                            height = (height + de).astype(np.float32)
+                            print(f"  dem_error({key}) 반영 → 절대고도 정밀화")
+                        break
+        except Exception as e:  # noqa: BLE001
+            print("dem_error 읽기 경고(무시):", e)
 
     # heading 은 MintPy/ISCE 에서 라디안으로 오는 경우가 많다(예: asc -0.23, desc -2.91).
     # fuse_asc_desc 는 도(°)를 기대하므로 여기서 통일해 저장한다.
@@ -94,11 +114,14 @@ def main() -> None:
         f.create_dataset("coh", data=coh)
         if incidence is not None:
             f.create_dataset("incidenceAngle", data=incidence)   # read_track_h5 가 인식
+        if height is not None:
+            f.create_dataset("height", data=height)              # read_track_h5 가 z 로 사용
         if math.isfinite(heading):
             f.attrs["HEADING"] = heading                          # asc/desc 분해용
-        f.attrs["source"] = "SARvey p2 (incidence/heading 포함)"
+        f.attrs["source"] = "SARvey p2 (incidence/height/heading 포함)"
+    hs = f"{float(np.nanmin(height)):.0f}~{float(np.nanmax(height)):.0f}m" if height is not None else "X"
     print(f"wrote {a.out}: N={N} M={M} incidence={'O' if incidence is not None else 'X'} "
-          f"heading={heading if math.isfinite(heading) else 'X'}")
+          f"height={hs} heading={heading if math.isfinite(heading) else 'X'}")
 
 
 if __name__ == "__main__":

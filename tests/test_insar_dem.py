@@ -227,3 +227,66 @@ def test_real_insar_track_height_beats_dem(tmp_path):
     assert src["z_source"] == "track_height"
     assert src["dem"] is None                       # DEM 샘플 자체를 안 함
     assert np.allclose(np.sort(xyz[:, 2]), np.sort(heights), atol=1e-4)
+
+
+# ─────────────── import_track_h5 DEM 경로 (WGS84 lon/lat) ───────────────
+
+def test_import_track_h5_dem_sampling_engages_height_correction(tmp_path):
+    """import_track_h5(dem_geotiff): height 없는 Track 을 WGS84 DEM 으로 z 채우고
+    고도차가 생겨 고도상관 대기보정이 실제 적용되는지 검증."""
+    from inframon.insar.track_reader import import_track_h5
+
+    # WGS84 lon/lat 램프 DEM: z(lon) = 1000·(lon-127.0) → 경도 0.01°당 10m
+    west, north, res = 127.0, 37.40, 0.001              # ~100m 격자
+    h, w = 100, 100
+    cols = np.arange(w)
+    zrow = 1000.0 * ((west + (cols + 0.5) * res) - 127.0)
+    data = np.tile(zrow, (h, 1)).astype(np.float32)
+    dem = tmp_path / "wgs84_ramp.tif"
+    _write_dem(dem, "EPSG:4326", west, north, res, data)
+
+    # DEM 범위 안 40점 (경도 다양 → z 스프레드 확보), 간단한 los 시계열
+    rng = np.random.default_rng(0)
+    lon = rng.uniform(127.01, 127.09, 40)
+    lat = rng.uniform(37.32, 37.38, 40)
+    M = 8
+    los = rng.normal(0, 1.0, (40, M)).astype(np.float32)
+    track = tmp_path / "track_nohgt.h5"
+    with h5py.File(track, "w") as f:
+        f.create_dataset("pixel_lonlat", data=np.column_stack([lon, lat]).astype(np.float64))
+        f.create_dataset("epochs", data=np.arange(20200101, 20200101 + M, dtype=np.int32))
+        f.create_dataset("los_mm", data=los)
+        f.create_dataset("coh", data=np.full(40, 0.85, dtype=np.float32))
+
+    with ProjectStore(tmp_path / "p.h5", mode="w") as store:
+        out = import_track_h5(store, track, dem_geotiff=str(dem), apply_corrections=True)
+        xyz = store.read_array("/insar/xyz")
+        src = store.read_json_attr("insar", "track_source")
+
+    z = xyz[:, 2]
+    assert src["z_source"] == "dem_raster"
+    assert src["dem"]["ok"] is True
+    assert (z.max() - z.min()) > 5.0                    # DEM 램프로 실제 고도차
+    # z 스프레드가 생겨 고도상관 보정이 적용됨(전엔 z=0 → skip)
+    assert "height_correlated" in src["corrections"]["applied"]
+    assert out.n_points == 40
+
+
+def test_import_track_h5_no_dem_z_zero(tmp_path):
+    """dem_geotiff 없고 Track height 없으면 z=0·z_source=zero (기존 동작 불변)."""
+    from inframon.insar.track_reader import import_track_h5
+
+    lon = np.linspace(127.01, 127.05, 6)
+    lat = np.linspace(37.33, 37.35, 6)
+    track = tmp_path / "t.h5"
+    with h5py.File(track, "w") as f:
+        f.create_dataset("pixel_lonlat", data=np.column_stack([lon, lat]).astype(np.float64))
+        f.create_dataset("epochs", data=np.array([20200101, 20200113], dtype=np.int32))
+        f.create_dataset("los_mm", data=np.zeros((6, 2), dtype=np.float32))
+        f.create_dataset("coh", data=np.full(6, 0.8, dtype=np.float32))
+    with ProjectStore(tmp_path / "p.h5", mode="w") as store:
+        import_track_h5(store, track)
+        xyz = store.read_array("/insar/xyz")
+        src = store.read_json_attr("insar", "track_source")
+    assert src["z_source"] == "zero"
+    assert np.allclose(xyz[:, 2], 0.0)

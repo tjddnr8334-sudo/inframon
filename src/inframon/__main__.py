@@ -881,7 +881,8 @@ def main() -> None:
         with ProjectStore(args.out, mode="a") as store:
             insar = import_track_h5(store, args.import_track_h5, geometry_latlon=geometry,
                                     apply_corrections=args.insar_corrections,
-                                    ref_min_coherence=args.ref_min_coherence)
+                                    ref_min_coherence=args.ref_min_coherence,
+                                    dem_geotiff=args.insar_dem)
         print("=" * 56)
         print("  Track HDF5 → /insar 변환 완료")
         print("=" * 56)
@@ -889,6 +890,7 @@ def main() -> None:
         print(f"  결과 파일       : {args.out}")
         print(f"  측정점/시점     : N={insar.n_points}, M={insar.n_dates}")
         print(f"  데크 station    : {'폴리라인 투영(곡선 대응)' if geometry else '주곡선 추정(레시피 geometry 없음)'}")
+        print(f"  고도(z) 출처    : {'DEM 샘플(--insar-dem)' if args.insar_dem else 'Track height 또는 0'}")
         print(f"  정확도 보정     : {'적용(기준점+고도상관) → /insar/velocity_mm_yr' if args.insar_corrections else '없음'}")
         print("=" * 56)
         return
