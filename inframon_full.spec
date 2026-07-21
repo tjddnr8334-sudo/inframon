@@ -38,7 +38,17 @@ for pkg in ("streamlit", "numpy", "pandas", "pyarrow", "plotly", "altair",
     except Exception:  # noqa: BLE001
         pass
 
-datas += collect_data_files("inframon", include_py_files=True)
+# collect_data_files("inframon") 는 **설치된** 패키지를 보므로, editable 설치가 다른
+# 체크아웃을 가리키면 엉뚱한 소스를 번들한다. 항상 이 spec 옆의 src/ 를 쓴다.
+from pathlib import Path as _Path
+
+_PKG = _Path(SPECPATH) / "src" / "inframon"
+if not _PKG.is_dir():
+    raise SystemExit(f"소스를 찾을 수 없습니다: {_PKG}")
+for _f in _PKG.rglob("*"):
+    if _f.is_file() and "__pycache__" not in _f.parts:
+        datas.append((str(_f), str(_Path("inframon") / _f.relative_to(_PKG).parent)))
+
 try:
     datas += copy_metadata("inframon")
 except Exception:  # noqa: BLE001
@@ -69,16 +79,39 @@ a = Analysis(
     # mintpy 는 SNAP 백엔드로 대체되어 불필요, 무거운 다운로드 전용 의존만 제외.
     excludes=["transformers", "timm", "mintpy", "prefect",
               "zarr", "s3fs", "rioxarray", "xarray", "fsspec", "remotezip",
-              "h5netcdf", "dask"],
+              "h5netcdf", "dask",
+              # 풀 빌드는 torch/rasterio 가 필요하지만, 아래는 여전히 참조 0건이다.
+              "polars", "geopandas", "fiona", "pyogrio",
+              "IPython", "notebook", "jupyter", "pytest", "setuptools",
+              ],
     noarchive=False,
 )
+
+# 훅이 끌어온 바이너리 중 런타임에 안 쓰이는 것 제거(inframon.spec 과 동일 규칙).
+_DROP_BINARIES = ("arrow_flight", "arrow_substrait", "arrow_dataset", "arrow_acero")
+
+
+def _keep(entry) -> bool:
+    name = entry[0].lower().replace("\\", "/").split("/")[-1]
+    if name.endswith(".lib"):
+        return False  # 링크타임 import 라이브러리 — 런타임엔 죽은 무게
+    return not any(d in name for d in _DROP_BINARIES)
+
+
+_before = len(a.binaries)
+a.binaries = [b for b in a.binaries if _keep(b)]
+print(f"[inframon_full.spec] 불필요 바이너리 {_before - len(a.binaries)}개 제외")
+
 pyz = PYZ(a.pure)
+
+import sys as _sys
+_icon = "assets/inframon.ico" if _sys.platform in ("win32", "darwin") else None
 
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
     name="inframon_full",
     console=True,
-    icon="assets/inframon.ico",
+    icon=_icon,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="inframon_full")

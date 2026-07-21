@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 
 # conda 실행파일 후보(직접 경로). ⚠️ 이 WSL 호출 방식에선 **새 셸변수·for 루프가 빈 값**이
@@ -63,17 +64,24 @@ class ToolStatus:
 
 
 def default_runner(cmd: str) -> tuple[int, str]:
-    """기본 runner — WSL(기본 배포판) 로그인 셸에서 셸명령 실행 → (rc, stdout).
+    """기본 runner — 리눅스 로그인 셸에서 셸명령 실행 → (rc, stdout).
 
-    WSL 이 없으면(예: 이미 Linux/컨테이너 안) 현재 셸에서 직접 실행한다. 프로브가 conda
-    실행파일을 직접 경로로 찾으므로 별도 환경 활성화(prelude)는 필요 없다.
+    리눅스/컨테이너 안이면 bash 로 직접, Windows 면 WSL(기본 배포판)을 경유한다.
+    OS 를 먼저 보는 이유: Windows 의 Git Bash 도 `bash` 로 잡히지만 ISCE2/conda 가
+    없는 별개 환경이라, WSL 대신 거기로 빠지면 오탐이 난다.
+    프로브가 conda 실행파일을 직접 경로로 찾으므로 별도 환경 활성화(prelude)는 필요 없다.
     """
-    if shutil.which("wsl"):
+    if sys.platform != "win32":
+        argv = ["bash", "-lc", cmd]
+    elif shutil.which("wsl"):
         argv = ["wsl", "--", "bash", "-lc", cmd]
     else:
-        argv = ["bash", "-lc", cmd]
+        return 127, ""  # Windows + WSL 없음 → 리눅스 툴체인 도달 불가
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        # encoding 을 명시하지 않으면 한글 Windows 에서 locale(cp949)로 디코딩해
+        # UTF-8 을 내보내는 WSL/conda 출력에 UnicodeDecodeError 가 난다.
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=120,
+                           encoding="utf-8", errors="replace")
         return p.returncode, (p.stdout or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 127, str(exc)

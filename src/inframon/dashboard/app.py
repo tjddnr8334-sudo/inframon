@@ -23,13 +23,57 @@ import pandas as pd
 import streamlit as st
 
 from inframon.contracts.schema import MEMBER_TYPES
-from inframon.dashboard.data import (
-    fram_function_diagram,
-    fram_panel_data,
-    has_group,
-    read_meta,
-)
-from inframon.dashboard.data import read_arrays as read
+from inframon.dashboard import data as _data
+from inframon.dashboard.data import has_group
+
+
+def _h5_mtime(path: str) -> float:
+    """project.h5 수정시각 — 캐시 무효화 키(파일이 갱신되면 캐시도 자동 갱신)."""
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+# 아래 읽기 함수들은 매 rerun(탭 전환·위젯 조작)마다 호출된다. 파일 mtime 을 키로
+# @st.cache_data 캐시해, 같은 project.h5 를 반복해 열고 큰 배열([N,M])을 재파싱하던
+# 비용을 없앤다. cache_data 는 호출마다 '복사본'을 돌려주므로 변형(in-place) 안전.
+# (mtime 은 언더스코어 없는 인자 → 해시 키에 포함되어 파일 갱신 시 캐시가 무효화됨.)
+@st.cache_data(show_spinner=False, max_entries=128)
+def _read_arrays_cached(path: str, mtime: float, names: tuple):
+    return _data.read_arrays(path, *names)
+
+
+def read(path: str, *names: str):
+    """project.h5 배열 읽기(mtime 키 캐시). data.read_arrays 와 동일 시그니처."""
+    return _read_arrays_cached(path, _h5_mtime(path), tuple(names))
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _fram_panel_cached(path: str, mtime: float) -> dict:
+    return _data.fram_panel_data(path)
+
+
+def fram_panel_data(path: str) -> dict:
+    return _fram_panel_cached(path, _h5_mtime(path))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _read_meta_cached(path: str, group: str, mtime: float) -> dict:
+    return _data.read_meta(path, group)
+
+
+def read_meta(path: str, group: str) -> dict:
+    return _read_meta_cached(path, group, _h5_mtime(path))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _fram_diagram_cached(path: str, k, mtime: float):
+    return _data.fram_function_diagram(path, k)
+
+
+def fram_function_diagram(path: str, k=None):
+    return _fram_diagram_cached(path, k, _h5_mtime(path))
 
 DEFAULT_H5 = "data/project.h5"
 _CONFIG_FILE = Path.home() / ".inframon" / "config.json"
@@ -393,29 +437,69 @@ def _win2wsl(p: str) -> str:
     return p.replace("\\", "/")
 
 
-def wsl_status(target_dir: str = "~") -> dict:
-    """WSL2 가용성·도구·Earthdata 인증 + 다운로드 폴더 여유 용량(GB)을 점검."""
+def linux_shell() -> tuple[list[str], str] | None:
+    """리눅스 셸 명령을 실행할 (argv 접두, 모드). 도달 불가면 None.
+
+    ISCE2/SARvey 는 리눅스 도구다. Windows 에서는 WSL2 를 경유해야 하지만,
+    **네이티브 리눅스에서는 그냥 bash 로 직접** 실행하면 된다. `wsl` 실행파일
+    유무만 보고 판단하면 정작 리눅스에서 "환경 없음"이 되므로 OS 를 먼저 본다.
+    """
+    if sys.platform != "win32":
+        bash = shutil.which("bash")
+        return ([bash, "-lc"], "native") if bash else None
+    if shutil.which("wsl"):
+        return (["wsl", "-e", "bash", "-lc"], "wsl")
+    return None
+
+
+def _host2linux(p: str) -> str:
+    """호스트 경로 → 리눅스 셸에서 보이는 경로. 네이티브면 그대로, Windows 면 /mnt/…."""
+    return _win2wsl(p) if sys.platform == "win32" else str(Path(p).resolve())
+
+
+def linux_status(target_dir: str = "~") -> dict:
+    """리눅스 처리환경(네이티브 또는 WSL2) 가용성·도구·Earthdata 인증·여유 용량(GB) 점검.
+
+    반환 `mode`: "native"(리눅스에서 직접) | "wsl"(Windows→WSL2) | ""(도달 불가).
+    """
     import re
     import subprocess
-    out = {"wsl": False, "asf": False, "netrc": False, "free_gb": None, "detail": ""}
-    try:
-        r = subprocess.run(
-            ["wsl", "-e", "bash", "-lc",
-             "echo WSL_OK; python3 -c 'import asf_search' 2>/dev/null && echo ASF_OK; "
+    out = {"linux": False, "mode": "", "asf": False, "netrc": False,
+           "free_gb": None, "detail": ""}
+    shell = linux_shell()
+    if shell is None:
+        out["detail"] = ("리눅스 셸에 도달할 수 없습니다"
+                         + (" — WSL2 를 설치하세요(`wsl --install`)."
+                            if sys.platform == "win32" else " — bash 를 찾을 수 없습니다."))
+        return out
+    prefix, mode = shell
+    probe = ("echo LINUX_OK; python3 -c 'import asf_search' 2>/dev/null && echo ASF_OK; "
              "grep -q urs.earthdata ~/.netrc 2>/dev/null && echo NETRC_OK; "
              f"mkdir -p {target_dir} 2>/dev/null; "
-             f"echo FREEGB:$(df -BG --output=avail {target_dir} 2>/dev/null | tail -1 | tr -dc '0-9')"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+             f"echo FREEGB:$(df -BG --output=avail {target_dir} 2>/dev/null | tail -1 | tr -dc '0-9')")
+    try:
+        r = subprocess.run([*prefix, probe], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
         s = r.stdout or ""
-        out["wsl"] = "WSL_OK" in s
+        out["linux"] = "LINUX_OK" in s
+        out["mode"] = mode if out["linux"] else ""
         out["asf"] = "ASF_OK" in s
         out["netrc"] = "NETRC_OK" in s
         mfree = re.search(r"FREEGB:(\d+)", s)
         out["free_gb"] = int(mfree.group(1)) if mfree and mfree.group(1) else None
         out["detail"] = s.strip() or (r.stderr or "").strip()
-    except Exception as exc:  # noqa: BLE001 (wsl 미설치 등)
+    except Exception as exc:  # noqa: BLE001 (셸 미설치·타임아웃 등)
         out["detail"] = str(exc)
     return out
+
+
+def bundled_script(name: str) -> Path:
+    """패키지에 동봉된 보조 스크립트(inframon/insar/wsl_scripts/<name>) 경로.
+
+    CWD 상대경로로 찾으면 더블클릭 실행(작업폴더가 임의)에서 깨지므로 패키지 기준으로 찾는다.
+    """
+    from inframon import insar
+    return Path(insar.__file__).resolve().parent / "wsl_scripts" / name
 
 
 def slc_search_section() -> None:
@@ -558,17 +642,18 @@ def slc_search_section() -> None:
 
     # ── ⬇️ 실제 SLC 다운로드 (선택 트랙 장면) — WSL 우선 ──
     st.markdown("**⬇️ 선택 트랙 SLC 다운로드** (실제 Sentinel-1 SLC, GB급)")
-    st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 WSL2 에서 하므로, SLC 도 WSL 에 받는 것이 정석입니다. "
-               "먼저 WSL 가용성을 확인합니다.")
-    if st.button("WSL 환경 확인", key="btn_wsl_check"):
-        with st.spinner("WSL2 점검 중…"):
-            st.session_state["wsl_status"] = wsl_status()
-    wsl = st.session_state.get("wsl_status")
+    st.caption("실 SAR 처리(ISCE2→MiaplPy→SARvey)는 리눅스 도구입니다. 리눅스에서는 그대로, "
+               "Windows 에서는 WSL2 를 거쳐 처리하며 SLC 도 그 쪽에 받는 것이 정석입니다.")
+    if st.button("처리환경 확인", key="btn_wsl_check"):
+        with st.spinner("리눅스 처리환경 점검 중…"):
+            st.session_state["linux_status"] = linux_status()
+    wsl = st.session_state.get("linux_status")
     if wsl is None:
-        st.info("‘WSL 환경 확인’을 눌러 WSL2·asf_search·Earthdata 인증 준비도를 점검하세요.")
+        st.info("‘처리환경 확인’을 눌러 리눅스(또는 WSL2)·asf_search·Earthdata 인증 준비도를 점검하세요.")
         return
     free = wsl.get("free_gb")
-    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · asf_search {'✅' if wsl['asf'] else '❌'} · "
+    envlabel = {"native": "리눅스(네이티브)", "wsl": "WSL2"}.get(wsl.get("mode"), "리눅스 환경")
+    st.write(f"{envlabel} {'✅' if wsl['linux'] else '❌'} · asf_search {'✅' if wsl['asf'] else '❌'} · "
              f"Earthdata(~/.netrc) {'✅' if wsl['netrc'] else '❌'} · "
              f"여유 용량 {'❓' if free is None else f'{free} GB'}")
 
@@ -616,49 +701,56 @@ def slc_search_section() -> None:
                  f"장면 수를 {max(1, int((free-5)//4))}장 이하로 줄이거나 공간을 확보하세요.")
     st.caption("※ 다운로드 후 ISCE2 코레지·MiaplPy 처리엔 SLC 대비 추가 공간(대략 2~3배)이 더 필요합니다.")
 
-    if wsl["wsl"]:
-        # ── WSL 경로: WSL 의 asf_search + ~/.netrc 로 WSL 폴더에 다운로드(처리 위치) ──
-        wsl_dir = st.text_input("WSL 다운로드 폴더", "~/insar_dl/SLC", key="wsl_dl_dir")
+    if wsl["linux"]:
+        # ── 리눅스 경로(네이티브 또는 WSL): 그 쪽 asf_search + ~/.netrc 로 처리 위치에 직접 받는다 ──
+        wsl_dir = st.text_input(f"{envlabel} 다운로드 폴더", "~/insar_dl/SLC", key="wsl_dl_dir")
         ready = wsl["asf"] and wsl["netrc"] and enough and bool(urls)
         if not (wsl["asf"] and wsl["netrc"]):
-            st.warning("WSL 에 asf_search 또는 Earthdata ~/.netrc 가 없습니다. "
+            st.warning(f"{envlabel} 에 asf_search 또는 Earthdata ~/.netrc 가 없습니다. "
                        "`python3 -m pip install --user asf_search` + ~/.netrc(urs.earthdata) 설정 필요.")
         if not urls:
             st.info("다운로드할 장면을 선택하세요.")
-        if st.button(f"⬇️ WSL 로 {len(sel_scenes)}장 다운로드", key="btn_wsl_dl", type="primary", disabled=not ready):
+        if st.button(f"⬇️ {envlabel} 로 {len(sel_scenes)}장 다운로드", key="btn_wsl_dl",
+                     type="primary", disabled=not ready):
             import subprocess
-            urls_win = Path("data/_dl_urls.txt"); urls_win.parent.mkdir(parents=True, exist_ok=True)
-            urls_win.write_text("\n".join(urls), encoding="utf-8")
-            dl_py = _win2wsl(str(Path("scripts/wsl_sarvey/dl_urls.py")))
-            urls_wsl = _win2wsl(str(urls_win))
-            cmd = ["wsl", "-e", "bash", "-lc",
-                   f"python3 {dl_py} --urls {urls_wsl} --out {wsl_dir}"]
-            if not urls:
-                st.error("다운로드 URL이 없습니다(검색·선별 먼저).")
-            else:
-                with st.spinner(f"WSL 에서 {len(urls)}장 다운로드 중… (~{est_gb:.0f}GB, 시간 소요)"):
-                    try:
-                        r = subprocess.run(cmd, capture_output=True, text=True,
-                                           encoding="utf-8", errors="replace", timeout=7200)
-                        out = (r.stdout or "") + (r.stderr or "")
-                        tail = out.strip().splitlines()[-8:]
-                        if "DONE" in (r.stdout or ""):
-                            st.success(f"완료 → WSL `{wsl_dir}`")
-                        elif r.returncode != 0:
-                            st.warning(f"WSL 종료코드 {r.returncode} — 로그 확인:")
-                        else:
-                            st.warning("종료(완료 표식 없음) — 로그 확인:")
-                        st.code("\n".join(tail) or "(출력 없음)")
-                        st.caption("다음(WSL): `scripts/wsl_sarvey/20_stack_isce.sh` (ISCE2) → MiaplPy → SARvey.")
-                    except Exception as exc:  # noqa: BLE001
-                        st.error(f"WSL 다운로드 실패: {exc}")
+
+            # 데이터 루트 기준으로 쓴다 — CWD 상대경로는 더블클릭 실행에서 엉뚱한 곳에 떨어진다.
+            urls_host = Path(data_root()) / "_dl_urls.txt"
+            urls_host.parent.mkdir(parents=True, exist_ok=True)
+            urls_host.write_text("\n".join(urls), encoding="utf-8")
+            dl_py = _host2linux(str(bundled_script("dl_urls.py")))
+            urls_lin = _host2linux(str(urls_host))
+            prefix, _mode = linux_shell()
+            cmd = [*prefix, f"python3 {dl_py} --urls {urls_lin} --out {wsl_dir}"]
+            with st.spinner(f"{envlabel} 에서 {len(urls)}장 다운로드 중… (~{est_gb:.0f}GB, 시간 소요)"):
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True,
+                                       encoding="utf-8", errors="replace", timeout=7200)
+                    out = (r.stdout or "") + (r.stderr or "")
+                    tail = out.strip().splitlines()[-8:]
+                    if "DONE" in (r.stdout or ""):
+                        st.success(f"완료 → `{wsl_dir}`")
+                    elif r.returncode != 0:
+                        st.warning(f"종료코드 {r.returncode} — 로그 확인:")
+                    else:
+                        st.warning("종료(완료 표식 없음) — 로그 확인:")
+                    st.code("\n".join(tail) or "(출력 없음)")
+                    st.caption("다음: `scripts/wsl_sarvey/20_stack_isce.sh` (ISCE2) → MiaplPy → SARvey.")
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"다운로드 실패: {exc}")
     else:
-        st.warning("WSL2 가 없어 실 SAR 처리(ISCE2/SARvey)는 불가합니다. 임시로 Windows 에 받을 수는 있으나 "
-                   "처리하려면 결국 WSL2 가 필요합니다.")
-        with st.expander("Windows 로 받기(폴백, 토큰 필요)"):
+        st.warning("리눅스 처리환경에 도달할 수 없어 실 SAR 처리(ISCE2/SARvey)는 불가합니다. "
+                   + ("WSL2 를 설치하세요(`wsl --install`). 임시로 Windows 에 받을 수는 있으나 "
+                      "처리하려면 결국 WSL2 가 필요합니다."
+                      if sys.platform == "win32" else
+                      "bash 를 찾을 수 없습니다. 아래로 직접 받을 수는 있습니다."))
+        if wsl.get("detail"):
+            with st.expander("진단 상세"):
+                st.code(wsl["detail"])
+        with st.expander("이 컴퓨터로 직접 받기(폴백, 토큰 필요)"):
             dl_dir = st.text_input("다운로드 폴더", "data/slc", key="slc_dl_dir")
             token = st.text_input("Earthdata 토큰", type="password", key="edl_token")
-            if st.button(f"⬇️ Windows 로 {len(sel_scenes)}장 다운로드", key="btn_slc_dl_win",
+            if st.button(f"⬇️ 이 컴퓨터로 {len(sel_scenes)}장 다운로드", key="btn_slc_dl_win",
                          disabled=not (enough and urls)):
                 import os
 
@@ -1014,29 +1106,32 @@ def asc_desc_section() -> None:
 
 
 def aux_data_section() -> None:
-    """F 준비 — ISCE2/SARvey 보조데이터(궤도·DEM·AUX_CAL) 준비. 실 처리는 WSL2."""
+    """F 준비 — ISCE2/SARvey 보조데이터(궤도·DEM·AUX_CAL) 준비. 실 처리는 리눅스(또는 WSL2)."""
     import subprocess
-    st.caption("ISCE2 코레지에 필요: **궤도(POEORB)·DEM·AUX_CAL**. SLC 처럼 WSL 에 준비합니다. "
+    st.caption("ISCE2 코레지에 필요: **궤도(POEORB)·DEM·AUX_CAL**. SLC 와 같은 리눅스 쪽에 준비합니다. "
                "(ERA5 온도·강수·습도는 🌧️ master 섹션 + PINN 🌡️ 열팽창에서 처리)")
-    if st.button("WSL 환경 확인", key="btn_wsl_aux"):
-        with st.spinner("WSL 점검 중…"):
-            st.session_state["wsl_status"] = wsl_status()
-    wsl = st.session_state.get("wsl_status")
+    if st.button("처리환경 확인", key="btn_wsl_aux"):
+        with st.spinner("리눅스 처리환경 점검 중…"):
+            st.session_state["linux_status"] = linux_status()
+    wsl = st.session_state.get("linux_status")
     if not wsl:
-        st.info("‘WSL 환경 확인’을 눌러 WSL2 준비도·여유 용량을 점검하세요.")
+        st.info("‘처리환경 확인’을 눌러 리눅스(또는 WSL2) 준비도·여유 용량을 점검하세요.")
         return
-    st.write(f"WSL2 {'✅' if wsl['wsl'] else '❌'} · 여유 {wsl.get('free_gb', '?')} GB")
-    if not wsl["wsl"]:
-        st.warning("WSL2 가 없어 ISCE2 보조데이터 준비 불가.")
+    envlabel = {"native": "리눅스(네이티브)", "wsl": "WSL2"}.get(wsl.get("mode"), "리눅스 환경")
+    st.write(f"{envlabel} {'✅' if wsl['linux'] else '❌'} · 여유 {wsl.get('free_gb', '?')} GB")
+    if not wsl["linux"]:
+        st.warning("리눅스 처리환경에 도달할 수 없어 ISCE2 보조데이터 준비 불가."
+                   + (" WSL2 를 설치하세요(`wsl --install`)." if sys.platform == "win32" else ""))
         return
 
     slc_dir = st.text_input("SLC 폴더(궤도 날짜 기준)", "~/insar_dl/SLC", key="aux_slc")
     orbit_dir, dem_dir = "~/insar_dl/orbits", "~/insar_dl/DEM"
 
     def _run(title, cmd):
-        with st.spinner(f"{title} 실행 중… (WSL)"):
+        prefix, _mode = linux_shell()
+        with st.spinner(f"{title} 실행 중… ({envlabel})"):
             try:
-                r = subprocess.run(["wsl", "-e", "bash", "-lc", cmd], capture_output=True,
+                r = subprocess.run([*prefix, cmd], capture_output=True,
                                    text=True, encoding="utf-8", errors="replace", timeout=3600)
                 out = (r.stdout or "") + (r.stderr or "")
                 (st.success if r.returncode == 0 else st.warning)(f"{title} 종료코드 {r.returncode}")
@@ -1697,16 +1792,26 @@ def tab_fram(path: str, start: date) -> None:
         d1, d2 = st.columns(2)
         with d1:
             names, vals = diag["func_names"], diag["variability"]
+            # 레이더(폴라) 차트는 matplotlib 로 그린다(이미 번들됨) — plotly 40MB 불필요.
             try:
-                import plotly.graph_objects as go
-                fig = go.Figure(go.Scatterpolar(
-                    r=list(vals) + [vals[0]], theta=names + [names[0]], fill="toself",
-                    line_color="#d62728"))
-                fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 1]}},
-                                  showlegend=False, height=320,
-                                  margin={"l": 40, "r": 40, "t": 20, "b": 20})
-                st.plotly_chart(fig, use_container_width=True)
-            except ImportError:  # plotly 없으면 막대그래프 폴백
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+
+                ang = np.linspace(0, 2 * np.pi, len(names), endpoint=False)
+                ang_c = np.concatenate([ang, ang[:1]])
+                r_c = list(vals) + [vals[0]]
+                fig, ax = plt.subplots(figsize=(3.4, 3.4), subplot_kw={"projection": "polar"})
+                ax.plot(ang_c, r_c, color="#d62728", linewidth=1.5)
+                ax.fill(ang_c, r_c, color="#d62728", alpha=0.25)
+                ax.set_xticks(ang)
+                ax.set_xticklabels(names, fontsize=8)
+                ax.set_ylim(0, 1)
+                ax.tick_params(axis="y", labelsize=7)
+                fig.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+            except Exception:  # noqa: BLE001 — matplotlib 문제 시 막대그래프 폴백
                 st.bar_chart(pd.DataFrame({"변동 V": vals}, index=pd.Index(names, name="기능")))
         with d2:
             st.caption("기능 간 공명 R_ij (1에 가까울수록 동조 → 공명 위험)")
@@ -1746,6 +1851,27 @@ def status_header(path: str) -> None:
     c2.metric("측정점 수 N", n_points)
     c3.metric("취득 시점 수 M", n_dates)
     c4.metric("프로젝트", Path(path).name)
+
+
+def onboarding_banner() -> None:
+    """첫 실행 시작 가이드 — 3단계 흐름과 '무엇부터'를 안내한다.
+
+    접이식이라 자리를 많이 안 뺏고, '다시 안 보기'는 config 에 저장돼 재실행 후에도
+    유지된다(첫 사용자에게만 펼쳐 보이고, 익숙해지면 접힌 상태로 남는다).
+    """
+    onboarded = bool(_config_load().get("onboarded"))
+    with st.expander("🚀 시작 가이드 — 3단계로 교량 안전 보기", expanded=not onboarded):
+        c1, c2, c3 = st.columns(3)
+        c1.markdown("**① 교량 선택**  \n왼쪽 사이드바 **🔎 교량명 검색**에서 이름으로 찾아 "
+                    "**📍 이 교량으로 설정**을 누르세요. (또는 **① InSAR** 탭 지도에서 클릭)")
+        c2.markdown("**② 데이터 취득·처리**  \n**① InSAR** 탭에서 위성 장면을 받아 처리하면 "
+                    "변위 시계열이 만들어집니다. 빠르게 둘러보려면 사이드바 **⚙️ 데모 데이터 생성**.")
+        c3.markdown("**③ 위험도 확인**  \n**② PINN**(구조 강성) → **③ FRAM**(공명 위험 CRI·경보)에서 "
+                    "결과를 봅니다. 상단 카드가 현재 경보 등급을 요약합니다.")
+        st.caption("데이터가 없어도 데모로 전체 흐름(InSAR→PINN→FRAM)을 바로 체험할 수 있어요.")
+        if not onboarded and st.button("이해했어요 — 다시 안 보기", key="btn_onboarded"):
+            _config_save(onboarded=True)
+            st.rerun()
 
 
 # ───────────────────────────────── main ───────────────────────────────
@@ -1862,29 +1988,13 @@ def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
+    onboarding_banner()
 
-    # 📁 저장 폴더(데이터 루트) — project·레시피·SLC·결과가 모두 여기에 저장된다.
-    st.sidebar.markdown("### 📁 저장 폴더")
-    _cur_root = data_root()
-    _root_in = st.sidebar.text_input(
-        "데이터 루트", _cur_root, key="data_root_input",
-        help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
-             "(대용량 SLC는 외장드라이브 권장).")
-    if _root_in.strip() and _root_in.strip() != _cur_root:
-        st.session_state["data_root"] = _root_in.strip()
-        _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
-        try:
-            Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            st.sidebar.error(f"폴더 생성 실패: {exc}")
-        st.rerun()
-    try:
-        _free_gb = shutil.disk_usage(data_root()).free / 1e9
-        st.sidebar.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
-    except OSError:
-        st.sidebar.caption(f"저장 위치: `{data_root()}`")
+    # ── 사이드바 구성: 위에서부터 '무엇을 볼까'(상태 → 교량 선택 → 프로젝트 데이터),
+    #    기술 설정(저장 폴더·날짜축)은 맨 아래 접힌 '설정'으로 내려 첫인상을 가볍게 한다.
+    #    (data_root() 는 config/session 에서 읽으므로 저장폴더 위젯이 아래에 있어도 안전)
 
-    # 📍 현재 교량(위치) — 레시피가 있으면 이름·좌표 표시, 없으면 지정 안내
+    # 📍 현재 교량(상태) — 레시피가 있으면 이름·좌표, 없으면 지정 안내
     st.sidebar.markdown("### 📍 현재 교량")
     _tgt = Path(_recipe_dir()) / "bridge_target.json"
     try:
@@ -1897,8 +2007,9 @@ def main() -> None:
     else:
         st.sidebar.caption("교량 미지정 — 아래에서 이름으로 검색하거나 ① InSAR 탭 지도로 지정.")
 
-    # 🔎 교량명 검색 — CSV(전국교량표준데이터) + OSM 양쪽 → 지도(① InSAR)에 마커로 표기
-    with st.sidebar.expander("🔎 교량명 검색 (CSV+OSM)", expanded=not (_t and _t.get("selected_lat"))):
+    # 🔎 교량 선택 — 이름 검색(CSV+OSM) + 포트폴리오
+    st.sidebar.markdown("### 🔎 교량 선택")
+    with st.sidebar.expander("교량명 검색 (CSV+OSM)", expanded=not (_t and _t.get("selected_lat"))):
         from inframon.public_data import find_bridge_csv
         _csv = find_bridge_csv(data_root())
         if not _csv:
@@ -1946,6 +2057,9 @@ def main() -> None:
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
+
+    # 📊 프로젝트 데이터 — 보고 있는 project.h5 + (없으면) 데모 생성
+    st.sidebar.markdown("### 📊 프로젝트 데이터")
     path = st.sidebar.text_input("project.h5 경로", picked or default_project_path())
     with st.sidebar.expander("⚙️ 데모 데이터 생성", expanded=not Path(path).exists()):
         n_points = st.number_input("측정점 수 N", 2, 2000, 200, 10)
@@ -1961,7 +2075,29 @@ def main() -> None:
                 run_demo(path, int(n_points), int(n_dates), engines)
             st.success("완료 — project.h5 갱신됨")
             st.rerun()
-    start = st.sidebar.date_input("기준 시작일 (날짜축용)", value=date(2023, 1, 1))
+
+    # ⚙️ 설정 — 저장 폴더·날짜축 등 기술 옵션(기본 접힘, 기본값으로도 잘 돌아감)
+    st.sidebar.divider()
+    with st.sidebar.expander("⚙️ 설정 · 저장 폴더 / 날짜축", expanded=False):
+        _cur_root = data_root()
+        _root_in = st.text_input(
+            "데이터 루트(저장 폴더)", _cur_root, key="data_root_input",
+            help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
+                 "(대용량 SLC는 외장드라이브 권장).")
+        if _root_in.strip() and _root_in.strip() != _cur_root:
+            st.session_state["data_root"] = _root_in.strip()
+            _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
+            try:
+                Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                st.error(f"폴더 생성 실패: {exc}")
+            st.rerun()
+        try:
+            _free_gb = shutil.disk_usage(data_root()).free / 1e9
+            st.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
+        except OSError:
+            st.caption(f"저장 위치: `{data_root()}`")
+        start = st.date_input("기준 시작일 (날짜축용)", value=date(2023, 1, 1))
 
     status_header(path)
     st.divider()
