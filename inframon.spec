@@ -98,6 +98,11 @@ a = Analysis(
               # networkx(8MB): fram 임계경로(try/except ImportError 폴백, 뷰어는 h5 값 읽기만)와
               #   asf_search SBAS 플롯(find_spec 가드 → 없으면 nx=None)에서만 쓰여 뷰어엔 죽은 무게.
               "pyproj", "networkx",
+              # tkinter(~11MB tcl/tk 데이터·DLL): matplotlib 은 세 곳 모두 Agg 백엔드 고정,
+              #   pywebview 는 EdgeChromium(pythonnet) 사용 → tk 창 안 씀. 뷰어에 tkinter 불필요.
+              # lxml(7MB): inframon 이 docx/pptx/read_html/read_xml/bs4/lxml 을 전혀 안 씀.
+              #   pandas·fonttools·bs4 의 '선택 extra'로만 요구되어 훅이 끌어온 죽은 무게.
+              "tkinter", "_tkinter", "lxml",
               ],  # (uvicorn·h5py·pyarrow·pandas·altair 는 streamlit 이 쓰므로 제외 금지!)
     noarchive=False,
 )
