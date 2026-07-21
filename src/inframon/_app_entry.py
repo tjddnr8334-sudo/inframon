@@ -37,8 +37,11 @@ def main() -> int:
 
     if "--_selftest" in sys.argv:  # 번들 의존성 점검(옵션 기능 포함). desktop import 불필요
         ok = True
-        for mod in ("asf_search", "shapely", "dateparser", "networkx",
-                    "requests", "urllib3", "streamlit", "h5py"):
+        # 경량 뷰어가 실제로 번들·import 하는 모듈만 점검한다.
+        # (networkx·pyproj·plotly 는 뷰어에서 제외되었으므로 넣지 않는다 — 넣으면 오탐)
+        for mod in ("streamlit", "h5py", "numpy", "pandas", "altair", "folium",
+                    "matplotlib", "asf_search", "shapely", "dateparser",
+                    "requests", "urllib3", "webview"):
             try:
                 __import__(mod)
                 print(f"OK    {mod}")

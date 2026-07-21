@@ -162,3 +162,39 @@ def test_explain_gpt_failure_reads_cp949_hostile_bytes(tmp_path):
     log.write_bytes(b"ERROR: \xb0\xa1\xb3\xaa cannot read file\n")
     msg = sb.explain_gpt_failure(1, log)
     assert "cannot read" in msg
+
+
+# ── 데스크톱 첫 실행 UX: 스플래시·에러 진단 화면 ──────────────────────────
+def test_splash_html_is_self_contained_and_localized():
+    """더블클릭 즉시 뜨는 로딩 화면 — 외부 리소스 없이 완결되어야 한다."""
+    from inframon import desktop
+
+    html = desktop._splash_html()
+    assert html.lstrip().lower().startswith("<!doctype html")
+    assert "inframon" in html
+    assert "준비" in html  # 한글 안내 문구
+    # 오프라인/CSP 환경에서도 떠야 하므로 외부 http 리소스를 참조하면 안 된다.
+    assert "http://" not in html and "https://" not in html
+
+
+def test_error_html_shows_the_log_path():
+    """서버 기동 실패 화면은 로그 '위치'를 반드시 알려줘야 한다(에러 진단)."""
+    from pathlib import Path
+
+    from inframon import desktop
+
+    log = Path("/tmp/inframon/inframon_app.log")
+    html = desktop._error_html(log)
+    assert str(log) in html
+    assert "시작하지 못했습니다" in html
+
+
+def test_log_path_matches_app_entry_convention():
+    """desktop 이 안내하는 로그 경로가 _app_entry 가 실제로 쓰는 경로와 같아야 한다."""
+    import tempfile
+    from pathlib import Path
+
+    from inframon import desktop
+
+    expected = Path(tempfile.gettempdir()) / "inframon" / "inframon_app.log"
+    assert desktop._log_path() == expected
