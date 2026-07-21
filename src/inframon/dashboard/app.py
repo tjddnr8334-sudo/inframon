@@ -1809,6 +1809,27 @@ def status_header(path: str) -> None:
     c4.metric("프로젝트", Path(path).name)
 
 
+def onboarding_banner() -> None:
+    """첫 실행 시작 가이드 — 3단계 흐름과 '무엇부터'를 안내한다.
+
+    접이식이라 자리를 많이 안 뺏고, '다시 안 보기'는 config 에 저장돼 재실행 후에도
+    유지된다(첫 사용자에게만 펼쳐 보이고, 익숙해지면 접힌 상태로 남는다).
+    """
+    onboarded = bool(_config_load().get("onboarded"))
+    with st.expander("🚀 시작 가이드 — 3단계로 교량 안전 보기", expanded=not onboarded):
+        c1, c2, c3 = st.columns(3)
+        c1.markdown("**① 교량 선택**  \n왼쪽 사이드바 **🔎 교량명 검색**에서 이름으로 찾아 "
+                    "**📍 이 교량으로 설정**을 누르세요. (또는 **① InSAR** 탭 지도에서 클릭)")
+        c2.markdown("**② 데이터 취득·처리**  \n**① InSAR** 탭에서 위성 장면을 받아 처리하면 "
+                    "변위 시계열이 만들어집니다. 빠르게 둘러보려면 사이드바 **⚙️ 데모 데이터 생성**.")
+        c3.markdown("**③ 위험도 확인**  \n**② PINN**(구조 강성) → **③ FRAM**(공명 위험 CRI·경보)에서 "
+                    "결과를 봅니다. 상단 카드가 현재 경보 등급을 요약합니다.")
+        st.caption("데이터가 없어도 데모로 전체 흐름(InSAR→PINN→FRAM)을 바로 체험할 수 있어요.")
+        if not onboarded and st.button("이해했어요 — 다시 안 보기", key="btn_onboarded"):
+            _config_save(onboarded=True)
+            st.rerun()
+
+
 # ───────────────────────────────── main ───────────────────────────────
 def tab_psi(start: date) -> None:
     """④ PSI 방법론 비교 — PS(ADI)·SBAS/DS(소baseline)·QPS(하이브리드) 데크 결과."""
@@ -1923,6 +1944,7 @@ def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
+    onboarding_banner()
 
     # 📁 저장 폴더(데이터 루트) — project·레시피·SLC·결과가 모두 여기에 저장된다.
     st.sidebar.markdown("### 📁 저장 폴더")
