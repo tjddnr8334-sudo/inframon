@@ -1269,6 +1269,12 @@ def tab_insar(path: str, start: date) -> None:
     c.metric("평균 coherence", f"{float(np.mean(coh)):.3f}")
     d.metric("기간", f"{times[0]:%y-%m} ~ {times[-1]:%y-%m}")
 
+    # 프로젝트 전환 시 이전 M/N 로 저장된 위젯 값이 새 범위를 초과하면 StreamlitValueAboveMaxError
+    # → 새 project 의 범위로 클램프해 크래시 방지(M/N 다른 프로젝트로 바꿔도 안전).
+    if st.session_state.get("insar_t", 0) > M - 1:
+        st.session_state["insar_t"] = M - 1
+    if st.session_state.get("insar_pt", 0) > N - 1:
+        st.session_state["insar_pt"] = N - 1
     k = st.slider("시점 (t)", 0, M - 1, M - 1, key="insar_t")
     st.caption(f"선택 시점: **{times[k]:%Y-%m-%d}**")
     c1, c2 = st.columns(2)
