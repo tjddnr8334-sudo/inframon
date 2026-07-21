@@ -1990,28 +1990,11 @@ def main() -> None:
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
     onboarding_banner()
 
-    # 📁 저장 폴더(데이터 루트) — project·레시피·SLC·결과가 모두 여기에 저장된다.
-    st.sidebar.markdown("### 📁 저장 폴더")
-    _cur_root = data_root()
-    _root_in = st.sidebar.text_input(
-        "데이터 루트", _cur_root, key="data_root_input",
-        help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
-             "(대용량 SLC는 외장드라이브 권장).")
-    if _root_in.strip() and _root_in.strip() != _cur_root:
-        st.session_state["data_root"] = _root_in.strip()
-        _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
-        try:
-            Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            st.sidebar.error(f"폴더 생성 실패: {exc}")
-        st.rerun()
-    try:
-        _free_gb = shutil.disk_usage(data_root()).free / 1e9
-        st.sidebar.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
-    except OSError:
-        st.sidebar.caption(f"저장 위치: `{data_root()}`")
+    # ── 사이드바 구성: 위에서부터 '무엇을 볼까'(상태 → 교량 선택 → 프로젝트 데이터),
+    #    기술 설정(저장 폴더·날짜축)은 맨 아래 접힌 '설정'으로 내려 첫인상을 가볍게 한다.
+    #    (data_root() 는 config/session 에서 읽으므로 저장폴더 위젯이 아래에 있어도 안전)
 
-    # 📍 현재 교량(위치) — 레시피가 있으면 이름·좌표 표시, 없으면 지정 안내
+    # 📍 현재 교량(상태) — 레시피가 있으면 이름·좌표, 없으면 지정 안내
     st.sidebar.markdown("### 📍 현재 교량")
     _tgt = Path(_recipe_dir()) / "bridge_target.json"
     try:
@@ -2024,8 +2007,9 @@ def main() -> None:
     else:
         st.sidebar.caption("교량 미지정 — 아래에서 이름으로 검색하거나 ① InSAR 탭 지도로 지정.")
 
-    # 🔎 교량명 검색 — CSV(전국교량표준데이터) + OSM 양쪽 → 지도(① InSAR)에 마커로 표기
-    with st.sidebar.expander("🔎 교량명 검색 (CSV+OSM)", expanded=not (_t and _t.get("selected_lat"))):
+    # 🔎 교량 선택 — 이름 검색(CSV+OSM) + 포트폴리오
+    st.sidebar.markdown("### 🔎 교량 선택")
+    with st.sidebar.expander("교량명 검색 (CSV+OSM)", expanded=not (_t and _t.get("selected_lat"))):
         from inframon.public_data import find_bridge_csv
         _csv = find_bridge_csv(data_root())
         if not _csv:
@@ -2073,6 +2057,9 @@ def main() -> None:
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
+
+    # 📊 프로젝트 데이터 — 보고 있는 project.h5 + (없으면) 데모 생성
+    st.sidebar.markdown("### 📊 프로젝트 데이터")
     path = st.sidebar.text_input("project.h5 경로", picked or default_project_path())
     with st.sidebar.expander("⚙️ 데모 데이터 생성", expanded=not Path(path).exists()):
         n_points = st.number_input("측정점 수 N", 2, 2000, 200, 10)
@@ -2088,7 +2075,29 @@ def main() -> None:
                 run_demo(path, int(n_points), int(n_dates), engines)
             st.success("완료 — project.h5 갱신됨")
             st.rerun()
-    start = st.sidebar.date_input("기준 시작일 (날짜축용)", value=date(2023, 1, 1))
+
+    # ⚙️ 설정 — 저장 폴더·날짜축 등 기술 옵션(기본 접힘, 기본값으로도 잘 돌아감)
+    st.sidebar.divider()
+    with st.sidebar.expander("⚙️ 설정 · 저장 폴더 / 날짜축", expanded=False):
+        _cur_root = data_root()
+        _root_in = st.text_input(
+            "데이터 루트(저장 폴더)", _cur_root, key="data_root_input",
+            help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
+                 "(대용량 SLC는 외장드라이브 권장).")
+        if _root_in.strip() and _root_in.strip() != _cur_root:
+            st.session_state["data_root"] = _root_in.strip()
+            _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
+            try:
+                Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                st.error(f"폴더 생성 실패: {exc}")
+            st.rerun()
+        try:
+            _free_gb = shutil.disk_usage(data_root()).free / 1e9
+            st.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
+        except OSError:
+            st.caption(f"저장 위치: `{data_root()}`")
+        start = st.date_input("기준 시작일 (날짜축용)", value=date(2023, 1, 1))
 
     status_header(path)
     st.divider()
