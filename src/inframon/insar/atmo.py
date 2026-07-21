@@ -103,6 +103,62 @@ def common_mode(los: np.ndarray, coherence: np.ndarray | None = None, *,
     return {"common_mode": cm, "meta": {"basis": basis, "n_stable": n_used, "min_coh": float(min_coh)}}
 
 
+def _norm_ymd(s) -> str:
+    """'YYYYMMDD' | 'YYYY-MM-DD' | bytes → 'YYYYMMDD'(숫자 8자리)."""
+    t = (s.decode() if isinstance(s, bytes) else str(s)).strip().replace("-", "").replace("/", "")
+    return t[:8]
+
+
+def resolve_temperature(date_labels, *, lat: float | None = None, lon: float | None = None,
+                        csv_path: str | None = None, fetch: bool = False) -> dict:
+    """취득일별 기온[°C] 시계열을 확보 — CSV 우선(결정론적), 없으면 ERA5 fetch(opt-in).
+
+    - csv_path: `date,temp_C`(헤더 무관, 날짜는 YYYYMMDD/YYYY-MM-DD) → date_labels 순서로 매칭.
+    - fetch=True + lat/lon: Open-Meteo ERA5(`era5_master.fetch_temperature`, 키 불필요·네트워크).
+    반환: {temperature:[M] float|None, source, meta}. 확보 실패 시 temperature=None(열보정 skip).
+    """
+    labels = [_norm_ymd(d) for d in date_labels]
+    M = len(labels)
+    if csv_path:
+        import csv as _csv
+        table: dict[str, float] = {}
+        try:
+            with open(csv_path, newline="", encoding="utf-8-sig") as fh:
+                for row in _csv.reader(fh):
+                    if len(row) < 2:
+                        continue
+                    key = _norm_ymd(row[0])
+                    if not key.isdigit():
+                        continue                       # 헤더/주석 행 skip
+                    try:
+                        table[key] = float(row[1])
+                    except ValueError:
+                        continue
+        except OSError as exc:
+            return {"temperature": None, "source": "csv", "meta": {"ok": False, "reason": str(exc)}}
+        temps = [table.get(k) for k in labels]
+        n_missing = sum(t is None for t in temps)
+        if n_missing:
+            return {"temperature": None, "source": "csv",
+                    "meta": {"ok": False, "reason": f"CSV에 {n_missing}/{M} 취득일 온도 없음", "path": csv_path}}
+        return {"temperature": np.array(temps, dtype=float), "source": "csv",
+                "meta": {"ok": True, "path": csv_path, "n": M}}
+    if fetch and lat is not None and lon is not None:
+        try:
+            from .era5_master import fetch_temperature
+            temps = fetch_temperature(float(lat), float(lon), labels)
+        except Exception as exc:  # noqa: BLE001 — 네트워크/데이터 실패 → 열보정 skip
+            return {"temperature": None, "source": "era5",
+                    "meta": {"ok": False, "reason": str(exc)[:120]}}
+        if temps is None or len(temps) != M:
+            return {"temperature": None, "source": "era5",
+                    "meta": {"ok": False, "reason": "ERA5 온도 개수 불일치"}}
+        return {"temperature": np.asarray(temps, dtype=float), "source": "era5",
+                "meta": {"ok": True, "lat": float(lat), "lon": float(lon), "n": M}}
+    return {"temperature": None, "source": "none",
+            "meta": {"ok": False, "reason": "온도원 없음(csv_path 또는 fetch+lat/lon 필요)"}}
+
+
 def correct_los_field(
     los: np.ndarray,
     coherence: np.ndarray | None = None,
@@ -112,18 +168,22 @@ def correct_los_field(
     height_corr: bool = True,
     min_ref_coh: float = 0.7,
     min_height_spread_m: float = 1.0,
+    days: np.ndarray | None = None,
+    temperature: np.ndarray | None = None,
 ) -> dict:
     """LOS 시계열 [N,M] 정확도 보정 체인 — 인제스트에서 project.h5 에 반영할 결정론적 보정.
 
-    세 보정을 순서대로 적용한다(모두 네트워크 불필요, 재현 가능):
+    보정을 순서대로 적용한다:
       1. **공통성분(APS) 제거**(reference): 안정점 집합의 에폭별 중앙값(=공간 기준망)을 전
          점에서 빼 공통 대기/궤도 램프를 제거한다 → 시간변동 저감. 단일점 대신 중앙값을
-         써 그 점 노이즈 주입을 피한다.
+         써 그 점 노이즈 주입을 피한다. (네트워크 불필요)
       2. **고도상관(성층 대류권) 보정**(height_corr): 고도차가 있을 때 시점별 los~height
-         선형기울기를 제거(GACOS 대안). 고도차 < min_height_spread_m 이면 건너뛴다.
+         선형기울기를 제거(GACOS 대안). 고도차 < min_height_spread_m 이면 건너뛴다. (네트워크 불필요)
+      3. **열팽창 분리**(thermal): `days`+`temperature` 를 주면 los=a+b·t+c·T 회귀로 계절
+         열변형 c·T 를 분리해 **순 변형** deformation=los−c·(T−T̄) 을 남긴다. 교량은 열팽창이
+         지배적이라 선형속도만으론 계절 거동을 노이즈로 버린다. (온도 시계열 필요)
 
-    반환: corrected[N,M] float32 + meta(적용 단계·기준·시간변동 감소율). 열팽창 분리는
-    온도 시계열이 필요하므로 여기서 하지 않고 `temporal_decompose` 로 대시보드/분석에서 한다.
+    반환: corrected[N,M] float32 + meta(적용 단계·기준·시간변동 감소율·열계수).
     """
     los = np.asarray(los, dtype=np.float64)
     meta: dict = {"applied": [], "n_points": int(los.shape[0]), "n_dates": int(los.shape[1])}
@@ -171,6 +231,26 @@ def correct_los_field(
             )
     elif height_corr:
         meta["height_correlated_skipped"] = "고도(height) 없음"
+
+    # 3. 열팽창 분리(온도 시계열이 있을 때만) — 계절 열변형 c·T 를 빼 순 변형만 남긴다.
+    if temperature is not None and days is not None:
+        T = np.asarray(temperature, dtype=np.float64).ravel()
+        d = np.asarray(days, dtype=np.float64).ravel()
+        if T.shape[0] == out.shape[1] and d.shape[0] == out.shape[1] and np.isfinite(T).all():
+            dec = temporal_decompose(out, d, T)
+            out = np.asarray(dec["deformation"], dtype=np.float64)
+            tc = np.asarray(dec["thermal_coef"], dtype=np.float64)
+            meta["applied"].append("thermal")
+            meta["thermal_coef_mm_per_C"] = {
+                "mean": round(float(tc.mean()), 4), "abs_max": round(float(np.abs(tc).max()), 4),
+            }
+            meta["temperature_range_C"] = [round(float(T.min()), 1), round(float(T.max()), 1)]
+        else:
+            meta["thermal_skipped"] = (
+                f"온도/일수 길이 불일치 또는 비유한값(T={T.shape[0]}, days={d.shape[0]}, M={out.shape[1]})"
+            )
+    elif temperature is not None or days is not None:
+        meta["thermal_skipped"] = "온도·일수 둘 다 필요"
 
     std_after = float(np.mean(out.std(axis=1)))
     meta["temporal_std_before_mm"] = round(std_before, 4)

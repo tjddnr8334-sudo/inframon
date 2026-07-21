@@ -62,6 +62,13 @@ class PipelineConfig:
     insar_apply_corrections: bool = False
     insar_ref_min_coherence: float = 0.9   # 기준점 후보 최소 시간결맞음(부족 시 최고 coh 폴백)
 
+    # 열팽창(온도) 보정 — los=a+b·t+c·T 회귀로 계절 열변형(c·T)을 분리해 순 변형만 남긴다.
+    # insar_apply_corrections 와 함께 켠다. 온도원: insar_temperature_csv(date,temp_C, 결정론적)
+    # 우선, 없고 insar_fetch_temperature=True 면 ERA5(Open-Meteo, 키불필요·네트워크)로 취득일 온도.
+    insar_thermal_correction: bool = False
+    insar_temperature_csv: str | None = None
+    insar_fetch_temperature: bool = False
+
     # 계약 강건화 (Phase 1 고도화)
     validate_contracts: bool = True   # 각 단계 출력의 배열 형상/dtype/심볼 검증
     write_manifest: bool = True       # 실행 출처(run_id/cfg/해시)를 project.h5 에 기록

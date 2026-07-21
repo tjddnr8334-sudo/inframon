@@ -201,6 +201,12 @@ def main() -> None:
                         "insar=real 과 --import-track-h5 양쪽에 적용, /insar/velocity_mm_yr 기록")
     p.add_argument("--ref-min-coherence", type=float, default=0.9,
                    help="--insar-corrections 기준점 후보 최소 시간결맞음(부족 시 최고 coh 폴백)")
+    p.add_argument("--insar-thermal", action="store_true",
+                   help="열팽창(온도) 보정 — los=a+b·t+c·T 로 계절 열변형 분리(--insar-corrections 필요)")
+    p.add_argument("--insar-temp-csv", default=None, metavar="CSV",
+                   help="열팽창 보정 온도원: date,temp_C CSV(결정론적). 취득일별 기온[°C]")
+    p.add_argument("--insar-fetch-temp", action="store_true",
+                   help="온도 CSV 없을 때 ERA5(Open-Meteo, 키불필요·네트워크)로 취득일 온도 조회")
     p.add_argument("--resume", action="store_true",
                    help="기존 --out 에서 입력이 안 바뀐 단계는 재계산 생략(증분 재개)")
     p.add_argument("--force-stage", action="append", default=[], metavar="STAGE",
@@ -242,6 +248,9 @@ def main() -> None:
         cfg.insar_dem_geotiff = args.insar_dem
     cfg.insar_apply_corrections = args.insar_corrections
     cfg.insar_ref_min_coherence = args.ref_min_coherence
+    cfg.insar_thermal_correction = args.insar_thermal
+    cfg.insar_temperature_csv = args.insar_temp_csv
+    cfg.insar_fetch_temperature = args.insar_fetch_temp
     cfg.resume = args.resume
     cfg.force_stages = tuple(args.force_stage)
     try:
@@ -882,7 +891,10 @@ def main() -> None:
             insar = import_track_h5(store, args.import_track_h5, geometry_latlon=geometry,
                                     apply_corrections=args.insar_corrections,
                                     ref_min_coherence=args.ref_min_coherence,
-                                    dem_geotiff=args.insar_dem)
+                                    dem_geotiff=args.insar_dem,
+                                    thermal_correction=args.insar_thermal,
+                                    temperature_csv=args.insar_temp_csv,
+                                    fetch_temperature=args.insar_fetch_temp)
         print("=" * 56)
         print("  Track HDF5 → /insar 변환 완료")
         print("=" * 56)
@@ -892,6 +904,8 @@ def main() -> None:
         print(f"  데크 station    : {'폴리라인 투영(곡선 대응)' if geometry else '주곡선 추정(레시피 geometry 없음)'}")
         print(f"  고도(z) 출처    : {'DEM 샘플(--insar-dem)' if args.insar_dem else 'Track height 또는 0'}")
         print(f"  정확도 보정     : {'적용(기준점+고도상관) → /insar/velocity_mm_yr' if args.insar_corrections else '없음'}")
+        if args.insar_thermal:
+            print(f"  열팽창 보정     : {'CSV ' + args.insar_temp_csv if args.insar_temp_csv else ('ERA5 fetch' if args.insar_fetch_temp else '온도원 없음')}")
         print("=" * 56)
         return
 

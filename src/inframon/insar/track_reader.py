@@ -222,6 +222,9 @@ def import_track_h5(
     apply_corrections: bool = False,
     ref_min_coherence: float = 0.9,
     dem_geotiff: str | Path | None = None,
+    thermal_correction: bool = False,
+    temperature_csv: str | None = None,
+    fetch_temperature: bool = False,
 ) -> InSAROutput:
     """Track A/B/C/D export HDF5를 /insar 데이터셋으로 적재한다(CLI 단독 변환용).
 
@@ -258,11 +261,23 @@ def import_track_h5(
     los = td.los
     corr_meta = None
     if apply_corrections:
-        from .atmo import correct_los_field
+        from .atmo import correct_los_field, resolve_temperature
+        temp = temp_meta = None
+        if thermal_correction:
+            ll = td.lonlat
+            clat = clon = None
+            if float(np.abs(ll[:, 0]).max()) <= 180 and float(np.abs(ll[:, 1]).max()) <= 90:
+                clat, clon = float(np.median(ll[:, 1])), float(np.median(ll[:, 0]))
+            tr = resolve_temperature(td.date_labels, lat=clat, lon=clon,
+                                     csv_path=temperature_csv, fetch=bool(fetch_temperature))
+            temp, temp_meta = tr["temperature"], {"source": tr["source"], **tr["meta"]}
         res = correct_los_field(los, coherence=td.coherence, height=z,
-                                min_ref_coh=float(ref_min_coherence))
+                                min_ref_coh=float(ref_min_coherence),
+                                days=td.dates, temperature=temp)
         los = res["corrected"]
         corr_meta = res["meta"]
+        if temp_meta is not None:
+            corr_meta["temperature"] = temp_meta
     xyz = np.column_stack([td.lonlat[:, 0], td.lonlat[:, 1], z])
     longitudinal = los * np.cos(np.deg2rad(azimuth_angle_deg))
     # 곡선 교량: 호길이 station(데크를 따라 잰 거리). 폴리라인 있으면 투영, 없으면 주곡선.

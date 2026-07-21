@@ -290,3 +290,40 @@ def test_import_track_h5_no_dem_z_zero(tmp_path):
         src = store.read_json_attr("insar", "track_source")
     assert src["z_source"] == "zero"
     assert np.allclose(xyz[:, 2], 0.0)
+
+
+def test_import_track_h5_thermal_csv(tmp_path):
+    """import_track_h5(thermal_correction, temperature_csv): 열팽창 분리 적용·이력 기록."""
+    from inframon.insar.track_reader import import_track_h5
+
+    M = 24
+    epochs = np.array([20200101 + i for i in range(M)], dtype=np.int32)  # 임의 취득일 라벨
+    days = np.arange(M) * 30.0
+    t = days / 365.25
+    T = 15 + 12 * np.sin(2 * np.pi * t)
+    rng = np.random.default_rng(2)
+    los = (-3.0 * t)[None, :] + 0.4 * (T - T.mean())[None, :] + rng.normal(0, 0.1, (12, M))
+    lon = np.linspace(127.01, 127.05, 12)
+    lat = np.linspace(37.33, 37.35, 12)
+    track = tmp_path / "t_thermal.h5"
+    with h5py.File(track, "w") as f:
+        f.create_dataset("pixel_lonlat", data=np.column_stack([lon, lat]).astype(np.float64))
+        f.create_dataset("epochs", data=epochs)
+        f.create_dataset("los_mm", data=los.astype(np.float32))
+        f.create_dataset("coh", data=np.full(12, 0.85, dtype=np.float32))
+
+    csv = tmp_path / "temp.csv"
+    csv.write_text("date,temp_C\n" + "\n".join(f"{int(e)},{tt:.2f}" for e, tt in zip(epochs, T)),
+                   encoding="utf-8")
+
+    with ProjectStore(tmp_path / "p.h5", mode="w") as store:
+        import_track_h5(store, track, apply_corrections=True,
+                        thermal_correction=True, temperature_csv=str(csv))
+        src = store.read_json_attr("insar", "track_source")
+
+    # 배선 검증: CSV 온도 확보 → 열분해 단계 적용·이력 기록(계수 복원 정확도는 test_atmo 단위테스트).
+    cm = src["corrections"]
+    assert "thermal" in cm["applied"]
+    assert cm["temperature"]["source"] == "csv" and cm["temperature"]["ok"] is True
+    assert np.isfinite(cm["thermal_coef_mm_per_C"]["mean"])
+    assert cm["temperature_range_C"][0] < cm["temperature_range_C"][1]

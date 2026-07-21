@@ -26,6 +26,22 @@ from . import geo
 from .track_reader import read_track_h5, write_insar_contract
 
 
+def _centroid_lonlat(lonlat, world, crs):
+    """점군의 대표 (lat, lon)[WGS84] — ERA5 온도 조회용. 실패 시 (None, None)."""
+    ll = np.asarray(lonlat, dtype=float)
+    if ll.size and float(np.abs(ll[:, 0]).max()) <= 180 and float(np.abs(ll[:, 1]).max()) <= 90:
+        return float(np.median(ll[:, 1])), float(np.median(ll[:, 0]))   # (lat, lon)
+    if world is not None and crs:
+        try:
+            w = np.asarray(world, dtype=float)
+            cx, cy = float(np.median(w[:, 0])), float(np.median(w[:, 1]))
+            out = geo.reproject(np.array([[cx, cy]]), crs, "EPSG:4326")  # (x=lon, y=lat)
+            return float(out[0, 1]), float(out[0, 0])
+        except Exception:  # noqa: BLE001 — 재투영 실패 → 온도 조회 skip
+            return None, None
+    return None, None
+
+
 def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> InSAROutput:
     if not cfg.insar_source_h5:
         raise ValueError(
@@ -136,9 +152,23 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
     if getattr(cfg, "insar_apply_corrections", False):
         from .atmo import correct_los_field
         min_coh = float(getattr(cfg, "insar_ref_min_coherence", 0.9))
-        res = correct_los_field(los, coherence=coherence, height=z, min_ref_coh=min_coh)
+        # 열팽창 보정용 온도(opt-in): CSV 우선, 없으면 ERA5 fetch(점군 중심 lon/lat).
+        temp = temp_meta = None
+        if getattr(cfg, "insar_thermal_correction", False):
+            from .atmo import resolve_temperature
+            clat, clon = _centroid_lonlat(td.lonlat[keep], world[keep] if world is not None else None,
+                                          cv.geometry.crs)
+            tr = resolve_temperature(
+                td.date_labels, lat=clat, lon=clon,
+                csv_path=getattr(cfg, "insar_temperature_csv", None),
+                fetch=bool(getattr(cfg, "insar_fetch_temperature", False)))
+            temp, temp_meta = tr["temperature"], {"source": tr["source"], **tr["meta"]}
+        res = correct_los_field(los, coherence=coherence, height=z, min_ref_coh=min_coh,
+                                days=td.dates, temperature=temp)
         los = res["corrected"]
         corr_meta = res["meta"]
+        if temp_meta is not None:
+            corr_meta["temperature"] = temp_meta
         if fused_axial_k is not None:            # 융합 종축/연직 — 기준점 정합만(고도상관 생략)
             fa = correct_los_field(fused_axial_k, coherence=coherence, height=None,
                                    height_corr=False, min_ref_coh=min_coh)

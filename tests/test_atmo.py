@@ -9,6 +9,7 @@ from inframon.insar.atmo import (
     height_correlated_correction,
     most_stable_index,
     reference_correction,
+    resolve_temperature,
     select_reference_point,
     temporal_decompose,
 )
@@ -134,3 +135,45 @@ def test_correct_los_field_disabled_steps_noop():
     res = correct_los_field(los, reference=False, height_corr=False)
     assert res["meta"]["applied"] == []
     assert np.allclose(res["corrected"], los)
+
+
+def test_correct_los_field_thermal_separates_seasonal():
+    # los = 선형변형(-4·t) + 열팽창(0.5·(T−T̄)) → 열분해가 계절성 제거, 열계수 복원
+    rng = np.random.default_rng(11)
+    M = 36
+    days = np.arange(M) * 30.0
+    t = days / 365.25
+    T = 15 + 12 * np.sin(2 * np.pi * t)
+    los = (-4.0 * t)[None, :] + 0.5 * (T - T.mean())[None, :] + rng.normal(0, 0.1, (20, M))
+    res = correct_los_field(los, reference=False, height_corr=False, days=days, temperature=T)
+    assert "thermal" in res["meta"]["applied"]
+    assert abs(res["meta"]["thermal_coef_mm_per_C"]["mean"] - 0.5) < 0.15   # 열계수 복원
+    # 열변형 제거 후 잔차의 계절진폭이 원본보다 작다
+    assert res["corrected"].std(axis=1).mean() < los.std(axis=1).mean()
+
+
+def test_correct_los_field_thermal_needs_both():
+    los = np.random.default_rng(12).normal(0, 1, (5, 8))
+    res = correct_los_field(los, reference=False, height_corr=False, days=np.arange(8) * 12.0)
+    assert "thermal" not in res["meta"]["applied"]
+    assert "thermal_skipped" in res["meta"]
+
+
+def test_resolve_temperature_csv(tmp_path):
+    csv = tmp_path / "temp.csv"
+    csv.write_text("date,temp_C\n20200101,1.5\n20200113,3.0\n2020-01-25,5.5\n", encoding="utf-8")
+    r = resolve_temperature(["20200101", "20200113", "20200125"], csv_path=str(csv))
+    assert r["source"] == "csv" and r["meta"]["ok"] is True
+    assert np.allclose(r["temperature"], [1.5, 3.0, 5.5])
+
+
+def test_resolve_temperature_csv_missing_date(tmp_path):
+    csv = tmp_path / "temp.csv"
+    csv.write_text("20200101,1.5\n", encoding="utf-8")
+    r = resolve_temperature(["20200101", "20200113"], csv_path=str(csv))
+    assert r["temperature"] is None and r["meta"]["ok"] is False   # 취득일 하나 없음
+
+
+def test_resolve_temperature_none_without_source():
+    r = resolve_temperature(["20200101", "20200113"])
+    assert r["temperature"] is None and r["source"] == "none"
