@@ -126,6 +126,15 @@ def main() -> None:
     p.add_argument("--fem-boundary", default=None,
                    choices=["simply_supported", "continuous", "fixed", "cantilever"],
                    help="--fem-crosscheck 경계조건 override (기본: /pinn 저장값 또는 단순지지).")
+    p.add_argument("--fit-reference-range", default=None, metavar="GLOB_OR_LIST",
+                   help="실측 건강 교량 project.h5 들(glob 또는 콤마목록)의 /fram/CRI 로 CRI "
+                        "정상범위(reference range)를 적합해 --reference-out JSON 으로 저장. "
+                        "현장 인구 기준치(합성 기본치 교체).")
+    p.add_argument("--reference-out", default="data/reference_range.json", metavar="JSON",
+                   help="--fit-reference-range 저장 경로(기본 data/reference_range.json).")
+    p.add_argument("--reference-clean", action="store_true",
+                   help="--fit-reference-range: 패키지 기본 정상범위의 정상범위 밖(경고·위험) 점을 "
+                        "제외하고 건강 점만으로 적합(오염 방어).")
     p.add_argument("--validate", default=None, metavar="PROJECT_H5,REFERENCE_CSV",
                    help="현장 검증: project.h5 의 InSAR 결과를 기준 CSV(계측·FEM: lon,lat,value)와 대조(RMSE·bias·r).")
     p.add_argument("--validate-kind", default="velocity", choices=["velocity", "displacement"],
@@ -187,6 +196,11 @@ def main() -> None:
                    help="asc+desc 융합용 반대 궤도 Track H5. 있으면 연직+종축 분리, 불가 시 단일 폴백")
     p.add_argument("--insar-dem", default=None,
                    help="Track 에 점별 고도가 없을 때 z 를 샘플링할 DEM GeoTIFF(ISCE2용 DEM 등)")
+    p.add_argument("--insar-corrections", action="store_true",
+                   help="LOS 시계열에 정확도 보정(기준점 정합+고도상관 성층대기) 적용 후 저장. "
+                        "insar=real 과 --import-track-h5 양쪽에 적용, /insar/velocity_mm_yr 기록")
+    p.add_argument("--ref-min-coherence", type=float, default=0.9,
+                   help="--insar-corrections 기준점 후보 최소 시간결맞음(부족 시 최고 coh 폴백)")
     p.add_argument("--resume", action="store_true",
                    help="기존 --out 에서 입력이 안 바뀐 단계는 재계산 생략(증분 재개)")
     p.add_argument("--force-stage", action="append", default=[], metavar="STAGE",
@@ -226,6 +240,8 @@ def main() -> None:
         cfg.insar_source_desc_h5 = args.insar_source_desc
     if args.insar_dem is not None:
         cfg.insar_dem_geotiff = args.insar_dem
+    cfg.insar_apply_corrections = args.insar_corrections
+    cfg.insar_ref_min_coherence = args.ref_min_coherence
     cfg.resume = args.resume
     cfg.force_stages = tuple(args.force_stage)
     try:
@@ -852,15 +868,65 @@ def main() -> None:
     if args.import_track_h5:
         from .contracts.io import ProjectStore
 
+        # 레시피의 교량 선형(OSM geometry)이 있으면 넘겨 **곡선 데크 호길이 station**을
+        # 폴리라인 투영으로 정확히 산출(없으면 점군 주곡선으로 폴백).
+        geometry = None
+        tgt_path = Path(f"{args.recipe}/bridge_target.json")
+        if tgt_path.exists():
+            try:
+                from .insar.recipe import load_bridge_target
+                geometry = load_bridge_target(str(tgt_path)).geometry or None
+            except Exception as exc:  # noqa: BLE001 — geometry 없어도 진행(주곡선 폴백)
+                print(f"  (경고) 레시피 geometry 로드 실패 → 주곡선 폴백: {str(exc)[:60]}")
         with ProjectStore(args.out, mode="a") as store:
-            insar = import_track_h5(store, args.import_track_h5)
+            insar = import_track_h5(store, args.import_track_h5, geometry_latlon=geometry,
+                                    apply_corrections=args.insar_corrections,
+                                    ref_min_coherence=args.ref_min_coherence)
         print("=" * 56)
         print("  Track HDF5 → /insar 변환 완료")
         print("=" * 56)
         print(f"  입력 파일       : {args.import_track_h5}")
         print(f"  결과 파일       : {args.out}")
         print(f"  측정점/시점     : N={insar.n_points}, M={insar.n_dates}")
+        print(f"  데크 station    : {'폴리라인 투영(곡선 대응)' if geometry else '주곡선 추정(레시피 geometry 없음)'}")
+        print(f"  정확도 보정     : {'적용(기준점+고도상관) → /insar/velocity_mm_yr' if args.insar_corrections else '없음'}")
         print("=" * 56)
+        return
+
+    if args.fit_reference_range:
+        import glob as _glob
+        import json as _json
+
+        from .fram.reference_range import (
+            default_reference_range,
+            fit_reference_range_from_projects,
+        )
+        spec = args.fit_reference_range
+        paths = ([q for tok in spec.split(",") for q in _glob.glob(tok.strip())]
+                 if ("*" in spec or "?" in spec or "," in spec) else _glob.glob(spec) or [spec])
+        paths = sorted(set(paths))
+        if not paths:
+            p.error(f"--fit-reference-range: 대상 project.h5 를 못 찾음: {spec}")
+        excl = default_reference_range() if args.reference_clean else None
+        try:
+            ref = fit_reference_range_from_projects(paths, exclude_out_of_range=excl)
+        except ValueError as exc:
+            p.error(str(exc))
+        Path(args.reference_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.reference_out).write_text(
+            _json.dumps(ref.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        print("=" * 56)
+        print("  CRI 정상범위(reference range) 적합 완료 — 현장 건강 코호트")
+        print("=" * 56)
+        print(f"  건강 교량 수     : {ref.regime.get('n_bridges')} (표본 {ref.n})")
+        print(f"  median·MAD       : {ref.median:.3f} · {ref.mad:.3f}")
+        print(f"  정상경계 p97.5/p99: {ref.p97_5:.3f} / {ref.p99:.3f}")
+        print(f"  위험경계         : {ref.abnormal_high:.3f}")
+        print(f"  관측규모(regime) : 노이즈 {ref.regime.get('noise_mm')}mm · "
+              f"기간 {ref.regime.get('span_days')}일")
+        print(f"  저장             : {args.reference_out}")
+        print("=" * 56)
+        print("  적용: custom_pinn(reference_range=<이 dict>) 또는 cfg.fram_reference_range 에 로드.")
         return
 
     if not args.demo:

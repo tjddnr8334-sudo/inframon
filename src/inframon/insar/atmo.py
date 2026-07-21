@@ -79,6 +79,108 @@ def temporal_decompose(los: np.ndarray, days: np.ndarray,
             "used_temperature": has_T}
 
 
+def common_mode(los: np.ndarray, coherence: np.ndarray | None = None, *,
+                min_coh: float = 0.7, min_points: int = 5) -> dict:
+    """공간 기준망 공통성분(APS 근사) — 안정점(고coh) 집합의 **에폭별 중앙값** 시계열.
+
+    단일 기준점은 그 점 노이즈를 전 점에 주입하지만, 다수 안정점의 중앙값은 개별 노이즈를
+    평균해 지워 **참 공통 대기/궤도 램프**만 남긴다. 이를 전 점에서 빼면 시간변동이 준다
+    (공간 reference network 보정). 안정점이 부족하면 전체 점 중앙값으로 폴백한다.
+
+    반환: cm[M] 공통성분 시계열 + meta(안정점 수·기준방식).
+    """
+    los = np.asarray(los, dtype=np.float64)
+    n = los.shape[0]
+    coh = (np.asarray(coherence, dtype=np.float64).ravel()
+           if coherence is not None else np.ones(n))
+    stable = np.where(coh >= min_coh)[0]
+    if stable.size >= min_points:
+        cm = np.median(los[stable], axis=0)
+        basis, n_used = "stable_high_coh", int(stable.size)
+    else:                                        # 폴백: 안정점 부족 → 전체 중앙값
+        cm = np.median(los, axis=0)
+        basis, n_used = "all_points_median", n
+    return {"common_mode": cm, "meta": {"basis": basis, "n_stable": n_used, "min_coh": float(min_coh)}}
+
+
+def correct_los_field(
+    los: np.ndarray,
+    coherence: np.ndarray | None = None,
+    height: np.ndarray | None = None,
+    *,
+    reference: bool = True,
+    height_corr: bool = True,
+    min_ref_coh: float = 0.7,
+    min_height_spread_m: float = 1.0,
+) -> dict:
+    """LOS 시계열 [N,M] 정확도 보정 체인 — 인제스트에서 project.h5 에 반영할 결정론적 보정.
+
+    세 보정을 순서대로 적용한다(모두 네트워크 불필요, 재현 가능):
+      1. **공통성분(APS) 제거**(reference): 안정점 집합의 에폭별 중앙값(=공간 기준망)을 전
+         점에서 빼 공통 대기/궤도 램프를 제거한다 → 시간변동 저감. 단일점 대신 중앙값을
+         써 그 점 노이즈 주입을 피한다.
+      2. **고도상관(성층 대류권) 보정**(height_corr): 고도차가 있을 때 시점별 los~height
+         선형기울기를 제거(GACOS 대안). 고도차 < min_height_spread_m 이면 건너뛴다.
+
+    반환: corrected[N,M] float32 + meta(적용 단계·기준·시간변동 감소율). 열팽창 분리는
+    온도 시계열이 필요하므로 여기서 하지 않고 `temporal_decompose` 로 대시보드/분석에서 한다.
+    """
+    los = np.asarray(los, dtype=np.float64)
+    meta: dict = {"applied": [], "n_points": int(los.shape[0]), "n_dates": int(los.shape[1])}
+    if los.ndim != 2 or los.shape[1] < 2:
+        meta["skipped"] = f"los 형상 {los.shape} — 보정 불가(그대로 반환)"
+        return {"corrected": los.astype(np.float32), "meta": meta}
+
+    std_before = float(np.mean(los.std(axis=1)))
+    out = los
+
+    if reference and los.shape[0] >= 3:
+        cmres = common_mode(out, coherence, min_coh=min_ref_coh)
+        cand = out - cmres["common_mode"][None, :]       # 공통성분 제거(전 점 동일 에폭 보정)
+        # 이득 가드: 이미 APS 필터된 데이터(SARvey 등)엔 공통성분이 거의 없어 되레 노이즈를
+        # 더할 수 있다. 시간변동이 실제로 줄 때만 채택 → 보정이 품질을 악화시키지 않게 보장.
+        std_cm = float(np.mean(cand.std(axis=1)))
+        if std_cm < std_before:
+            out = cand
+            meta["applied"].append("reference")
+            meta["reference"] = {**cmres["meta"], "std_reduction_mm": round(std_before - std_cm, 4)}
+        else:
+            meta["reference_skipped"] = (
+                f"공통성분 제거가 시간변동을 안 줄임({std_before:.3f}→{std_cm:.3f}mm) "
+                "— 이미 APS 보정된 입력으로 판단, 원본 유지"
+            )
+    elif reference:
+        meta["reference_skipped"] = f"점 수 {los.shape[0]} < 3"
+
+    if height_corr and height is not None:
+        h = np.asarray(height, dtype=np.float64).ravel()
+        spread = float(h.max() - h.min()) if h.size else 0.0
+        if np.isfinite(h).all() and spread >= min_height_spread_m:
+            hc = height_correlated_correction(out, h)
+            out = hc["corrected"]
+            sl = np.asarray(hc["slope_mm_per_m"], dtype=np.float64)
+            meta["applied"].append("height_correlated")
+            meta["height_spread_m"] = round(spread, 2)
+            meta["height_slope_mm_per_m"] = {
+                "mean": round(float(sl.mean()), 4),
+                "abs_max": round(float(np.abs(sl).max()), 4),
+            }
+        else:
+            meta["height_correlated_skipped"] = (
+                f"고도차 {spread:.2f}m < {min_height_spread_m}m 또는 비유한값"
+            )
+    elif height_corr:
+        meta["height_correlated_skipped"] = "고도(height) 없음"
+
+    std_after = float(np.mean(out.std(axis=1)))
+    meta["temporal_std_before_mm"] = round(std_before, 4)
+    meta["temporal_std_after_mm"] = round(std_after, 4)
+    meta["temporal_std_reduction_pct"] = round(
+        100.0 * (1.0 - std_after / (std_before + 1e-12)), 2
+    )
+    return {"corrected": out.astype(np.float32), "meta": meta}
+
+
 def height_correlated_correction(los: np.ndarray, height: np.ndarray) -> dict:
     """성층 대류권 근사: 시점별 los~height 선형회귀 → 고도상관 성분 제거(GACOS 대안).
 

@@ -1304,8 +1304,16 @@ def tab_insar(path: str, start: date) -> None:
             folium = None
         if folium is not None:
             st.markdown("**🛰️ LOS 속도 점군 지도** — SARvey PS/DS 점, **점 클릭 → 해당 점 변위 시계열**")
-            tv = np.array([(t - times[0]).days / 365.25 for t in times])   # 연 단위
-            vel = np.linalg.lstsq(np.vstack([tv, np.ones_like(tv)]).T, los.T, rcond=None)[0][0]
+            # 인제스트 정확도 보정(--insar-corrections)이 저장한 /insar/velocity_mm_yr 를 우선 사용
+            # (기준점 정합·고도상관 보정 반영). 없으면 원 LOS 에서 즉석 선형회귀로 폴백.
+            stored_vel = read(path, "/insar/velocity_mm_yr")
+            if stored_vel is not None and len(stored_vel) == len(lon_c):
+                vel = np.asarray(stored_vel, dtype=float)
+                vel_src = "인제스트 보정 속도(/insar/velocity_mm_yr)"
+            else:
+                tv = np.array([(t - times[0]).days / 365.25 for t in times])   # 연 단위
+                vel = np.linalg.lstsq(np.vstack([tv, np.ones_like(tv)]).T, los.T, rcond=None)[0][0]
+                vel_src = "즉석 선형회귀(원 LOS)"
             vmax = float(np.percentile(np.abs(vel), 95)) or 1.0
 
             def _vcol(v):  # 🔴침하(음)·⚪0·🔵융기(양)
@@ -1335,6 +1343,7 @@ def tab_insar(path: str, start: date) -> None:
                 st.line_chart(pd.DataFrame({"날짜": times, "LOS": los[sel],
                                             "종방향": lon[sel]}).set_index("날짜"))
             st.caption(f"색 = LOS 속도(mm/yr): 🔴침하(음)·⚪0·🔵융기(양), 범위 ±{vmax:.1f}. "
+                       f"속도 출처: **{vel_src}**. "
                        f"지도 점 클릭 → 오른쪽에 그 점의 변위 시계열. (미클릭 시 위 '측정점 index' 점)")
 
     with st.expander("🎯 InSAR 정확도 보정 (기준점 · 온도회귀 · 대기보정)", expanded=False):
@@ -1575,8 +1584,32 @@ def tab_fram(path: str, start: date) -> None:
     lead_fwd = warning.get("lead_time_forecast_days")
     basis = warning.get("basis", "cri")
     fstates = warning.get("function_states", {})
-    basis_ko = "보정 붕괴확률" if basis == "calibrated_probability" else "원시 CRI"
+    basis_ko = {"calibrated_probability": "보정 붕괴확률",
+                "reference_range": "정상범위(건강 인구 대비)"}.get(basis, "원시 CRI")
     getattr(st, banner_fn)(f"{emoji} 경보 등급: **{level}**  ·  근거: {basis_ko}")
+
+    # 🩺 CRI 정상범위(reference range) 판독 — 의료 검사수치처럼 건강 인구 대비 위치 표시
+    ref = data.get("reference_range")
+    obs = data.get("observation")
+    if obs and not obs.get("sufficient", True):
+        st.warning(f"🕒 **잠정 판정** — {obs.get('note') or '관측 기간이 짧아 계절/노이즈 분리가 불충분합니다.'} "
+                   f"(관측 {obs.get('span_days', 0):.0f}일)")
+    if ref:
+        bc = ref.get("band_counts", {})
+        _be = {"정상": "🟢", "주의": "🟡", "경고": "🟠", "위험": "🔴"}
+        badges = " · ".join(f"{_be.get(b, '⚪')} {b} {bc.get(b, 0)}"
+                            for b in ("정상", "주의", "경고", "위험"))
+        st.markdown(f"🩺 **건강 인구 대비 판독** — {badges}  "
+                    f"(정상범위 밖 **{ref.get('n_out_of_range', 0)}점**)")
+        rp1, rp2, rp3 = st.columns(3)
+        rp1.metric("최악점 백분위", f"{ref.get('worst_percentile', 0):.0f} %",
+                   help="건강 교량 인구에서 이 교량 최악점의 상대 위치(100%=가장 높음).")
+        rp2.metric("최악점 robust-z", f"{ref.get('worst_robust_z', 0):+.2f} σ",
+                   help="건강 인구 중앙값 대비 로버스트 표준편차 단위 이탈(의료 검사수치의 z).")
+        rp3.metric("정상범위 밖 점수", f"{ref.get('n_out_of_range', 0)}")
+        if ref.get("regime_mismatch"):
+            st.caption(f"⚠️ 관측조건 부적합 비교 주의: {ref['regime_mismatch']} "
+                       "— 정상범위는 비슷한 노이즈·기간에서 학습됨.")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("최대 CRI", f"{cri.max():.3f}")
     # 전방 예측(위험 도달까지) 우선, 없으면 후방 경과
@@ -1860,6 +1893,13 @@ def tab_psi(start: date) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
+    # 섹션(라디오)을 오가도 위젯 값 유지: 렌더링 안 되는 섹션의 keyed 위젯은 Streamlit 이
+    # session_state 에서 GC 하므로, 매 rerun 마다 키를 재확정해 기본값 리셋을 막는다.
+    # 단, 버튼(btn_*·prof_save)은 session_state 로 값 설정이 금지되므로 제외한다.
+    for _k in list(st.session_state.keys()):
+        if _k.startswith("btn_") or _k in ("prof_save",) or _k.startswith("FormSubmitter"):
+            continue
+        st.session_state[_k] = st.session_state[_k]
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
 

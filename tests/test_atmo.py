@@ -5,6 +5,7 @@ import numpy as np
 
 from inframon.insar.atmo import (
     REF_MIN_COHERENCE,
+    correct_los_field,
     height_correlated_correction,
     most_stable_index,
     reference_correction,
@@ -96,3 +97,40 @@ def test_height_correlated_correction_removes_stratified():
     assert out["corrected"].shape == los.shape
     assert np.abs(out["corrected"]).mean() < np.abs(los).mean()          # 상관성분 감소
     assert np.allclose(out["slope_mm_per_m"], 0.05, atol=0.02)
+
+
+def test_correct_los_field_reduces_common_mode():
+    # 공통 대기 램프(전 점 동일) + 점별 안정 → 기준점 정합이 공통성분 제거
+    rng = np.random.default_rng(5)
+    M = 24
+    common = rng.normal(0, 4, M)                         # 전 점 공통 대기(시간변동 큼)
+    los = np.tile(common, (12, 1)) + rng.normal(0, 0.1, (12, M))
+    coh = np.full(12, 0.99)
+    res = correct_los_field(los, coherence=coh, height=None)
+    assert "reference" in res["meta"]["applied"]
+    assert res["meta"]["temporal_std_after_mm"] < res["meta"]["temporal_std_before_mm"]
+    assert res["meta"]["temporal_std_reduction_pct"] > 50    # 공통성분 대부분 제거
+    assert res["corrected"].shape == los.shape
+
+
+def test_correct_los_field_applies_height_when_spread():
+    rng = np.random.default_rng(6)
+    h = np.linspace(0, 80, 40)
+    los = (0.03 * h)[:, None] * np.ones((1, 10)) + rng.normal(0, 0.05, (40, 10))
+    res = correct_los_field(los, coherence=np.full(40, 0.99), height=h)
+    assert "height_correlated" in res["meta"]["applied"]
+    assert res["meta"]["height_spread_m"] == 80.0
+
+
+def test_correct_los_field_skips_height_when_flat():
+    los = np.random.default_rng(7).normal(0, 1, (8, 10))
+    res = correct_los_field(los, coherence=np.full(8, 0.99), height=np.zeros(8))
+    assert "height_correlated" not in res["meta"]["applied"]
+    assert "height_correlated_skipped" in res["meta"]
+
+
+def test_correct_los_field_disabled_steps_noop():
+    los = np.random.default_rng(8).normal(0, 1, (6, 10)).astype(np.float32)
+    res = correct_los_field(los, reference=False, height_corr=False)
+    assert res["meta"]["applied"] == []
+    assert np.allclose(res["corrected"], los)

@@ -105,42 +105,9 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
     coherence = td.coherence[keep].astype(np.float32)
     n_points, _ = los.shape
 
-    # ── 부재 할당: CV member 마스크에서 점 위치별 라벨 ──
-    member = np.zeros(n_points, dtype=np.int8)
-    for mi, name in enumerate(MEMBER_TYPES):
-        ds = cv.member_label_ds.get(name)
-        if ds is None:
-            continue
-        mmask = store.read_array(ds)
-        member[mmask[row_k, col_k] == 1] = mi
-
-    # ── 기하: LOS→종방향 분해 + 고정단까지 거리 + xyz ──
-    # 우선순위: ① asc+desc 융합(종축+연직) → ② 입사각 deprojection → ③ 투영 폴백.
-    az = float(cv.geometry.azimuth_angle)
-    proj = (los * np.cos(np.deg2rad(az))).astype(np.float32)  # 폴백(투영, sinθ 누락)
-    vertical = None
-    if fused_axial is not None:
-        # 융합 경로: 종축은 2×2 역산 결과, 연직은 계약 외 /insar/vertical 로 저장.
-        longitudinal = fused_axial[keep].astype(np.float32)
-        vertical = fused_vertical[keep].astype(np.float32)
-        longitudinal_method = "asc_desc_fusion"
-        n_low_sens = 0
-        incidence_mean = float(np.mean(td.incidence[keep])) if td.incidence is not None else None
-    elif td.incidence is not None:
-        inc_k = td.incidence[keep]
-        factor = geo.los_axial_factor(inc_k, az)             # sinθ·cosΔ [n_points]
-        axial, valid = geo.los_to_axial(los, factor)
-        longitudinal = np.where(valid[:, None], axial, proj).astype(np.float32)
-        longitudinal_method = "deprojection_incidence"
-        n_low_sens = int((~valid).sum())
-        incidence_mean = float(np.mean(inc_k))
-    else:
-        longitudinal = proj
-        longitudinal_method = "projection_approx"
-        n_low_sens = 0
-        incidence_mean = None
     # z(고도): ① Track H5 점별 고도 → ② DEM GeoTIFF 샘플(world 좌표 필요) → ③ 0.
-    # 고도는 트러스 상·하현/아치 리브·데크/케이블 주탑·데크를 분리하는 형식별 해석에 쓰인다.
+    # 고도는 트러스 상·하현/아치 리브·데크/케이블 주탑·데크를 분리하는 형식별 해석에 쓰이고,
+    # 아래 고도상관(성층 대기) 보정에도 쓰이므로 종방향 분해 전에 먼저 구한다.
     dem_meta = None
     if td.height is not None:
         z = td.height[keep].astype(float)
@@ -159,6 +126,62 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
     else:
         z = np.zeros(n_points)
         z_source = "zero"
+
+    # ── InSAR 정확도 보정(opt-in): 기준점 정합 + 고도상관 성층대기 보정 ──
+    # LOS 도메인에서 먼저 보정하면 아래 종방향 분해가 보정된 los 에서 유도돼 일관된다.
+    # 융합 경로의 종축/연직은 이미 축 도메인이라 기준점 정합만 별도로 적용한다.
+    corr_meta = None
+    fused_axial_k = fused_axial[keep] if fused_axial is not None else None
+    fused_vertical_k = fused_vertical[keep] if fused_vertical is not None else None
+    if getattr(cfg, "insar_apply_corrections", False):
+        from .atmo import correct_los_field
+        min_coh = float(getattr(cfg, "insar_ref_min_coherence", 0.9))
+        res = correct_los_field(los, coherence=coherence, height=z, min_ref_coh=min_coh)
+        los = res["corrected"]
+        corr_meta = res["meta"]
+        if fused_axial_k is not None:            # 융합 종축/연직 — 기준점 정합만(고도상관 생략)
+            fa = correct_los_field(fused_axial_k, coherence=coherence, height=None,
+                                   height_corr=False, min_ref_coh=min_coh)
+            fused_axial_k = fa["corrected"]
+            fv = correct_los_field(fused_vertical_k, coherence=coherence, height=None,
+                                   height_corr=False, min_ref_coh=min_coh)
+            fused_vertical_k = fv["corrected"]
+            corr_meta["fusion_axial"] = fa["meta"]
+
+    # ── 부재 할당: CV member 마스크에서 점 위치별 라벨 ──
+    member = np.zeros(n_points, dtype=np.int8)
+    for mi, name in enumerate(MEMBER_TYPES):
+        ds = cv.member_label_ds.get(name)
+        if ds is None:
+            continue
+        mmask = store.read_array(ds)
+        member[mmask[row_k, col_k] == 1] = mi
+
+    # ── 기하: LOS→종방향 분해 + 고정단까지 거리 + xyz ──
+    # 우선순위: ① asc+desc 융합(종축+연직) → ② 입사각 deprojection → ③ 투영 폴백.
+    az = float(cv.geometry.azimuth_angle)
+    proj = (los * np.cos(np.deg2rad(az))).astype(np.float32)  # 폴백(투영, sinθ 누락)
+    vertical = None
+    if fused_axial_k is not None:
+        # 융합 경로: 종축은 2×2 역산 결과, 연직은 계약 외 /insar/vertical 로 저장.
+        longitudinal = fused_axial_k.astype(np.float32)
+        vertical = fused_vertical_k.astype(np.float32)
+        longitudinal_method = "asc_desc_fusion"
+        n_low_sens = 0
+        incidence_mean = float(np.mean(td.incidence[keep])) if td.incidence is not None else None
+    elif td.incidence is not None:
+        inc_k = td.incidence[keep]
+        factor = geo.los_axial_factor(inc_k, az)             # sinθ·cosΔ [n_points]
+        axial, valid = geo.los_to_axial(los, factor)
+        longitudinal = np.where(valid[:, None], axial, proj).astype(np.float32)
+        longitudinal_method = "deprojection_incidence"
+        n_low_sens = int((~valid).sum())
+        incidence_mean = float(np.mean(inc_k))
+    else:
+        longitudinal = proj
+        longitudinal_method = "projection_approx"
+        n_low_sens = 0
+        incidence_mean = None
     if world is not None:
         # geo 경로: xyz 는 world 좌표(cv.crs, 예: EPSG:5179), 단위 미터.
         xy2d = world[keep][:, :2]
@@ -179,10 +202,16 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
         los=los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
         vertical=vertical,   # 융합 연직(있으면) → 계약 필드 vertical_ds
     )
+    # 점별 선형 속도[mm/yr] — 보정된 종방향 시계열에서 최소제곱. 대시보드/리포트가 바로 소비.
+    from .atmo import temporal_decompose
+    velocity = temporal_decompose(longitudinal, td.dates)["velocity_mm_yr"].astype(np.float32)
+    store.write_array("/insar/velocity_mm_yr", velocity)
     store.write_json_attr(
         "insar",
         "insar_source",
         {
+            "velocity_ds": "/insar/velocity_mm_yr",
+            "corrections": corr_meta,
             "path": str(cfg.insar_source_h5),
             "mode": "real",
             "frame": frame,

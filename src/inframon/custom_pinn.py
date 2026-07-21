@@ -42,6 +42,7 @@ def run_custom_pinn(
     traffic_count_field: str | None = None,
     traffic_params: dict[str, str] | None = None,
     fram_mode: str = "real",
+    reference_range: dict | bool | None = True,   # CRI 정상범위(dict) / True=패키지기본 / None=끔
     pinn_epochs: int = 600,
     pinn_virtual_sensors: int = 200,
     pinn_deck_long: int = 60,
@@ -157,7 +158,16 @@ def run_custom_pinn(
             from .fram.real_engine import run_fram_real as run_fram
         else:
             from .fram.engine import run_fram
+        # CRI 정상범위(reference range): 건강 인구 대비 판독 등급. True=패키지 기본치.
+        if reference_range:
+            from .fram.reference_range import default_reference_range
+            cfg.fram_reference_range = (reference_range if isinstance(reference_range, dict)
+                                        else default_reference_range().to_dict())
         fram = run_fram(store, insar, pinn, cfg)
+        try:
+            collected["reference_range"] = store.read_json_attr("fram", "reference_range")
+        except (KeyError, ValueError):
+            collected["reference_range"] = None
 
     return {
         "bridge_name": prof.name or bridge_name,
@@ -169,5 +179,7 @@ def run_custom_pinn(
         "n_points": insar.n_points, "n_dates": insar.n_dates,
         "cri_global_max": float(fram.cri_global_max),
         "warning_level": fram.warning.level,
+        "warning_basis": fram.warning.basis,
+        "reference_range": collected.get("reference_range"),
         "critical_members": list(fram.warning.critical_members),
     }

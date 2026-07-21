@@ -119,6 +119,16 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
     if len(dates) != n_dates:
         raise ValueError(f"epoch count {len(dates)} != los date count {n_dates}")
 
+    # 시간순 정렬 + 최이른 취득일 재기준. 스타네트워크 기준일이 중간 날짜이면 epochs 가
+    # [기준, 슬레이브…] 순이라 비단조(예: [0,-636,…,+168])가 되는데, 하류 secular·관측기간
+    # 계산은 dates 가 단조(오름차순, 최이른=0)라고 가정하므로 여기서 강제 정렬한다.
+    order = np.argsort(dates, kind="stable")
+    if not np.array_equal(order, np.arange(n_dates)):
+        dates = dates[order]
+        date_labels = date_labels[order]
+        los = los[:, order]
+    dates = dates - dates[0]          # 최이른 취득일 기준(0..)
+
     # 입사각: 데이터셋(점별 [N] 또는 스칼라) 우선, 없으면 attr 스칼라 → [N] 브로드캐스트.
     incidence: np.ndarray | None = None
     if inc_raw is not None:
@@ -156,11 +166,14 @@ def write_insar_contract(
     dates: np.ndarray,
     date_labels: np.ndarray | None = None,
     vertical: np.ndarray | None = None,
+    deck_station: np.ndarray | None = None,
 ) -> InSAROutput:
     """표준 /insar 데이터셋 + InSAROutput 메타를 적재한다(출처 attr 은 호출 측에서).
 
     `vertical`([N,M], asc+desc 융합 연직 성분)을 주면 /insar/vertical 에 쓰고
     계약 필드 vertical_ds 를 채운다(단일 궤도면 None → 미적재).
+    `deck_station`([N], 데크 호길이)을 주면 /insar/deck_station 에 쓴다 — 곡선 교량에서
+    공간전파·구조축 정렬을 데크를 따라(직선 X정렬 대신) 하기 위함.
     """
     n_points, n_dates = los.shape
     g = "/insar"
@@ -175,6 +188,8 @@ def write_insar_contract(
     if date_labels is not None:
         store.write_array(f"{g}/date_labels", date_labels)
     store.write_array(f"{g}/temporal_coherence", coherence)
+    if deck_station is not None:
+        store.write_array(f"{g}/deck_station", np.asarray(deck_station, np.float32))
     vertical_ds = None
     if vertical is not None:
         vertical_ds = store.write_array(f"{g}/vertical", vertical)
@@ -203,25 +218,48 @@ def import_track_h5(
     *,
     azimuth_angle_deg: float = 0.0,
     member_default: int = 0,
+    geometry_latlon=None,
+    apply_corrections: bool = False,
+    ref_min_coherence: float = 0.9,
 ) -> InSAROutput:
     """Track A/B/C/D export HDF5를 /insar 데이터셋으로 적재한다(CLI 단독 변환용).
 
     CV 결합 없이 좌표/부재를 단순 가정한다. CV 기하 정합이 필요하면 run_insar_real 사용.
+    `geometry_latlon`([[lat,lon],...] 데크 중심선)을 주면 각 점을 폴리라인에 투영해
+    **호길이 station**(곡선 교량 대응)으로 l_from_fixed·deck_station 을 채운다. 없으면
+    점군 주곡선으로 station 을 추정한다(직선이면 X거리와 동등).
+
+    `apply_corrections=True` 면 LOS 시계열에 기준점 정합 + 고도상관 성층대기 보정을 적용하고
+    (`atmo.correct_los_field`), 보정된 los/longitudinal + /insar/velocity_mm_yr 를 저장한다.
     """
+    from .deck_geometry import deck_station as _deck_station
     td = read_track_h5(track_h5)
     n_points, _ = td.los.shape
 
     z = td.height.astype(np.float64) if td.height is not None else np.zeros(n_points)
+    los = td.los
+    corr_meta = None
+    if apply_corrections:
+        from .atmo import correct_los_field
+        res = correct_los_field(los, coherence=td.coherence, height=z,
+                                min_ref_coh=float(ref_min_coherence))
+        los = res["corrected"]
+        corr_meta = res["meta"]
     xyz = np.column_stack([td.lonlat[:, 0], td.lonlat[:, 1], z])
-    longitudinal = td.los * np.cos(np.deg2rad(azimuth_angle_deg))
-    x_center = float(np.nanmedian(td.lonlat[:, 0]))
-    l_from_fixed = np.abs(td.lonlat[:, 0] - x_center).astype(np.float32)
+    longitudinal = los * np.cos(np.deg2rad(azimuth_angle_deg))
+    # 곡선 교량: 호길이 station(데크를 따라 잰 거리). 폴리라인 있으면 투영, 없으면 주곡선.
+    station = _deck_station(td.lonlat, geometry_latlon).astype(np.float32)
+    l_from_fixed = station                                            # 고정단(=station 0)에서 호길이
     member = np.full(n_points, member_default, dtype=np.int8)
 
     out = write_insar_contract(
         store, xyz=xyz, member=member, coherence=td.coherence, l_from_fixed=l_from_fixed,
-        los=td.los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
+        los=los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
+        deck_station=station,
     )
+    from .atmo import temporal_decompose
+    velocity = temporal_decompose(longitudinal, td.dates)["velocity_mm_yr"].astype(np.float32)
+    store.write_array("/insar/velocity_mm_yr", velocity)
     store.write_json_attr(
         "insar",
         "track_source",
@@ -231,6 +269,8 @@ def import_track_h5(
             "unit": "mm",
             "mode": "import",
             "date_labels_ds": "/insar/date_labels",
+            "velocity_ds": "/insar/velocity_mm_yr",
+            "corrections": corr_meta,
         },
     )
     return out

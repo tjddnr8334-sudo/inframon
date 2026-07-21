@@ -76,10 +76,15 @@ def run_bridge_pipeline(
     # ③ ROI 도심지 가중 (② SLC 조회보다 먼저: 조회 AOI 로 씀)
     try:
         from .insar.roi_selection import select_roi
-        roi = select_roi(lat, lon, sizes_km=roi_sizes)
+        # ①에서 확인된 교량 길이보다 ROI 한 변이 크도록(교량이 ROI 안, off-deck reference 확보)
+        _blen = (ctx.get("bridge") or {}).get("length_m")
+        roi = select_roi(lat, lon, sizes_km=roi_sizes, bridge_length_m=_blen)
         ctx["roi"] = roi.as_dict(); ctx["roi_wkt"] = roi.wkt(); ctx["roi_bbox"] = roi.bbox
+        _blen_txt = (f" · 교량 {round(_blen)}m<ROI {'✅' if roi.larger_than_bridge else '⚠️'}"
+                     if _blen else "")
         rep.add(StageResult("③ROI도심지가중", "done",
-                            f"{roi.size_km:.0f}km · 건물 {roi.n_buildings} · {roi.density_per_km2:.0f}/km²"))
+                            f"{roi.size_km:.0f}km · 건물 {roi.n_buildings} · "
+                            f"{roi.density_per_km2:.0f}/km²{_blen_txt}"))
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("③ROI도심지가중", "error", str(e)[:80]))
 
@@ -210,8 +215,9 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
         from .custom_pinn import run_custom_pinn
         from .insar.track_reader import import_track_h5
         proj = str(out / "project.h5")
+        _geom = ctx.get("bridge", {}).get("geometry")   # ①에서 확인된 교량 선형(곡선 station용)
         with ProjectStore(proj, mode="a") as store:
-            import_track_h5(store, deck_h5)
+            import_track_h5(store, deck_h5, geometry_latlon=_geom)
         summ = run_custom_pinn(proj, lat, lon)
         ctx["pinn"] = {"cri_max": summ["cri_global_max"], "warning": summ["warning_level"],
                        "project": proj}

@@ -38,6 +38,11 @@ class PipelineConfig:
     # vertical_ds 가 없으면(단일궤도·합성·Morandi) 무영향 → 켜도 검증 게이트 안전.
     fram_use_vertical: bool = True
 
+    # CRI 정상범위(reference range) — 건강 교량 코호트로 학습한 기준치(dict, ReferenceRange.to_dict).
+    # 있으면 경보 등급을 임의 절대임계 대신 **건강 인구 대비 백분위/밴드**로 판독한다
+    # (의료 검사수치의 reference range). None 이면 기존 절대임계(cri_thresholds) 경로 불변.
+    fram_reference_range: dict | None = None
+
     # 엔진별 구현 선택 (핫스왑 스위치). 기본 전부 "stub".
     engines: dict[str, str] = field(default_factory=_default_engines)
 
@@ -49,6 +54,13 @@ class PipelineConfig:
     # Track 결과에 점별 고도가 없을 때, 이 DEM GeoTIFF(WSL2 1단계의 ISCE2용 DEM 등)에서
     # world 좌표로 z 를 샘플링한다. 없으면 z=0. 점별 고도가 있으면 이 값은 무시.
     insar_dem_geotiff: str | None = None
+
+    # InSAR 정확도 보정(인제스트에서 LOS 시계열에 적용) — 기준점 정합 + 고도상관 성층대기 보정.
+    # 결정론적(네트워크 불필요)이고 opt-in. 켜면 project.h5 의 los/longitudinal 이 보정된 값으로
+    # 저장되고 /insar/velocity_mm_yr(보정 속도) + insar_source.corrections(이력)가 기록된다.
+    # 열팽창 분리는 온도 시계열이 필요하므로 대시보드에서 별도로 한다(atmo.temporal_decompose).
+    insar_apply_corrections: bool = False
+    insar_ref_min_coherence: float = 0.9   # 기준점 후보 최소 시간결맞음(부족 시 최고 coh 폴백)
 
     # 계약 강건화 (Phase 1 고도화)
     validate_contracts: bool = True   # 각 단계 출력의 배열 형상/dtype/심볼 검증

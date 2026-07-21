@@ -100,6 +100,33 @@ def test_real_insar_couples_to_cv(tmp_path):
     assert labels[0] == "20200101"
 
 
+def test_real_insar_corrections_write_velocity(tmp_path):
+    """--insar-corrections: /insar/velocity_mm_yr + 보정 이력이 기록되고 형상 일관."""
+    cfg, cv, store, _ = _cv_and_store(tmp_path)
+    try:
+        roi = store.read_array(cv.roi_mask_ds)
+        inside = np.argwhere(roi > 0)
+        rng = np.random.default_rng(1)
+        ins = inside[rng.choice(len(inside), 8, replace=False)]
+        lonlat = np.column_stack([ins[:, 1], ins[:, 0]]).astype(float)
+        track = tmp_path / "track.h5"
+        _make_track_h5(track, lonlat, n_dates=5, seed=3)
+        cfg.insar_source_h5 = str(track)
+        cfg.insar_apply_corrections = True
+
+        out = run_insar_real(store, cv, cfg)
+        vel = store.read_array("/insar/velocity_mm_yr")
+        src = store.read_json_attr("insar", "insar_source")
+    finally:
+        store.__exit__(None, None, None)
+
+    assert vel.shape == (out.n_points,)               # 점별 속도
+    assert np.isfinite(vel).all()
+    assert src["velocity_ds"] == "/insar/velocity_mm_yr"
+    assert src["corrections"] is not None
+    assert "applied" in src["corrections"]            # 보정 이력(적용/스킵) 기록
+
+
 def test_los_axial_factor_and_deprojection():
     """기하 계수 g=sinθ·cosΔ + deprojection·저민감 마스크."""
     from inframon.insar import geo

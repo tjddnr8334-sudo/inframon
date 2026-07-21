@@ -46,6 +46,29 @@ def test_fram_panel_exposes_network_and_calibrated(tmp_path):
     assert (data["calibrated_risk"] >= 0).all() and (data["calibrated_risk"] <= 1).all()
 
 
+def test_fram_panel_exposes_reference_range_and_observation(tmp_path):
+    from inframon.fram.reference_range import fit_reference_range
+    ref = fit_reference_range([0.05, 0.1, 0.15, 0.2, 0.25]).to_dict()
+    cfg = PipelineConfig(n_points=20, n_dates=12,
+                         engines={"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    cfg.fram_reference_range = ref
+    out = tmp_path / "p.h5"
+    run_pipeline(out, cfg)
+    data = fram_panel_data(str(out))
+    # 정상범위 판독(밴드·백분위·z) + 관측 충분성 노출
+    rr = data["reference_range"]
+    assert rr is not None and set(rr["band_counts"]) == {"정상", "주의", "경고", "위험"}
+    assert "worst_percentile" in rr and "worst_robust_z" in rr
+    assert data["observation"] is not None and "sufficient" in data["observation"]
+    assert data["cri_percentile"] is not None and data["cri_percentile"].shape == (20,)
+
+
+def test_fram_panel_reference_range_absent_is_none(tmp_path):
+    path = _run(tmp_path, {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
+    data = fram_panel_data(path)
+    assert data["reference_range"] is None            # 정상범위 미설정 → None(안전)
+
+
 def test_fram_panel_stub_has_no_extras(tmp_path):
     path = _run(tmp_path, {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "stub"})
     data = fram_panel_data(path)

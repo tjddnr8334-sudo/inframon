@@ -78,3 +78,37 @@ def test_select_roi_tight_cluster_prefers_small_roi():
     pts = [(BLON + rng.normal(0, 0.003), BLAT + rng.normal(0, 0.003)) for _ in range(300)]
     roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0, 5.0, 10.0), builtup=pts, grid=5)
     assert roi.size_km <= 2.0                    # 좁은 도심 → 작은 ROI(밀도 유지)
+
+
+def test_roi_larger_than_bridge_drops_small_sizes():
+    # 교량 길이 1.5km → ROI 한 변은 그보다 커야 하고 여유(×1.5=2.25km)까지 권장 → 3km 이상
+    pts = [(BLON, BLAT)] * 20
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0, 3.0, 5.0),
+                     bridge_length_m=1500.0, builtup=pts, grid=3)
+    assert roi.size_km * 1000.0 > 1500.0         # 하드: 교량 길이보다 큼
+    assert roi.larger_than_bridge is True
+    assert roi.bridge_length_m == 1500.0
+    assert roi.as_dict()["larger_than_bridge"] is True
+
+
+def test_roi_hard_constraint_when_margin_unavailable():
+    # 교량 2.4km, 후보 최대 3km → 여유(×1.5=3.6km) 불가하지만 하드(>2.4km)는 3km 로 만족
+    pts = [(BLON, BLAT)] * 20
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0, 3.0),
+                     bridge_length_m=2400.0, builtup=pts, grid=3)
+    assert roi.size_km == 3.0 and roi.larger_than_bridge is True
+
+
+def test_roi_synthesizes_size_when_all_presets_too_small():
+    # 모든 프리셋(≤2km)이 교량 3km 보다 작음 → 교량보다 큰 크기를 합성
+    pts = [(BLON, BLAT)] * 20
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0),
+                     bridge_length_m=3000.0, builtup=pts, grid=3)
+    assert roi.size_km > 3.0 and roi.larger_than_bridge is True
+
+
+def test_roi_no_bridge_length_keeps_all_sizes():
+    pts = [(BLON, BLAT)] * 20
+    roi = select_roi(BLAT, BLON, sizes_km=(1.0, 2.0), builtup=pts, grid=3)
+    assert roi.larger_than_bridge is True and roi.bridge_length_m is None
+    assert roi.as_dict()["bridge_length_m"] is None

@@ -26,6 +26,8 @@ class RoiResult:
     n_buildings: int
     density_per_km2: float                    # 건물/km²(도심지수)
     contains_bridge: bool
+    bridge_length_m: float | None = None      # 반영한 교량 길이(있으면)
+    larger_than_bridge: bool = True           # ROI 한 변이 교량 길이보다 큰가
 
     def wkt(self) -> str:
         w, s, e, n = self.bbox
@@ -35,7 +37,10 @@ class RoiResult:
         return {"bbox": list(self.bbox), "size_km": self.size_km,
                 "center_latlon": list(self.center), "n_buildings": self.n_buildings,
                 "density_per_km2": round(self.density_per_km2, 1),
-                "contains_bridge": self.contains_bridge}
+                "contains_bridge": self.contains_bridge,
+                "bridge_length_m": (round(self.bridge_length_m)
+                                    if self.bridge_length_m else None),
+                "larger_than_bridge": self.larger_than_bridge}
 
 
 def _builtup_query(lat: float, lon: float, radius_m: float) -> str:
@@ -80,9 +85,35 @@ def _km_to_deg(km: float, lat: float) -> tuple[float, float]:
     return km / 111.0, km / (111.0 * math.cos(math.radians(lat)))   # (dlat, dlon)
 
 
+def _effective_sizes(sizes_km, bridge_length_m: float | None,
+                     length_margin: float, max_cap_km: float = 10.0) -> tuple[list, bool]:
+    """교량 길이보다 큰 ROI 후보만 남긴다.
+
+    ROI 한 변은 **교량 길이보다 반드시 커야**(하드) 하고, off-deck reference point(움직이는
+    데크 밖 안정 지반·건물)를 담도록 `length_margin`(기본 1.5)배 여유가 권장(소프트)된다.
+    프리셋이 모두 교량보다 작으면 교량보다 큰 크기를 **합성**(절대 상한 `max_cap_km`=10km,
+    사용자 규칙: 최대 10×10km). 반환: (정렬 크기 리스트, larger_than_bridge 만족 여부).
+    """
+    sizes = sorted({float(s) for s in sizes_km})
+    if not bridge_length_m or bridge_length_m <= 0:
+        return sizes, True
+    l_km = bridge_length_m / 1000.0
+    want_km = min(l_km * length_margin, max_cap_km)     # 여유 포함 권장 최소(10km 상한)
+    hard = [s for s in sizes if s > l_km]               # 교량보다 큰 후보만(하드 제약)
+    soft = [s for s in hard if s >= want_km]            # 여유까지 만족(권장)
+    chosen = soft or hard
+    if chosen:
+        return chosen, True
+    # 프리셋이 모두 교량보다 작음 → 교량보다 큰 크기를 합성(1~10km 안, 교량 초과가 가능하면)
+    syn = min(round(max(want_km, l_km * 1.05), 3), max_cap_km)
+    syn = max(syn, 1.0)
+    return [syn], syn > l_km
+
+
 def select_roi(lat: float, lon: float, *,
                sizes_km=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
                grid: int = 7, density_floor: float = 0.5,
+               bridge_length_m: float | None = None, length_margin: float = 1.5,
                query_fn=_overpass_query, builtup: list | None = None) -> RoiResult:
     """교량(lat,lon)을 포함하며 **도심밀도 높고 reference point(건물)가 많은** ROI 선정.
 
@@ -93,15 +124,22 @@ def select_roi(lat: float, lon: float, *,
       · 그 중 **건물수(=reference 후보) 최대**(동률이면 큰 ROI)를 고른다.
     → 교량만 좁게 잡아 reference point 가 부족해지는 문제를 피하고, 도심을 벗어나 밀도가
       급락하는 과대 ROI 는 배제한다. builtup 을 주면 조회 생략(테스트).
+
+    `bridge_length_m` 을 주면 **ROI 한 변이 교량 길이보다 크도록**(교량이 ROI 밖으로
+    삐져나가지 않게) 후보 크기를 거른다. 이렇게 넓힌 ROI 에서 데크 밖 도심 건물의
+    영구산란체가 temporal coherence ≥0.98 인 reference point 로 잡힌다
+    (실제 0.98 게이팅은 `snap_backend.find_reference_point`/`atmo.select_reference_point`).
     """
     if not sizes_km:
         raise ValueError("ROI 후보 크기(sizes_km)가 비었습니다.")
+    eff_sizes, larger = _effective_sizes(sizes_km, bridge_length_m, length_margin)
     if builtup is None:
-        builtup = fetch_builtup(lat, lon, radius_m=max(sizes_km) * 1000.0 * 0.8, query_fn=query_fn)
+        builtup = fetch_builtup(lat, lon, radius_m=max(eff_sizes) * 1000.0 * 0.8,
+                                query_fn=query_fn)
     bx = [p[0] for p in builtup]; by = [p[1] for p in builtup]
 
     cands: list[RoiResult] = []
-    for s in sorted(sizes_km):
+    for s in eff_sizes:
         dlat, dlon = _km_to_deg(s, lat)
         half_lat, half_lon = dlat / 2, dlon / 2
         # 교량이 ROI 안에 있으려면 중심은 교량에서 ±half 이내
@@ -114,7 +152,8 @@ def select_roi(lat: float, lon: float, *,
                 so, no = clat - half_lat, clat + half_lat
                 n = sum(1 for k in range(len(bx)) if w <= bx[k] <= e and so <= by[k] <= no)
                 cand = RoiResult((w, so, e, no), s, (clat, clon), n, n / (s * s),
-                                 w <= lon <= e and so <= lat <= no)
+                                 w <= lon <= e and so <= lat <= no,
+                                 bridge_length_m=bridge_length_m, larger_than_bridge=larger)
                 if best_s is None or cand.n_buildings > best_s.n_buildings:
                     best_s = cand
         if best_s is not None:

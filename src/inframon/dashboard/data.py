@@ -41,6 +41,23 @@ def read_meta(path: str, group: str) -> dict:
         return {}
 
 
+def read_json_attr(path: str, group: str, name: str) -> dict | None:
+    """그룹 attribute 로 저장된 작은 JSON 메타(예: reference_range·observation)를 읽는다(없으면 None)."""
+    try:
+        with h5py.File(path, "r") as f:
+            if f"/{group}" not in f or name not in f[f"/{group}"].attrs:
+                return None
+            raw = f[f"/{group}"].attrs[name]
+    except (OSError, KeyError):
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+
 def fram_panel_data(path: str) -> dict:
     """FRAM 탭이 그릴 데이터 묶음 — 핵심 CRI + 선택 출력(함수망 공명·보정확률).
 
@@ -53,6 +70,7 @@ def fram_panel_data(path: str) -> dict:
         path, "/fram/CRI", "/insar/xyz", "/fram/network_resonance", "/fram/calibrated_risk"
     )
     warning = read_meta(path, "fram").get("warning", {})
+    cri_pct, cri_z = read_arrays(path, "/fram/cri_percentile", "/fram/cri_robust_z")
     return {
         "cri": cri,
         "xyz": xyz,
@@ -61,6 +79,11 @@ def fram_panel_data(path: str) -> dict:
         "network_resonance": net,
         "calibrated_risk": cal,
         "calibrated_max": None if cal is None else float(np.max(cal)),
+        # CRI 정상범위(reference range) 판독 + 관측 충분성(잠정) — attr 로 저장된 진단
+        "reference_range": read_json_attr(path, "fram", "reference_range"),
+        "observation": read_json_attr(path, "fram", "observation"),
+        "cri_percentile": cri_pct,
+        "cri_robust_z": cri_z,
     }
 
 

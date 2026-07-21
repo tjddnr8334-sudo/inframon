@@ -170,6 +170,75 @@ def test_fram_consumes_vertical_localizes_settlement(tmp_path):
     assert (cri_on[cluster] - cri_off[cluster]).mean() > (cri_on[~cluster] - cri_off[~cluster]).mean()
 
 
+def test_healthy_bridge_stays_low_cri(tmp_path):
+    """멀쩡한 교량(작은 선형추세 + 계절 열팽창 + 측정노이즈)은 CRI 가 **낮아야** 한다.
+
+    회귀 방지: 점-대-점 미분이 InSAR 에폭 노이즈(σ~10mm)를 수백 mm/yr 로 폭증시켜
+    건강한 교량도 CRI 가 포화(≈0.98)되던 버그를 로버스트 secular 속도로 고쳤다.
+    가역 계절 호흡·측정 노이즈는 위험이 아니므로 CRI 가 낮게 유지돼야 한다.
+    """
+    from inframon.insar.track_reader import write_insar_contract
+
+    rng = np.random.default_rng(7)
+    N, M = 80, 24
+    dates = np.arange(M, dtype=float) * 24.0                 # ~2년 span(계절 제거 가능)
+    t = dates / 365.0
+    x = np.linspace(0.0, 120.0, N)
+    xyz = np.column_stack([x, np.zeros(N), np.zeros(N)])
+    seasonal = 4.0 * np.sin(2 * np.pi * t)[None, :]         # 가역 열팽창(건강)
+    trend = (rng.uniform(-1.5, 0.5, N))[:, None] * t[None, :]  # 미세 선형(≤1.5mm/yr)
+    los = (seasonal + trend + rng.normal(0.0, 10.0, (N, M))).astype(np.float32)  # σ=10mm 노이즈
+    cfg = PipelineConfig(n_points=N, n_dates=M,
+                         engines={"cv": "stub", "insar": "stub", "pinn": "real", "fram": "real"})
+    with ProjectStore(tmp_path / "p.h5", mode="w") as store:
+        insar = write_insar_contract(
+            store, xyz=xyz, member=np.zeros(N, np.int8),
+            coherence=np.full(N, 0.7, np.float32), l_from_fixed=np.abs(x - x.mean()).astype(np.float32),
+            los=los, longitudinal=los, dates=dates, date_labels=None)
+        from inframon.pinn.engine import run_pinn
+        pinn = run_pinn(store, insar, cfg)
+        fram = run_fram_real(store, insar, pinn, cfg)
+        cri = store.read_array(fram.CRI_ds)
+    # 핵심: 노이즈·계절만 있는 건강 교량은 CRI 가 낮다(포화하지 않는다).
+    assert cri.mean() < 0.3, f"건강 교량 CRI 평균 {cri.mean():.3f} 이 너무 높음(노이즈 오경보)"
+    assert cri[:, -1].max() < 0.6, f"건강 교량 최종 최대 CRI {cri[:, -1].max():.3f} 이 위험역"
+    assert fram.warning.level != "위험"
+
+
+def test_short_record_fast_settlement_not_silent(tmp_path):
+    """안전 회귀: **짧은 관측(<1년)이라도 실제 급침하를 침묵(CRI 0)하면 안 된다**.
+
+    계절제거 게이트가 짧은 창의 계절램프 오인은 막지만, 그 때문에 관측<1년 교량의 실제
+    급변위까지 0 으로 죽이면 붕괴를 놓친다(거짓음성). 짧은 관측은 선형 secular 로라도
+    급변위를 잡고 `observation.sufficient=False`(잠정)로 표시한다.
+    """
+    from inframon.insar.track_reader import write_insar_contract
+
+    N, M = 40, 8
+    dates = np.arange(M, dtype=float) * 24.0                 # span 168일 < 270(짧음)
+    t = dates / 365.0
+    x = np.linspace(0.0, 100.0, N)
+    rng = np.random.default_rng(0)
+    los = rng.normal(0.0, 3.0, (N, M)).astype(np.float32)
+    los[:10] += (-30.0 * t ** 2)[None, :].astype(np.float32)  # 10점 가속 침하(위험)
+    cfg = PipelineConfig(n_points=N, n_dates=M,
+                         engines={"cv": "stub", "insar": "stub", "pinn": "real", "fram": "real"})
+    with ProjectStore(tmp_path / "p.h5", mode="w") as store:
+        insar = write_insar_contract(
+            store, xyz=np.column_stack([x, np.zeros(N), np.zeros(N)]),
+            member=np.zeros(N, np.int8), coherence=np.full(N, 0.8, np.float32),
+            l_from_fixed=x.astype(np.float32), los=los, longitudinal=los,
+            dates=dates, date_labels=None)
+        from inframon.pinn.engine import run_pinn
+        pinn = run_pinn(store, insar, cfg)
+        fram = run_fram_real(store, insar, pinn, cfg)
+        cri = store.read_array(fram.CRI_ds)
+        obs = store.read_json_attr("fram", "observation")
+    assert cri.max() > 0.2, "짧은 관측이라도 급침하는 감지돼야(침묵 금지)"
+    assert cri[:10, -1].mean() > cri[10:, -1].mean()       # 침하 영역이 평균적으로 더 높다
+    assert obs["sufficient"] is False and obs["note"]      # 잠정 표시
+
+
 def test_fram_vertical_absent_is_identical(tmp_path):
     """vertical_ds 없으면 fram_use_vertical 켜고 끔이 CRI 에 무영향(Morandi·골든 게이트 안전)."""
     _build(tmp_path, {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "real"})
