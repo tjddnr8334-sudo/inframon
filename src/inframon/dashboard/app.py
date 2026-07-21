@@ -1748,16 +1748,26 @@ def tab_fram(path: str, start: date) -> None:
         d1, d2 = st.columns(2)
         with d1:
             names, vals = diag["func_names"], diag["variability"]
+            # 레이더(폴라) 차트는 matplotlib 로 그린다(이미 번들됨) — plotly 40MB 불필요.
             try:
-                import plotly.graph_objects as go
-                fig = go.Figure(go.Scatterpolar(
-                    r=list(vals) + [vals[0]], theta=names + [names[0]], fill="toself",
-                    line_color="#d62728"))
-                fig.update_layout(polar={"radialaxis": {"visible": True, "range": [0, 1]}},
-                                  showlegend=False, height=320,
-                                  margin={"l": 40, "r": 40, "t": 20, "b": 20})
-                st.plotly_chart(fig, use_container_width=True)
-            except ImportError:  # plotly 없으면 막대그래프 폴백
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+
+                ang = np.linspace(0, 2 * np.pi, len(names), endpoint=False)
+                ang_c = np.concatenate([ang, ang[:1]])
+                r_c = list(vals) + [vals[0]]
+                fig, ax = plt.subplots(figsize=(3.4, 3.4), subplot_kw={"projection": "polar"})
+                ax.plot(ang_c, r_c, color="#d62728", linewidth=1.5)
+                ax.fill(ang_c, r_c, color="#d62728", alpha=0.25)
+                ax.set_xticks(ang)
+                ax.set_xticklabels(names, fontsize=8)
+                ax.set_ylim(0, 1)
+                ax.tick_params(axis="y", labelsize=7)
+                fig.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+            except Exception:  # noqa: BLE001 — matplotlib 문제 시 막대그래프 폴백
                 st.bar_chart(pd.DataFrame({"변동 V": vals}, index=pd.Index(names, name="기능")))
         with d2:
             st.caption("기능 간 공명 R_ij (1에 가까울수록 동조 → 공명 위험)")
