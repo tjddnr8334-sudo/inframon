@@ -92,3 +92,103 @@ def test_gnss_los_velocities_gates_bad_station():
     assert any("SWON" in d for d in dropped)
     suwn = next(s for s in out if s.sta == "SUWN")
     assert suwn.up_vel_mm_yr == pytest.approx(2.0, abs=0.2)
+
+
+# ── 판정 축: LOS 가 아니라 수직 ────────────────────────────────────────
+# GNSS 절대속도는 한반도 플레이트 수평운동(~30mm/yr)을 포함하고 InSAR LOS 는 국소
+# 기준점에 대한 상대값이다. LOS 에서 직접 빼면 차이의 대부분이 기준프레임 차이지
+# InSAR 오차가 아니다 — 그걸 합격/불합격으로 쓰면 멀쩡한 결과가 "편차 큼"이 된다.
+
+def _project(tmp_path, vel_mm_yr: float, n=40, m=30, years=8.0):
+    """LOS 속도가 vel_mm_yr 인 최소 project.h5."""
+    import h5py
+    from datetime import date, timedelta
+    p = tmp_path / "p.h5"
+    d0 = date(2016, 1, 1)
+    labels = [(d0 + timedelta(days=int(i * years * 365.25 / (m - 1)))).strftime("%Y%m%d")
+              for i in range(m)]
+    t = np.array([(i * years / (m - 1)) for i in range(m)])
+    with h5py.File(p, "w") as f:
+        g = f.create_group("insar")
+        g.create_dataset("xyz", data=np.column_stack([
+            np.full(n, 127.109), np.full(n, 37.3634), np.zeros(n)]))
+        g.create_dataset("los", data=np.tile(vel_mm_yr * t, (n, 1)))
+        g.create_dataset("date_labels", data=np.array(labels, dtype="S8"))
+    return str(p)
+
+
+def _fetch(up_by_sta: dict, *, east_mm_yr: float = 0.0):
+    """관측소별 수직속도[mm/yr] + 공통 동향 수평운동(플레이트 모사) fetch_fn."""
+    holdings = _HOLDINGS + "SON2  37.4000   127.2000  80.0  0 0 0  2015 2026\n"
+
+    def fake(url):
+        if url == gn.HOLDINGS_URL:
+            return holdings
+        for sta, up in up_by_sta.items():
+            if sta in url:
+                return _tenv3([(2016.0 + i * 0.5,
+                                i * 0.5 * east_mm_yr / 1000.0, 0.0,
+                                100.0 + i * 0.5 * up / 1000.0) for i in range(20)])
+        raise OSError("no data")
+    return fake
+
+
+def test_verdict_uses_vertical_not_los(tmp_path):
+    """InSAR 와 GNSS 의 수직이 일치하면, 수평 플레이트 운동이 아무리 커도 정합이다."""
+    proj = _project(tmp_path, vel_mm_yr=-1.0 * math.cos(math.radians(39.0)))  # 연직 -1mm/yr
+    r = gn.validate_insar_vs_gnss(
+        proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+        fetch_fn=_fetch({"SUWN": -1.0, "SON2": -1.0}, east_mm_yr=30.0))   # 플레이트 30mm/yr
+    assert r.insar_up_vel_mm_yr == pytest.approx(-1.0, abs=0.05)
+    assert r.rms_up_resid_mm_yr < 0.2                       # 수직은 정합
+    assert abs(r.rms_resid_mm_yr) > 5.0                     # LOS 는 프레임 차로 크게 벌어짐
+    assert "정합" in r.summary() and "판정에 쓰지 않음" in r.summary()
+
+
+def test_plate_motion_alone_does_not_flag_failure(tmp_path):
+    """수평 운동만 있고 수직은 0 → 판정은 정합이어야 한다(예전엔 '편차 큼'이었다)."""
+    proj = _project(tmp_path, vel_mm_yr=0.0)
+    for east in (0.0, 30.0, 60.0):
+        r = gn.validate_insar_vs_gnss(
+            proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+            fetch_fn=_fetch({"SUWN": 0.0, "SON2": 0.0}, east_mm_yr=east))
+        assert r.rms_up_resid_mm_yr < gn.VERT_OK_MM_YR      # 수평이 커져도 판정 불변
+        assert "✅" in r.summary()
+
+
+def test_real_vertical_discrepancy_is_flagged(tmp_path):
+    """수직이 실제로 어긋나면 잡아야 한다 — 게이트가 무조건 통과시키면 안 된다."""
+    proj = _project(tmp_path, vel_mm_yr=0.0)                # InSAR 연직 0
+    r = gn.validate_insar_vs_gnss(
+        proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+        fetch_fn=_fetch({"SUWN": -8.0, "SON2": -8.0}))      # GNSS 는 8mm/yr 침하
+    assert r.rms_up_resid_mm_yr > gn.VERT_MARGINAL_MM_YR
+    assert "⚠️" in r.summary()
+
+
+def test_vertical_outlier_is_excluded_from_verdict(tmp_path):
+    """장비 스텝 잔재로 수직이 튀는 관측소는 MAD 기준으로 제외하고 사유를 남긴다."""
+    proj = _project(tmp_path, vel_mm_yr=0.0)
+    r = gn.validate_insar_vs_gnss(
+        proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+        fetch_fn=_fetch({"SUWN": 0.0, "SON2": 0.0, "DAEJ": -25.0}))
+    outs = {s["sta"] for s in r.stations if s["vertical_outlier"]}
+    assert r.n_vertical_used >= 2
+    assert r.rms_up_resid_mm_yr < gn.VERT_OK_MM_YR          # 이상치가 판정을 흔들지 않는다
+    if outs:                                                # 반경 안에 잡혔다면 표시돼야 한다
+        assert any("수직" in o for o in r.vertical_outliers)
+
+
+def test_as_dict_names_the_primary_metric(tmp_path):
+    proj = _project(tmp_path, vel_mm_yr=0.0)
+    d = gn.validate_insar_vs_gnss(proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+                                  fetch_fn=_fetch({"SUWN": 0.0, "SON2": 0.0})).as_dict()
+    assert d["primary_metric"] == "rms_up_resid_mm_yr"
+    assert "판정에 쓰지 않는다" in d["note"]
+    assert d["rms_up_resid_mm_yr"] is not None
+
+
+def test_mad_outliers_needs_three_samples():
+    assert gn._mad_outliers([1.0, 99.0]) == [False, False]   # 표본 부족 → 판단 보류
+    flags = gn._mad_outliers([0.0, 0.1, -0.1, 30.0])
+    assert flags[-1] and not any(flags[:-1])

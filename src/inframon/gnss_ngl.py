@@ -18,7 +18,7 @@ NGL 실 엔드포인트(2026 확인):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 HOLDINGS_URL = "https://geodesy.unr.edu/NGLStationPages/DataHoldings.txt"
 TENV3_URL = "https://geodesy.unr.edu/gps_timeseries/IGS20/tenv3/IGS20/{sta}.tenv3"
@@ -212,18 +212,48 @@ def gnss_los_velocities(lat: float, lon: float, *, incidence_deg: float,
     return out, dropped
 
 
+# 수직 대조 판정 임계[mm/yr]. InSAR 연직 정밀도(장기 시계열 ~0.5~1)와 GNSS Up(~0.5)를
+# 감안한 값 — 2 이내면 정합, 5 이내면 허용, 그 이상은 편차.
+VERT_OK_MM_YR, VERT_MARGINAL_MM_YR = 2.0, 5.0
+# 수직속도 이상치 판정(MAD 배수). 장비 스텝이 남은 관측소를 데이터 기반으로 걸러낸다.
+VERT_OUTLIER_MAD = 5.0
+
+
+def _mad_outliers(values: list[float], k: float = VERT_OUTLIER_MAD) -> list[bool]:
+    """중앙값 절대편차 기준 이상치 마스크. 표본이 3개 미만이면 전부 False."""
+    import numpy as np
+
+    v = np.asarray(values, dtype=float)
+    if v.size < 3:
+        return [False] * v.size
+    med = float(np.median(v))
+    mad = float(np.median(np.abs(v - med)))
+    if mad <= 1e-9:                       # 거의 동일 → 편차가 있는 것만 이상치
+        return [bool(abs(x - med) > 1.0) for x in v]
+    return [bool(abs(x - med) / (1.4826 * mad) > k) for x in v]
+
+
 @dataclass
 class GnssValidation:
     insar_los_vel_mm_yr: float        # 교량 InSAR LOS 속도(대표=중앙값)
     insar_los_std: float
     incidence_deg: float
     heading_deg: float
-    stations: list                    # [{sta,dist_km,gnss_los,up_vel,insar,resid}]
+    stations: list                    # [{sta,dist_km,gnss_los,up_vel,insar,resid,up_resid,...}]
     n_stations: int
-    rms_resid_mm_yr: float            # 관측소별 (InSAR−GNSS) RMS
+    rms_resid_mm_yr: float            # 관측소별 (InSAR−GNSS) **LOS** RMS — 기준프레임 차 포함
     max_km: float
     dropped: list                     # 게이트로 제외된 관측소·사유
     insar_span_yr: float = 0.0        # InSAR 관측기간(속도 신뢰성 지표)
+    # ── 1차 지표: 수직 대조(플레이트-무관) ──
+    # GNSS 절대속도는 한반도 플레이트 수평운동(~30mm/yr)을 포함하고 InSAR LOS 는 국소
+    # 기준점에 대한 **상대** 값이다. 둘을 LOS 에서 직접 빼면 차이의 대부분이 기준프레임
+    # 차이지 InSAR 오차가 아니다 — 그 숫자를 합격/불합격으로 쓰면 안 된다.
+    # 플레이트 운동은 거의 수평이므로 **연직 성분**이 유효한 대조축이다.
+    insar_up_vel_mm_yr: float | None = None    # LOS/cosθ (단일궤도 연직 가정)
+    rms_up_resid_mm_yr: float | None = None    # 이상치 제외 후 수직 잔차 RMS
+    n_vertical_used: int = 0
+    vertical_outliers: list = field(default_factory=list)
 
     def summary(self) -> str:
         lines = ["════ InSAR ↔ GNSS(NGL) 신뢰도 지표 ════",
@@ -231,22 +261,46 @@ class GnssValidation:
                  f" (θ={self.incidence_deg:.0f}° head={self.heading_deg:.1f}°, 관측 {self.insar_span_yr:.1f}yr)",
                  f" 인근 GNSS {self.n_stations}개 (반경 {self.max_km:.0f}km):"]
         for s in self.stations:
-            lines.append(f"   {s['sta']} {s['dist_km']:.1f}km: GNSS LOS {s['gnss_los']:+.2f}"
-                         f"(수직 {s['up_vel']:+.2f}) · InSAR−GNSS {s['resid']:+.2f} mm/yr"
-                         f"  [{s['span_yr']:.0f}yr]")
+            flag = "  ⊘이상치" if s.get("vertical_outlier") else ""
+            up_r = s.get("up_resid")
+            up_txt = f"{up_r:+.2f}" if up_r is not None else "—"
+            lines.append(f"   {s['sta']} {s['dist_km']:.1f}km: 수직 {s['up_vel']:+.2f} "
+                         f"→ InSAR−GNSS(수직) {up_txt} mm/yr"
+                         f"  [{s['span_yr']:.0f}yr]{flag}")
+            lines.append(f"          (LOS {s['gnss_los']:+.2f}, 차 {s['resid']:+.2f} "
+                         "— 기준프레임 차 포함이라 판정에 쓰지 않음)")
         if self.dropped:
             lines.append(" 제외: " + ", ".join(self.dropped))
-        if self.n_stations:
-            lines.append(f" LOS 잔차 RMS {self.rms_resid_mm_yr:.2f} mm/yr — "
-                         + ("✅ GNSS 지상기준과 정합(신뢰도↑)" if self.rms_resid_mm_yr <= 5.0
-                            else "⚠️ 편차 큼 — 아래 유의사항 참고"))
+
+        # ── 판정은 **수직**으로만 한다 ──
+        if self.rms_up_resid_mm_yr is not None:
+            if self.rms_up_resid_mm_yr <= VERT_OK_MM_YR:
+                verdict = "✅ GNSS 지상기준과 정합(신뢰도↑)"
+            elif self.rms_up_resid_mm_yr <= VERT_MARGINAL_MM_YR:
+                verdict = "🟡 허용 범위 — 관측기간·기준점 확인 권장"
+            else:
+                verdict = "⚠️ 수직 편차 큼 — InSAR 기준프레임/보정 점검 필요"
+            lines.append(f" 수직 잔차 RMS {self.rms_up_resid_mm_yr:.2f} mm/yr "
+                         f"(관측소 {self.n_vertical_used}개) — {verdict}")
+            if self.vertical_outliers:
+                lines.append("   ⊘ 수직 이상치 제외: " + ", ".join(self.vertical_outliers)
+                             + " (장비 스텝 잔재로 판단)")
+        elif self.n_stations:
+            lines.append(" 수직 대조 불가 — 유효 관측소 부족")
         else:
             lines.append(" ⚠️ 반경 내 유효 GNSS 없음 — 반경 확대(--gnss-km) 권장")
-        # 정직 유의: 프레임·플레이트 운동·짧은 관측
-        lines.append(" ⓘ 유의: (1) GNSS 절대속도는 한반도 플레이트 운동(수평 ~30mm/yr)을 포함,"
-                     " 상대 InSAR LOS 와 수평성분에 계통차 존재 → 플레이트-무관 **수직**이 1차 지표.")
-        lines.append("        (2) InSAR 관측기간이 짧으면(±산포 큼) 속도 불확실 — 장기 시계열 필요.")
-        return "\n".join(lines)
+
+        lines.append(f" InSAR 연직 환산 {self.insar_up_vel_mm_yr:+.2f} mm/yr"
+                     f" (LOS/cos{self.incidence_deg:.0f}°, 단일궤도 연직 가정)"
+                     if self.insar_up_vel_mm_yr is not None else "")
+        lines.append(" ⓘ 유의: (1) GNSS 절대속도는 한반도 플레이트 운동(수평 ~30mm/yr)을 포함하고"
+                     " InSAR LOS 는 국소 기준점에 대한 **상대** 값이다. LOS 에서 직접 빼면 차이의"
+                     " 대부분이 기준프레임 차이지 InSAR 오차가 아니므로 판정에 쓰지 않는다.")
+        lines.append("        (2) 수직 대조도 InSAR 기준점이 안정하다는 가정 위에 있고,"
+                     " GNSS 는 교량이 아니라 수 km 떨어진 지반이다 — 광역 정합성 검증이지"
+                     " 교량 부재 검증이 아니다.")
+        lines.append("        (3) InSAR 관측기간이 짧으면(±산포 큼) 속도 불확실 — 장기 시계열 필요.")
+        return "\n".join(x for x in lines if x)
 
     def as_dict(self) -> dict:
         return {"insar_los_vel_mm_yr": round(self.insar_los_vel_mm_yr, 3),
@@ -254,7 +308,17 @@ class GnssValidation:
                 "insar_span_yr": self.insar_span_yr,
                 "incidence_deg": self.incidence_deg, "heading_deg": self.heading_deg,
                 "n_stations": self.n_stations, "rms_resid_mm_yr": round(self.rms_resid_mm_yr, 3),
-                "stations": self.stations, "dropped": self.dropped, "max_km": self.max_km}
+                "stations": self.stations, "dropped": self.dropped, "max_km": self.max_km,
+                # 1차 지표(판정 근거)
+                "insar_up_vel_mm_yr": (None if self.insar_up_vel_mm_yr is None
+                                       else round(self.insar_up_vel_mm_yr, 3)),
+                "rms_up_resid_mm_yr": (None if self.rms_up_resid_mm_yr is None
+                                       else round(self.rms_up_resid_mm_yr, 3)),
+                "n_vertical_used": self.n_vertical_used,
+                "vertical_outliers": self.vertical_outliers,
+                "primary_metric": "rms_up_resid_mm_yr",
+                "note": ("LOS 잔차는 기준프레임(플레이트 운동) 차를 포함해 판정에 쓰지 않는다. "
+                         "판정은 플레이트-무관 수직 잔차로 한다.")}
 
 
 def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
@@ -297,16 +361,35 @@ def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
 
     gnss, dropped = gnss_los_velocities(lat0, lon0, incidence_deg=incidence_deg,
                                         heading_deg=head, max_km=max_km, k=k, fetch_fn=fetch_fn)
-    stations, resids = [], []
-    for s in gnss:
+    # InSAR LOS → 연직(단일궤도 연직 가정). 플레이트 운동은 거의 수평이므로 GNSS Up 과의
+    # 대조가 기준프레임에 영향받지 않는 유일한 축이다.
+    cos_t = math.cos(math.radians(incidence_deg))
+    insar_up = insar_vel / cos_t if abs(cos_t) > 1e-6 else None
+
+    ups = [s.up_vel_mm_yr for s in gnss]
+    outlier_mask = _mad_outliers(ups)
+
+    stations, resids, up_resids, outliers = [], [], [], []
+    for s, is_out in zip(gnss, outlier_mask):
         r = insar_vel - s.los_vel_mm_yr
         resids.append(r)
+        ur = None if insar_up is None else round(insar_up - s.up_vel_mm_yr, 3)
+        if is_out:
+            outliers.append(f"{s.sta}(수직 {s.up_vel_mm_yr:+.1f}mm/yr, {s.span_yr:.0f}yr)")
+        elif ur is not None:
+            up_resids.append(ur)
         stations.append({"sta": s.sta, "dist_km": s.dist_km, "gnss_los": s.los_vel_mm_yr,
                          "up_vel": s.up_vel_mm_yr, "insar": round(insar_vel, 3),
-                         "resid": round(r, 3), "n_epochs": s.n_epochs, "span_yr": s.span_yr})
+                         "resid": round(r, 3), "up_resid": ur,
+                         "vertical_outlier": bool(is_out),
+                         "n_epochs": s.n_epochs, "span_yr": s.span_yr})
     rms = float(np.sqrt(np.mean(np.square(resids)))) if resids else float("nan")
+    rms_up = float(np.sqrt(np.mean(np.square(up_resids)))) if up_resids else None
     return GnssValidation(insar_los_vel_mm_yr=insar_vel, insar_los_std=insar_std,
                           incidence_deg=incidence_deg, heading_deg=round(head, 2),
                           stations=stations, n_stations=len(stations),
                           rms_resid_mm_yr=rms, max_km=max_km, dropped=dropped,
-                          insar_span_yr=insar_span)
+                          insar_span_yr=insar_span,
+                          insar_up_vel_mm_yr=(None if insar_up is None else round(insar_up, 3)),
+                          rms_up_resid_mm_yr=(None if rms_up is None else round(rms_up, 3)),
+                          n_vertical_used=len(up_resids), vertical_outliers=outliers)

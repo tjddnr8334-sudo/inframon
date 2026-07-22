@@ -168,6 +168,36 @@ trend fitted to a numerical artefact. Fatigue and durability are likewise record
 with a stated reason** rather than silently omitted. Full design and data requirements:
 [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
 
+### Independent validation against GNSS
+
+`--gnss-validate` compares the ingested InSAR rates against nearby NGL continuous-GNSS stations.
+This is currently the **only check of the InSAR velocities against ground truth** — everything
+else in the test suite is synthetic.
+
+```bash
+python -m inframon --gnss-validate project.h5 --gnss-incidence 41.5 --gnss-km 60
+```
+
+The verdict is computed on the **vertical** component only. GNSS absolute velocities carry
+Korean plate motion (~30 mm/yr horizontal) while InSAR LOS is *relative* to a local reference,
+so subtracting them in LOS yields a difference that is mostly a reference-frame offset, not
+InSAR error — using it as a pass/fail turns a sound result into a false alarm. Plate motion is
+almost entirely horizontal, so the vertical axis is the one that can be compared like-for-like.
+LOS residuals are still shown, labelled as frame-affected. Stations whose vertical rate is a
+MAD outlier (residual equipment steps) are excluded from the verdict and listed.
+
+Result on the real Jeongja ascending track (2,661 pts × 8.8 yr) against 3 stations at 11–17 km:
+
+```
+InSAR vertical −0.12 mm/yr   vs   SUWN −0.62 (29yr) · SON2 +0.03 (9yr) · SG26 −0.14 (8yr)
+vertical residual RMS 0.30 mm/yr  → consistent with the ground reference
+(SWON excluded: −21.8 mm/yr over 3 yr — residual equipment step)
+```
+
+This validates the wide-area reference frame and atmospheric correction, **not** the bridge
+members: the GNSS stations are kilometres away on the ground, and the vertical comparison still
+assumes the InSAR reference point is stable.
+
 ### BIM / digital-twin alignment
 
 `--bim-align` maps monitoring results onto IFC elements. Most of "merging with BIM" is
@@ -392,6 +422,33 @@ python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
 없기 때문이다(`d4≈0`). 게이트는 수치 인공물에 맞춘 추세를 내놓는 대신 그 사실을 그대로
 말한다. 피로·내구성도 조용히 빼지 않고 **비활성 + 사유**로 남긴다.
 설계·필요 데이터: [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
+
+### GNSS 독립 검증
+
+`--gnss-validate` 는 인제스트된 InSAR 속도를 인근 NGL 상시 GNSS 와 대조한다. 현재
+**InSAR 속도를 지상 실측과 맞대보는 유일한 검증**이다 — 나머지 테스트는 전부 합성이다.
+
+```bash
+python -m inframon --gnss-validate project.h5 --gnss-incidence 41.5 --gnss-km 60
+```
+
+판정은 **수직 성분으로만** 한다. GNSS 절대속도는 한반도 플레이트 운동(수평 ~30mm/yr)을
+포함하고 InSAR LOS 는 국소 기준점에 대한 **상대**값이라, LOS 에서 직접 빼면 차이의 대부분이
+기준프레임 차이지 InSAR 오차가 아니다 — 그걸 합격/불합격으로 쓰면 멀쩡한 결과가 경보가 된다.
+플레이트 운동은 거의 수평이므로 같은 물리량끼리 비교할 수 있는 축은 수직뿐이다. LOS 잔차도
+계속 보여주되 "기준프레임 차 포함"으로 명시한다. 수직속도가 MAD 이상치인 관측소(장비 스텝
+잔재)는 판정에서 제외하고 사유를 남긴다.
+
+정자교 실 상승 트랙(2,661점 × 8.8년) × 11~17km 관측소 3개 결과:
+
+```
+InSAR 연직 −0.12 mm/yr   vs   SUWN −0.62 (29yr) · SON2 +0.03 (9yr) · SG26 −0.14 (8yr)
+수직 잔차 RMS 0.30 mm/yr  → 지상기준과 정합
+(SWON 제외: 3년에 −21.8 mm/yr — 장비 스텝 잔재)
+```
+
+이것이 검증하는 것은 **광역 기준프레임과 대기보정**이지 교량 부재가 아니다. GNSS 관측소는
+수 km 떨어진 지반에 있고, 수직 대조도 InSAR 기준점이 안정하다는 가정 위에 있다.
 
 ### BIM / 디지털 트윈 정합
 
