@@ -80,6 +80,14 @@ ARRAY_SPECS: dict[str, dict[str, tuple[tuple, frozenset]]] = {
         "deck_total_ds": (("G", "M"), _FLOAT),
         "deck_deflection_ds": (("G", "M"), _FLOAT),
     },
+    # 잔존수명(opt-in 후처리). N 은 insar/pinn/fram 과 같은 심볼로 결속된다.
+    "life": {
+        "rsl_point_ds": (("N",), _FLOAT),
+        "rsl_lower_ds": (("N",), _FLOAT),
+        "rate_ds": (("N",), _FLOAT),
+        "rate_sigma_ds": (("N",), _FLOAT),
+        "sublimit_ds": (("N",), _INT),
+    },
     "fram": {
         "resonance_Rij_ds": (("F", "F", "M"), _FLOAT),
         "amplification_ds": (("N", "M"), _FLOAT),
@@ -96,6 +104,7 @@ _SCALAR_SYMBOLS: dict[str, dict[str, str]] = {
     "insar": {"n_points": "N", "n_dates": "M"},
     "pinn": {"n_points": "N", "n_dates": "M", "n_virtual": "V", "n_deck": "G"},
     "fram": {"n_points": "N", "n_dates": "M"},
+    "life": {"n_points": "N"},
 }
 
 

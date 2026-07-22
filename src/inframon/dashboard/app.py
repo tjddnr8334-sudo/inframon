@@ -1805,6 +1805,128 @@ def status_header(path: str) -> None:
 
 
 # ───────────────────────────────── main ───────────────────────────────
+# ─────────────────────────── ④ 잔존수명 탭 ────────────────────────────
+_SUBLIMIT_KO = {0: "검열(열화 신호 없음)", 1: "절대 변위", 2: "부등침하(각변위)"}
+_CONF_KO = {"high": ("success", "높음"), "medium": ("warning", "보통"), "low": ("error", "낮음")}
+
+
+def tab_life(path: str, start: date) -> None:
+    """잔존수명(RSL) — 하한·지배 채널·핫스팟·가정을 한 화면에.
+
+    이 탭의 설계 원칙은 **과신 방지**다. 헤드라인은 점추정이 아니라 하한이고,
+    가정 패널은 접지 않으며, 측정기반/가정기반 채널을 눈에 띄게 구분한다.
+    """
+    st.subheader("④ 잔존수명 — 사용성 한계까지 남은 시간")
+    if not has_group(path, "life"):
+        st.info("잔존수명 결과가 없습니다. `python -m inframon --demo --remaining-life` "
+                "(또는 `--import-track-h5 ... --remaining-life`) 로 계산하세요.")
+        st.caption("설계·필요 데이터: `docs/잔존수명_설계.md`")
+        return
+
+    meta = read_meta(path, "life")
+    if not meta:
+        st.warning("/life 메타를 읽지 못했습니다.")
+        return
+
+    lo, pt = meta.get("rsl_lower_years"), meta.get("rsl_years")
+    horizon = meta.get("horizon_years", 100.0)
+    gov = meta.get("governing")
+    conf = str(meta.get("confidence", "low"))
+    cens = float(meta.get("censored_fraction", 1.0))
+
+    # ── 헤드라인 — 하한과 지배 채널을 항상 같이 ──
+    if lo is None:
+        st.success(f"### 잔존수명 > {horizon:.0f}년\n"
+                   f"관측 구간에서 **유의한 열화 군집이 없습니다** (검열 {cens * 100:.0f}%). "
+                   "고립점만으로는 교량 대표값으로 승격하지 않습니다.")
+    else:
+        fn, _ = _CONF_KO.get(conf, ("warning", "보통"))
+        getattr(st, fn)(f"### 잔존수명 ≥ {lo:.1f}년 (하한)\n"
+                        f"점추정 {pt:.1f}년 · 지배 한계상태 **{gov}** · 신뢰도 **{_CONF_KO.get(conf, ('', conf))[1]}**")
+    st.caption(f"신뢰도 근거: {meta.get('confidence_reason', '-')}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("관측 기간", f"{meta.get('observed_years', 0):.2f} 년")
+    c2.metric("측정점", f"{meta.get('n_points', 0):,}")
+    c3.metric("검열 비율", f"{cens * 100:.0f} %", help="열화 추세가 유의하지 않아 잔존수명이 정의되지 않는 점의 비율")
+    c4.metric("표시 상한", f"{horizon:.0f} 년", help="설계공용수명 − 공용연수")
+
+    # ── 채널 표 — 측정기반/가정기반 구분과 비활성 사유 ──
+    st.markdown("**한계상태 채널**")
+    rows = []
+    for ch in meta.get("channels", []):
+        rows.append({
+            "채널": ch.get("name"),
+            "성격": "측정기반" if ch.get("kind") == "measured" else "가정기반(설계코드)",
+            "상태": "활성" if ch.get("active") else "비활성",
+            "잔존수명 하한[yr]": ("—" if ch.get("rsl_lower_years") is None
+                             else f"{ch['rsl_lower_years']:.1f}"),
+            "비고": ch.get("inactive_reason") or "",
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    sv = next((c for c in meta.get("channels", []) if c.get("name") == "serviceability"), {})
+    detail = sv.get("detail") or {}
+
+    # ── 핫스팟 — 어디를 점검해야 하는가 ──
+    hs = detail.get("hotspot")
+    if hs:
+        st.markdown("**🎯 지배 열화 군집 (여기부터 점검)**")
+        h1, h2, h3 = st.columns(3)
+        h1.metric("군집 점수", f"{hs['n_points']}")
+        h2.metric("최대 속도", f"{hs['rate_max_mm_yr']:.2f} mm/yr")
+        h3.metric("군집 최단 RSL", f"{hs['rsl_min_years']:.1f} 년")
+        cx, cy = hs.get("centroid_xy", [None, None])
+        st.caption(f"중심 좌표 {cx}, {cy} · 범위 {hs['extent_m'][0]}×{hs['extent_m'][1]} m · "
+                   f"점 인덱스 {hs['point_index'][:10]}")
+
+    # ── 분포 — 극값만 보면 오해한다 ──
+    rsl, sub, rate = read(path, meta["rsl_point_ds"], meta["sublimit_ds"], meta["rate_ds"])
+    if rsl is not None:
+        fin = np.asarray(rsl, dtype=float)
+        ok = np.isfinite(fin)
+        left, right = st.columns([3, 2])
+        with left:
+            st.markdown("**생존 곡선 — 잔존수명 이하인 점의 비율**")
+            if ok.any():
+                xs = np.linspace(0, min(float(np.percentile(fin[ok], 95)), horizon), 60)
+                frac = [(fin[ok] <= x).mean() * 100 for x in xs]
+                # 필드명에 대괄호를 쓰면 안 된다 — Vega-Lite 가 `[` 를 배열 인덱스 문법으로
+                # 해석해 필드 참조가 깨지고 차트가 조용히 빈 화면이 된다.
+                st.line_chart(pd.DataFrame({"점 비율 (%)": frac},
+                                           index=pd.Index(np.round(xs, 1), name="잔존수명 (년)")))
+            else:
+                st.caption("유한 잔존수명 점이 없습니다(전부 검열).")
+        with right:
+            st.markdown("**지배 한계 분포**")
+            u, c = np.unique(np.asarray(sub).astype(int), return_counts=True)
+            st.dataframe(pd.DataFrame({"한계": [_SUBLIMIT_KO.get(int(k), str(k)) for k in u],
+                                       "점 수": c}),
+                         use_container_width=True, hide_index=True)
+        pcts = detail.get("rsl_percentiles_years")
+        if pcts:
+            st.caption("유한 잔존수명 분위수[년] — "
+                       + " · ".join(f"{k} {v}" for k, v in pcts.items())
+                       + "  (교량 대표값은 최솟값이 아니라 공간 응집 군집 규칙으로 뽑는다)")
+
+    # ── 가정 패널 — 항상 펼쳐 둔다(접으면 안 본다) ──
+    a = meta.get("assumptions", {})
+    st.markdown("**⚙️ 사용된 가정 — 이 값들이 결과에 선형으로 반영된다**")
+    vals, srcs = a.get("values", {}), a.get("sources", {})
+    st.dataframe(pd.DataFrame([{"항목": k, "값": v, "출처": srcs.get(k, "")} for k, v in vals.items()]),
+                 use_container_width=True, hide_index=True)
+    st.caption(
+        f"변위 원: {a.get('displacement_source', '-')} · "
+        f"열성분: {'제거됨 — ' + str(a.get('thermal_removal')) if a.get('thermal_removed') else '⚠ 미분리(계절 열팽창이 속도에 섞임)'}\n\n"
+        f"한계 적용: {a.get('limit_basis', '-')}\n\n"
+        f"기존 누적 변위: {a.get('consumed_mm', 0)} mm — {a.get('consumed_note', '')}")
+    for n in a.get("notes", []):
+        st.caption(f"· {n}")
+    st.info("**측정할 수 없는 것**: 프리스트레스 손실 · 부식률 · 균열폭 · 실제 활하중 응력범위. "
+            "위성 InSAR+PINN 은 운동학(변위·속도·곡률)만 관측한다. "
+            "피로·내구성 채널은 설계코드·점검자료 기반 추정이며 위성 관측이 기여하지 않는다.")
+
+
 def tab_psi(start: date) -> None:
     """④ PSI 방법론 비교 — PS(ADI)·SBAS/DS(소baseline)·QPS(하이브리드) 데크 결과."""
     st.subheader("④ PSI 방법론 비교 — PS · SBAS(DS) · QPS")
@@ -2031,20 +2153,23 @@ def main() -> None:
 
     # 섹션 선택 — st.tabs 는 rerun 시 첫 탭으로 리셋되므로, session_state 에 유지되는
     # 라디오(key='active_tab')로 대체. 위젯 조작으로 rerun 돼도 현재 섹션이 유지된다.
-    _SECTIONS = ["① InSAR", "② PINN", "③ FRAM", "④ PSI 방법론"]
+    _SECTIONS = ["① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
     active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
                       label_visibility="collapsed")
     st.divider()
 
+    # 조건식(`f() if c else g()`)을 문장으로 쓰면 Streamlit 매직이 그 값(None)을 화면에
+    # 그대로 찍는다 — 탭 하단에 "None" 이 남던 원인. 평범한 if/else 문으로 쓴다.
+    _NO_PROJECT = "project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요."
+    _tabs = {_SECTIONS[1]: tab_pinn, _SECTIONS[2]: tab_fram, _SECTIONS[3]: tab_life}
     if active == _SECTIONS[0]:
         tab_insar(path, start)
-    elif active == _SECTIONS[1]:
-        tab_pinn(path, start) if Path(path).exists() else \
-            st.info("project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요.")
-    elif active == _SECTIONS[2]:
-        tab_fram(path, start) if Path(path).exists() else \
-            st.info("project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요.")
-    elif active == _SECTIONS[3]:
+    elif active in _tabs:
+        if Path(path).exists():
+            _tabs[active](path, start)
+        else:
+            st.info(_NO_PROJECT)
+    elif active == _SECTIONS[4]:
         tab_psi(start)
 
 

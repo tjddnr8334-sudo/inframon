@@ -128,6 +128,35 @@ is the verified route for a bare SARvey/MintPy product.
 Every step is opt-in and logs what it applied/skipped into the `insar_source` attribute, so the
 default and golden-regression paths are unchanged.
 
+### Remaining service life (opt-in)
+
+`--remaining-life` estimates how long until a serviceability limit is reached and writes `/life`.
+It runs **after** FRAM as a post-processing stage — the four engines and the golden regression are
+untouched, and without the flag the `/life` group is never created.
+
+```bash
+python -m inframon --demo --remaining-life --out data/project.h5
+python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
+  --remaining-life --life-settlement-mm 25 --life-consumed-mm 0
+```
+
+Three properties make the number defensible rather than decorative:
+
+- **Censoring.** A point whose trend confidence interval includes zero has *no defined* remaining
+  life, not a very long one. Reporting `margin / rate` there yields "500,000 years". Such points are
+  censored and the bridge reads `> horizon`.
+- **Lower bound first.** The headline is `margin / rate_upper` (Theil–Sen 95% bound), not the point
+  estimate. Rates use Theil–Sen because InSAR series carry unwrapping outliers.
+- **Spatial cohesion.** The bridge value is not the per-point minimum — one noisy point would
+  govern the whole structure. Only a connected cluster of ≥ k points counts, and the governing
+  cluster's coordinates, extent and rate are reported so the result names an inspection target.
+
+Two sub-limits are checked per point: absolute displacement (member-dependent) and **differential
+settlement** (angular distortion vs 1/500), which often governs before the absolute limit. Channels
+for stiffness (needs time-resolved EI), fatigue and durability are recorded as **inactive with a
+stated reason** rather than silently omitted. Full design and data requirements:
+[`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
+
 ### Reproducibility
 
 | Aspect | Detail |
@@ -282,6 +311,32 @@ python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
 | 열팽창 | `los = a + b·t + c·T` 회귀로 계절 열변형 분리 | `--insar-thermal` + 온도원 | CSV(`date,temp_C`)가 결정론적이라 우선, 없으면 `--insar-fetch-temp` 로 ERA5(Open-Meteo) 조회 |
 
 모두 opt-in 이고 적용/skip 내역을 `insar_source` attr 에 남긴다 — 기본 경로와 골든 회귀는 불변.
+
+### 잔존수명 (opt-in)
+
+`--remaining-life` 는 사용성 한계까지 남은 시간을 추정해 `/life` 에 기록한다. FRAM **뒤**에
+붙는 후처리 스테이지라 4엔진과 골든 회귀는 불변이고, 플래그를 안 쓰면 `/life` 그룹 자체가
+생기지 않는다.
+
+```bash
+python -m inframon --demo --remaining-life --out data/project.h5
+python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
+  --remaining-life --life-settlement-mm 25 --life-consumed-mm 0
+```
+
+이 숫자가 장식이 아니게 만드는 세 가지:
+
+- **검열(censoring)** — 추세 신뢰구간이 0 을 포함하는 점은 잔존수명이 *정의되지 않는다*.
+  거기서 `여유/속도` 를 계산하면 "50만년"이 나온다. 그런 점은 검열하고 교량은 `> horizon` 으로 읽는다.
+- **하한 우선** — 헤드라인은 점추정이 아니라 `여유/속도상한`(Theil–Sen 95% 경계)이다.
+  속도 추정에 Theil–Sen 을 쓰는 이유는 InSAR 시계열에 unwrapping 이상치가 섞이기 때문이다.
+- **공간 응집** — 교량 값은 점별 최솟값이 아니다(노이즈 한 점이 교량 전체를 지배한다).
+  반경 안에 연결된 k점 이상 군집만 인정하고, **지배 군집의 좌표·범위·속도**를 함께 기록해
+  결과가 점검 대상을 지목하게 한다.
+
+점별로 두 하위 한계를 본다: 절대 변위(부재별)와 **부등침하**(각변위 vs 1/500) — 실제로는
+부등침하가 절대 한계보다 먼저 걸리는 경우가 많다. 강성열화·피로·내구성 채널은 조용히 빼지
+않고 **비활성 + 사유**로 남긴다. 설계·필요 데이터: [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
 
 ### 재현성
 

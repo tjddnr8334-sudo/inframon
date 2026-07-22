@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 # 하위호환되는 Optional 필드 추가는 minor 만 올린다.
 # 1.1: InSAROutput.vertical_ds 추가(asc+desc 융합 연직 성분, Optional — 1.0 파일과 호환).
 # 1.2: PINNOutput 에 가상센싱(상부거더 전체 변위장) Optional 필드 추가 — 1.0/1.1 파일과 호환.
-SCHEMA_VERSION = "1.2"
+# 1.3: RemainingLifeOutput(/life 그룹) 추가 — 4엔진 계약 불변, 잔존수명은 opt-in 후처리.
+SCHEMA_VERSION = "1.3"
 
 # 부재 종류 (CV → InSAR → PINN → FRAM 전체에서 공유하는 표준 라벨)
 MEMBER_TYPES = ("deck", "pier", "abutment", "bearing")
@@ -149,3 +150,53 @@ class FRAMOutput(BaseModel):
     calibrated_risk_ds: str | None = None    # [N,M] isotonic 보정 붕괴확률(캘리브레이터 있을 때)
     cri_global_max: float     # 전체 최대 CRI (요약 스칼라)
     warning: FRAMWarning
+
+
+# ───────────────────── 후처리: 잔존수명 (RSL, opt-in) ─────────────────────
+# 4엔진(ENGINE_NAMES)에 5번째를 추가하지 않는다 — FRAM 뒤에 붙는 후처리 스테이지이고
+# `--remaining-life` 로만 동작한다. 미사용 시 /life 그룹 자체가 생기지 않아 기존
+# 파이프라인 수치·골든 회귀는 완전히 불변이다. 설계: docs/잔존수명_설계.md
+
+# 잔존수명 채널(한계상태). 물리적으로 다른 한계는 다른 시간을 주므로 뭉개지 않는다.
+RSL_CHANNELS = ("serviceability", "stiffness", "fatigue", "durability")
+# 채널 성격 — 측정기반(위성 관측이 근거) / 가정기반(설계코드·점검자료 추정).
+RSL_KINDS = ("measured", "model_based")
+# 사용성 채널의 하위 한계 — 점별 지배 한계를 이 인덱스로 기록한다.
+#   0=검열(열화 신호 없음) · 1=절대 변위 · 2=부등침하(각변위)
+RSL_SUBLIMITS = ("censored", "absolute", "differential")
+
+
+class RSLChannel(BaseModel):
+    """한 한계상태 채널의 잔존수명 결과. 비활성이면 사유를 반드시 남긴다."""
+    name: str                          # RSL_CHANNELS
+    kind: str                          # RSL_KINDS — UI 가 '측정/추정'을 구분 표기
+    active: bool
+    inactive_reason: str | None = None  # 비활성 사유(관측기간 부족 등) — 침묵 금지
+    rsl_years: float | None = None      # 점추정(검열이면 None)
+    rsl_lower_years: float | None = None  # 보수적 하한 — 보고 기본값
+    censored: bool = False              # 유효 열화 군집 없음 → "> horizon"
+    detail: dict = Field(default_factory=dict)
+
+
+class RemainingLifeOutput(BaseModel):
+    """문서 docs/잔존수명_설계.md — /life 그룹."""
+    schema_version: str = SCHEMA_VERSION
+    n_points: int
+    as_of: str                    # 기준일 YYYY-MM-DD (관측 마지막 취득일)
+    observed_years: float         # 관측 구간 길이[년] — 채널 게이팅 근거
+    horizon_years: float          # 이 값을 넘으면 검열(">horizon")
+    # 점별 결과 [N]
+    rsl_point_ds: str             # 잔존수명[yr] — 검열점은 inf
+    rsl_lower_ds: str             # 보수적 하한[yr] — 검열점은 inf
+    rate_ds: str                  # 열화율(변위 |mm/yr|)
+    rate_sigma_ds: str            # 유효 표준오차 — 신뢰도 표기에 필수
+    sublimit_ds: str              # 점별 지배 하위한계 (RSL_SUBLIMITS 인덱스)
+    channels: list[RSLChannel] = Field(default_factory=list)
+    # 교량 대표값 — 최솟값이 아니라 공간 응집 군집 규칙으로 뽑는다(고립 노이즈점 배제)
+    rsl_years: float | None = None
+    rsl_lower_years: float | None = None
+    governing: str | None = None       # 지배 채널명
+    censored_fraction: float = 1.0     # 검열된 점 비율(1.0 = 유의한 열화 없음)
+    confidence: str = "low"            # high | medium | low
+    confidence_reason: str = ""
+    assumptions: dict = Field(default_factory=dict)  # 임계값·출처·변위원 전부

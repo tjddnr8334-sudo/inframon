@@ -18,6 +18,45 @@ from .insar.track_reader import import_track_h5
 from .orchestrator.pipeline import run_pipeline
 
 
+def _run_remaining_life(args, cfg=None) -> None:
+    """`--remaining-life` 후처리 — /life 기록 후 요약 출력.
+
+    실패해도 파이프라인 결과는 이미 저장돼 있으므로, 사유만 알리고 종료코드는
+    바꾸지 않는다(잔존수명은 부가 산출물이다).
+    """
+    from .contracts.io import ProjectStore
+    from .life import estimate_remaining_life, summarize
+
+    user_limits = {
+        "settlement_mm": args.life_settlement_mm,
+        "deck_deflection_ratio": args.life_deflection_ratio,
+        "angular_distortion": args.life_angular,
+        "design_life_years": args.life_design_years,
+    }
+    try:
+        with ProjectStore(args.out, mode="a") as store:
+            out = estimate_remaining_life(
+                store, cfg, user_limits=user_limits,
+                consumed_mm=args.life_consumed_mm,
+                min_cluster=args.life_min_cluster,
+            )
+    except (KeyError, ValueError) as exc:
+        print(f"  잔존수명       : 계산 불가 — {exc}")
+        return
+
+    sv = next((c for c in out.channels if c.name == "serviceability"), None)
+    print("-" * 56)
+    print(f"  잔존수명       : {summarize(out)}")
+    print(f"  관측 기간      : {out.observed_years:.2f}년 · 검열 {out.censored_fraction * 100:.0f}%")
+    print(f"  신뢰도         : {out.confidence} — {out.confidence_reason}")
+    if sv is not None and not sv.active:
+        print(f"  사용성 채널    : 비활성 — {sv.inactive_reason}")
+    print(f"  변위 원        : {out.assumptions['displacement_source']}"
+          f" · 열성분 {'제거됨' if out.assumptions['thermal_removed'] else '미분리(주의)'}")
+    print(f"  기록           : /life (스키마 {out.schema_version})")
+    print("-" * 56)
+
+
 def main() -> None:
     # Windows 콘솔(cp949)에서도 한글/특수문자 출력이 깨지지 않도록 UTF-8 강제
     for stream in (sys.stdout, sys.stderr):
@@ -207,6 +246,22 @@ def main() -> None:
                    help="열팽창 보정 온도원: date,temp_C CSV(결정론적). 취득일별 기온[°C]")
     p.add_argument("--insar-fetch-temp", action="store_true",
                    help="온도 CSV 없을 때 ERA5(Open-Meteo, 키불필요·네트워크)로 취득일 온도 조회")
+    # ── 잔존수명(RSL) — FRAM 뒤 opt-in 후처리. 설계: docs/잔존수명_설계.md ──
+    p.add_argument("--remaining-life", action="store_true",
+                   help="잔존수명(사용성 한계) 추정 후 /life 에 기록. --demo 와 --import-track-h5 양쪽 적용")
+    p.add_argument("--life-settlement-mm", type=float, default=None, metavar="MM",
+                   help="교각·교대 절대 침하 허용치[mm] (기본 25 — 지반조건 의존, 지정 권장)")
+    p.add_argument("--life-deflection-ratio", type=float, default=None, metavar="R",
+                   help="상판 처짐 한계 span/R (기본 800)")
+    p.add_argument("--life-angular", type=float, default=None, metavar="RAD",
+                   help="부등침하 각변위 한계[rad] (기본 0.002 = 1/500)")
+    p.add_argument("--life-design-years", type=float, default=None, metavar="YR",
+                   help="설계공용수명[년] (기본 100) — 잔존수명 표시 상한 산정에 사용")
+    p.add_argument("--life-consumed-mm", type=float, default=0.0, metavar="MM",
+                   help="관측 시작 이전에 이미 발생한 누적 변위[mm]. 기본 0 은 낙관적 가정 — "
+                        "수준측량 등 실측 누적치가 있으면 반드시 지정")
+    p.add_argument("--life-min-cluster", type=int, default=3, metavar="K",
+                   help="교량 대표값 인정에 필요한 인접 열화점 수(기본 3) — 고립 노이즈점 배제")
     p.add_argument("--resume", action="store_true",
                    help="기존 --out 에서 입력이 안 바뀐 단계는 재계산 생략(증분 재개)")
     p.add_argument("--force-stage", action="append", default=[], metavar="STAGE",
@@ -907,6 +962,8 @@ def main() -> None:
         if args.insar_thermal:
             print(f"  열팽창 보정     : {'CSV ' + args.insar_temp_csv if args.insar_temp_csv else ('ERA5 fetch' if args.insar_fetch_temp else '온도원 없음')}")
         print("=" * 56)
+        if args.remaining_life:
+            _run_remaining_life(args, cfg)
         return
 
     if args.fit_reference_range:
@@ -966,6 +1023,8 @@ def main() -> None:
         print(f"  예상 리드타임  : {fram.warning.lead_time_days:.0f} 일")
     print(f"  위험 부재      : {', '.join(fram.warning.critical_members) or '없음'}")
     print("=" * 56)
+    if args.remaining_life:
+        _run_remaining_life(args, cfg)
 
 
 if __name__ == "__main__":

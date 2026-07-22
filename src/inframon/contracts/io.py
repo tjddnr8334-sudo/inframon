@@ -27,6 +27,10 @@ from .schema import SCHEMA_VERSION
 T = TypeVar("T", bound=BaseModel)
 
 GROUPS = ("cv", "insar", "pinn", "fram")
+# 잔존수명(opt-in 후처리) 그룹. GROUPS 에 넣지 않는 이유: `__init__` 이 GROUPS 를 전부
+# require_group 하므로 넣으면 잔존수명을 안 쓰는 모든 project.h5 에도 빈 그룹이 생긴다.
+# 여기 것은 실제로 쓸 때만 lazy 하게 만들어진다(write_meta/write_json_attr 가 require).
+LIFE_GROUP = "life"
 # 런타임 메타데이터(run_id/cfg/해시) 전용 그룹. 데이터셋이 아닌 attribute 만 담아
 # 골든 회귀(데이터셋 walk)·결정론성 비교에 영향을 주지 않는다.
 META_GROUP = "_meta"
@@ -73,8 +77,9 @@ class ProjectStore:
 
     # ── 메타데이터(Pydantic) ──
     def write_meta(self, group: str, obj: BaseModel) -> None:
-        self._f[group].attrs["meta"] = obj.model_dump_json()
-        self._f[group].attrs["meta_type"] = type(obj).__name__
+        g = self._f.require_group(group)   # LIFE_GROUP 등 lazy 그룹 대응
+        g.attrs["meta"] = obj.model_dump_json()
+        g.attrs["meta_type"] = type(obj).__name__
 
     def read_meta(self, group: str, model: type[T]) -> T:
         raw = self._f[group].attrs["meta"]
@@ -89,11 +94,11 @@ class ProjectStore:
         return model.model_validate_json(raw)
 
     def has_meta(self, group: str) -> bool:
-        return "meta" in self._f[group].attrs
+        return group in self._f and "meta" in self._f[group].attrs
 
     def write_json_attr(self, group: str, name: str, value: dict[str, Any]) -> None:
         """작은 JSON 메타데이터를 그룹 attribute로 저장한다."""
-        self._f[group].attrs[name] = json.dumps(value, ensure_ascii=False)
+        self._f.require_group(group).attrs[name] = json.dumps(value, ensure_ascii=False)
 
     def read_json_attr(self, group: str, name: str) -> dict[str, Any]:
         raw = self._f[group].attrs[name]
@@ -121,7 +126,7 @@ class ProjectStore:
         """모든 데이터셋 값의 sha256(앞 16자) — 재현성·변경 추적용."""
         hashes: dict[str, str] = {}
 
-        for g in GROUPS:
+        for g in (*GROUPS, LIFE_GROUP):
             if g not in self._f:
                 continue
 

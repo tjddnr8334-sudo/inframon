@@ -1,0 +1,292 @@
+"""잔존수명 추정 오케스트레이션 — project.h5 → `/life`.
+
+`--remaining-life` 로만 동작하는 **후처리 스테이지**다. 4엔진(ENGINE_NAMES)에
+5번째를 추가하지 않으므로 미사용 시 기존 파이프라인 수치는 완전히 불변이다.
+
+P1 은 사용성 채널만 활성이고 나머지 채널은 **사유와 함께 비활성**으로 기록한다
+(침묵하면 사용자는 그 한계상태가 검토된 줄 안다). 설계: docs/잔존수명_설계.md
+"""
+
+from __future__ import annotations
+
+from datetime import date
+
+import numpy as np
+
+from ..contracts.io import LIFE_GROUP, ProjectStore
+from ..contracts.schema import (
+    InSAROutput,
+    RemainingLifeOutput,
+    RSLChannel,
+)
+from . import limits as limits_mod
+from .aggregate import cohesive_min
+from .channels import serviceability
+
+# 잔존수명이 이 값을 넘으면 표시 의미가 없다(검열 상한의 하한선).
+MIN_HORIZON_YEARS = 10.0
+
+
+def _xy_meters(xyz: np.ndarray) -> tuple[np.ndarray, str]:
+    """[N,3] 좌표 → 거리 계산용 평면 좌표[m]. 경위도면 국소 평면으로 환산.
+
+    Track 좌표계는 투영(EPSG:5179 등)일 수도, 경위도(EPSG:4326)일 수도 있다.
+    경위도를 그대로 미터로 쓰면 이웃 반경·각변위가 5자리 틀린다.
+    """
+    xy = np.asarray(xyz, dtype=np.float64)[:, :2]
+    if np.abs(xy[:, 0]).max() <= 180.0 and np.abs(xy[:, 1]).max() <= 90.0:
+        lat0 = float(np.median(xy[:, 1]))
+        mx = 111_320.0 * np.cos(np.deg2rad(lat0))
+        return np.stack([(xy[:, 0] - np.median(xy[:, 0])) * mx,
+                         (xy[:, 1] - lat0) * 110_540.0], axis=1), "lonlat→국소평면"
+    return xy - np.median(xy, axis=0), "투영좌표"
+
+
+def _resolve_displacement(store: ProjectStore, ins: InSAROutput) -> dict:
+    """외삽에 쓸 변위 시계열을 고르고, 열성분 제거 여부를 기록한다.
+
+    열성분이 남은 신호를 외삽하면 관측창의 계절 위상이 속도를 통째로 바꾼다.
+    그래서 원 LOS 직접 사용은 최후수단이고, 그 경우 신뢰도를 낮춘다.
+    """
+    src, why = None, ""
+    if ins.vertical_ds and store.has_array(ins.vertical_ds):
+        src, why = store.read_array(ins.vertical_ds), "asc+desc 융합 연직(/insar/vertical)"
+    else:
+        src, why = store.read_array(ins.los_ds), "LOS(/insar/los)"
+    d = np.asarray(src, dtype=np.float64)
+
+    # ① 인제스트에서 이미 열팽창을 분리했는가(--insar-thermal)
+    thermal_removed, how = False, "없음"
+    try:
+        corr = store.read_json_attr("insar", "insar_source").get("corrections") or {}
+        if "thermal" in (corr.get("applied") or []):
+            thermal_removed, how = True, "인제스트 열팽창 보정(--insar-thermal)"
+    except (KeyError, ValueError):
+        pass
+
+    # ② 아니면 PINN 성분분해의 열성분을 뺀다
+    if not thermal_removed and store.has_meta("pinn"):
+        try:
+            from ..contracts.schema import PINNOutput
+            pn = store.read_meta("pinn", PINNOutput)
+            th = np.asarray(store.read_array(pn.comp_thermal_ds), dtype=np.float64)
+            if th.shape == d.shape:
+                d = d - th
+                thermal_removed, how = True, "PINN 성분분해 열성분 차감(/pinn/comp_thermal)"
+        except (KeyError, ValueError, AttributeError):
+            pass
+
+    return {"disp": d, "source": why, "thermal_removed": thermal_removed, "thermal_how": how}
+
+
+def _span_m(store: ProjectStore, xy_m: np.ndarray) -> tuple[float, str, bool]:
+    """지간[m]과 (값, 출처, **실제로 아는 값인가**).
+
+    세 번째 값이 중요하다. 점군 최대 신장은 지간이 아니다 — 실 SARvey 결과에서는
+    주변 건물까지 점이 잡혀 신장이 교량 지간의 10배를 넘기도 한다(정자교: 점군
+    1519m vs 교량 ~120m). 그 값으로 L/800 을 만들면 한계가 1.9m 가 되어 상판에서
+    아무것도 검출되지 않는다. 그래서 추정치일 때는 span_known=False 로 알린다.
+    """
+    try:
+        from ..contracts.schema import CVOutput
+        cv = store.read_meta("cv", CVOutput)
+        if cv.geometry.length_unit == "m" and cv.geometry.bridge_length > 0:
+            return float(cv.geometry.bridge_length), "CV 기하(bridge_length)", True
+    except (KeyError, ValueError, AttributeError):
+        pass
+    if xy_m.shape[0] >= 2:
+        ext = xy_m.max(axis=0) - xy_m.min(axis=0)
+        return float(max(ext.max(), 1.0)), "점군 최대 신장 — 지간이 아님(참고용)", False
+    return 30.0, "기본가정 30m", False
+
+
+def _build_year(cfg) -> int | None:
+    digits = "".join(ch for ch in str(getattr(cfg, "bridge_build_year", "") or "") if ch.isdigit())
+    if len(digits) >= 4:
+        y = int(digits[:4])
+        if 1800 <= y <= 2200:
+            return y
+    return None
+
+
+def _hotspot(members, xyz: np.ndarray, xy_m: np.ndarray, res: dict) -> dict | None:
+    """지배 열화 군집의 위치·규모·속도 — 점검 대상을 지목하기 위한 블록."""
+    if not members:
+        return None
+    idx = np.asarray(members, dtype=int)
+    pts = xy_m[idx]
+    ext = pts.max(axis=0) - pts.min(axis=0) if idx.size > 1 else np.zeros(2)
+    return {
+        "n_points": int(idx.size),
+        "point_index": [int(i) for i in idx[:20]],       # 상위 20개면 현장 확인엔 충분
+        "centroid_xy": [round(float(np.mean(xyz[idx, 0])), 6),
+                        round(float(np.mean(xyz[idx, 1])), 6)],
+        "extent_m": [round(float(ext[0]), 1), round(float(ext[1]), 1)],
+        "rate_max_mm_yr": round(float(res["rate"][idx].max()), 3),
+        "rate_median_mm_yr": round(float(np.median(res["rate"][idx])), 3),
+        "rsl_min_years": round(float(np.min(res["rsl"][idx])), 2),
+    }
+
+
+def estimate_remaining_life(
+    store: ProjectStore,
+    cfg=None,
+    *,
+    user_limits: dict | None = None,
+    consumed_mm: float = 0.0,
+    min_cluster: int = 3,
+    alpha: float = 0.05,
+    as_of: str | None = None,
+) -> RemainingLifeOutput:
+    """`/life` 를 계산해 project.h5 에 기록하고 계약 객체를 돌려준다."""
+    ins = store.read_meta("insar", InSAROutput)
+    xyz = np.asarray(store.read_array(ins.xyz_ds), dtype=np.float64)
+    member = np.asarray(store.read_array(ins.member_ds)).ravel()
+    days = np.asarray(store.read_array(ins.dates_ds), dtype=np.float64).ravel()
+    t_years = (days - days[0]) / 365.25
+    observed_years = float(t_years[-1] - t_years[0])
+
+    xy_m, coord_kind = _xy_meters(xyz)
+    span_m, span_src, span_known = _span_m(store, xy_m)
+    lim_vals, lim_srcs = limits_mod.resolve(user_limits)
+    point_limit, limit_basis = limits_mod.point_limits(
+        member, span_m, lim_vals, span_known=span_known)
+
+    dsrc = _resolve_displacement(store, ins)
+    disp = dsrc["disp"]
+
+    # 관측이 너무 짧으면 어떤 추세도 유의하지 않다 — 계산하지 않고 사유를 남긴다.
+    too_short = observed_years < 1.0 or disp.shape[1] < 4
+    if too_short:
+        reason = (f"관측 {observed_years:.2f}년 / {disp.shape[1]}시점 — "
+                  "추세 추정 최소요건(1년·4시점) 미달")
+        n = int(ins.n_points)
+        res = {"rsl": np.full(n, np.inf), "rsl_lower": np.full(n, np.inf),
+               "rate": np.zeros(n), "sigma": np.zeros(n),
+               "sublimit": np.zeros(n, dtype=np.int16), "meta": {"skipped": reason}}
+        channels = [RSLChannel(name="serviceability", kind="measured", active=False,
+                               inactive_reason=reason)]
+        bridge_rsl = bridge_lo = None
+        conf, conf_why = "low", reason
+        censored_frac = 1.0
+    else:
+        res = serviceability(
+            t_years, disp, xy=xy_m, point_limit_mm=point_limit,
+            angular_limit=lim_vals["angular_distortion"],
+            consumed_mm=consumed_mm, alpha=alpha,
+        )
+        radius = float(res["meta"]["neighbor_radius_m"])
+        bridge_rsl, agg_pt = cohesive_min(res["rsl"], xy_m, radius_m=radius,
+                                          min_cluster=min_cluster)
+        bridge_lo, agg_lo = cohesive_min(res["rsl_lower"], xy_m, radius_m=radius,
+                                         min_cluster=min_cluster)
+        censored_frac = float(np.mean(~np.isfinite(res["rsl"])))
+        # 지배 군집의 위치·규모 — 숫자 하나만 주면 어디를 점검할지 알 수 없다.
+        res["meta"]["hotspot"] = _hotspot(agg_pt.pop("members", None), xyz, xy_m, res)
+        agg_lo.pop("members", None)
+        res["meta"]["aggregate_point"] = agg_pt
+        res["meta"]["aggregate_lower"] = agg_lo
+        # 극값만 보면 오해한다 — 유한 잔존수명의 분포도 같이 남긴다.
+        fin = res["rsl"][np.isfinite(res["rsl"])]
+        if fin.size:
+            res["meta"]["rsl_percentiles_years"] = {
+                "p1": round(float(np.percentile(fin, 1)), 2),
+                "p5": round(float(np.percentile(fin, 5)), 2),
+                "p50": round(float(np.median(fin)), 2),
+                "p95": round(float(np.percentile(fin, 95)), 2),
+            }
+        channels = [RSLChannel(
+            name="serviceability", kind="measured", active=True,
+            rsl_years=bridge_rsl, rsl_lower_years=bridge_lo,
+            censored=bridge_lo is None,
+            detail=res["meta"],
+        )]
+        # 신뢰도 — 관측 길이·열성분 제거·연직 관측 여부로 정한다(과신 방지)
+        if not dsrc["thermal_removed"]:
+            conf, conf_why = "low", ("열성분 미분리 — 계절 열팽창이 속도에 섞여 있습니다. "
+                                     "--insar-thermal 또는 PINN 성분분해를 먼저 적용하세요.")
+        elif observed_years < 2.0:
+            conf, conf_why = "low", f"관측 {observed_years:.1f}년 — 2년 미만은 추세 신뢰 곤란"
+        elif observed_years < 3.0:
+            conf, conf_why = "medium", f"관측 {observed_years:.1f}년 — 3년 이상 권장"
+        elif "연직" not in dsrc["source"]:
+            conf, conf_why = "medium", "단일 궤도 LOS — 연직 성분 분리 안 됨(asc+desc 융합 권장)"
+        else:
+            conf, conf_why = "high", (f"관측 {observed_years:.1f}년 · 연직 분리 · 열성분 제거")
+
+    # 잔존수명 표시 상한 — 설계공용수명에서 공용연수를 뺀 값
+    by = _build_year(cfg) if cfg is not None else None
+    ref_year = int((as_of or date.today().isoformat())[:4])
+    age = max(0, ref_year - by) if by else None
+    horizon = max(MIN_HORIZON_YEARS, float(lim_vals["design_life_years"]) - (age or 0))
+
+    paths = {}
+    for key, arr, dt in (
+        ("rsl_point", res["rsl"], np.float64),
+        ("rsl_lower", res["rsl_lower"], np.float64),
+        ("rate", res["rate"], np.float64),
+        ("rate_sigma", res["sigma"], np.float64),
+        ("sublimit", res["sublimit"], np.int16),
+    ):
+        paths[key] = store.write_array(f"/{LIFE_GROUP}/{key}", np.asarray(arr, dtype=dt))
+
+    assumptions = limits_mod.describe(lim_vals, lim_srcs, span_m=span_m,
+                                      span_known=span_known, extra={
+        "span_source": span_src,
+        "span_known": span_known,
+        "limit_basis": limit_basis,
+        "coordinate_handling": coord_kind,
+        "displacement_source": dsrc["source"],
+        "thermal_removed": dsrc["thermal_removed"],
+        "thermal_removal": dsrc["thermal_how"],
+        "consumed_mm": float(consumed_mm),
+        "consumed_note": ("관측 시작 이전 누적 변위를 0 으로 가정(낙관적). 수준측량 등 실측 "
+                          "누적치가 있으면 지정해야 한다." if consumed_mm == 0 else "사용자 지정"),
+        "min_cluster": int(min_cluster),
+        "build_year": by, "age_years": age,
+        "observed_years": round(observed_years, 3),
+    })
+
+    # 미구현 채널도 사유와 함께 남긴다 — 침묵하면 검토된 것으로 오해된다.
+    channels += [
+        RSLChannel(name="stiffness", kind="measured", active=False,
+                   inactive_reason="P2 미구현 — PINN 시간분해 EI(EI_series) 필요, 관측 3년 이상"),
+        RSLChannel(name="fatigue", kind="model_based", active=False,
+                   inactive_reason="P3 미구현 — 피로상세등급·대형차 혼입률 입력 필요(설계코드 추정)"),
+        RSLChannel(name="durability", kind="model_based", active=False,
+                   inactive_reason="P4 미구현 — 피복두께·노출등급·w/c 점검자료 필요(위성 무관)"),
+    ]
+
+    active = [c for c in channels if c.active and c.rsl_lower_years is not None]
+    governing = min(active, key=lambda c: c.rsl_lower_years).name if active else None
+    b_rsl = bridge_rsl if not too_short else None
+    b_lo = bridge_lo if not too_short else None
+
+    out = RemainingLifeOutput(
+        n_points=int(ins.n_points),
+        as_of=as_of or date.today().isoformat(),
+        observed_years=round(observed_years, 3),
+        horizon_years=round(horizon, 1),
+        rsl_point_ds=paths["rsl_point"], rsl_lower_ds=paths["rsl_lower"],
+        rate_ds=paths["rate"], rate_sigma_ds=paths["rate_sigma"],
+        sublimit_ds=paths["sublimit"],
+        channels=channels,
+        rsl_years=(None if b_rsl is None else round(float(b_rsl), 2)),
+        rsl_lower_years=(None if b_lo is None else round(float(b_lo), 2)),
+        governing=governing,
+        censored_fraction=round(float(censored_frac), 4),
+        confidence=conf, confidence_reason=conf_why,
+        assumptions=assumptions,
+    )
+    store.write_meta(LIFE_GROUP, out)
+    store.validate(LIFE_GROUP, out)
+    return out
+
+
+def summarize(out: RemainingLifeOutput) -> str:
+    """CLI 한 줄 요약 — 하한과 지배 채널을 항상 같이 보여준다."""
+    if out.rsl_lower_years is None:
+        return (f"잔존수명 > {out.horizon_years:.0f}년 (관측 구간에서 유의한 열화 군집 없음, "
+                f"검열 {out.censored_fraction * 100:.0f}%)")
+    return (f"잔존수명 ≥ {out.rsl_lower_years:.1f}년 (하한, {out.governing} 지배, "
+            f"점추정 {out.rsl_years:.1f}년, 신뢰도 {out.confidence})")

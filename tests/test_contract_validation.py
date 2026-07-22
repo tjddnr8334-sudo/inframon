@@ -14,7 +14,7 @@ import pytest
 from inframon.config import PipelineConfig
 from inframon.contracts.array_schema import ContractViolation
 from inframon.contracts.io import ProjectStore
-from inframon.contracts.schema import FRAMOutput, InSAROutput, PINNOutput
+from inframon.contracts.schema import SCHEMA_VERSION, FRAMOutput, InSAROutput, PINNOutput
 from inframon.orchestrator.pipeline import run_pipeline
 
 CFG = {"n_points": 30, "n_dates": 12}
@@ -93,7 +93,7 @@ def test_manifest_recorded(project):
     with ProjectStore(project, mode="r") as store:
         man = store.read_manifest()
     assert len(man["run_id"]) == 12
-    assert man["schema_version"] == "1.2"
+    assert man["schema_version"] == SCHEMA_VERSION   # 하위호환 minor 올릴 때마다 깨지지 않게
     assert man["engine_modes"] == {"cv": "stub", "insar": "stub", "pinn": "stub", "fram": "stub"}
     assert "insar/los" in man["dataset_hashes"]
     assert man["config"]["n_points"] == 30
