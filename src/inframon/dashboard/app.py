@@ -1670,9 +1670,26 @@ def tab_fram(path: str, start: date) -> None:
         st.markdown("**전역 최대 CRI 시계열**")
         st.line_chart(pd.DataFrame({"CRI_max": cri.max(axis=0)}, index=pd.Index(times, name="날짜")))
 
-    st.markdown("**CRI 히트맵 (측정점 × 시점)**")
-    st.image((cri / (cri.max() + 1e-9) * 255).astype(np.uint8),
-             caption="밝을수록 위험", use_container_width=True)
+    # CRI 히트맵 — N 이 크면(예 2661점) 세로가 화면을 압도하므로 접고, 위험순 정렬 +
+    # 블록최대 다운샘플(밴드별 최댓값 → 위험 은폐 방지)로 화면 크기를 제한한다.
+    with st.expander(f"🔥 CRI 히트맵 (측정점 × 시점) — {N:,}점", expanded=(N <= 300)):
+        MAXROWS = 200
+        order = np.argsort(cri.max(axis=1))[::-1]        # 피크 CRI 내림차순 → 위험 점을 위로
+        crim = cri[order]
+        if N > MAXROWS:
+            edges = np.linspace(0, N, MAXROWS + 1).astype(int)
+            crim = np.stack([crim[edges[i]:edges[i + 1]].max(axis=0) for i in range(MAXROWS)])
+            row_note = f"{N:,}점 → {MAXROWS}밴드(밴드별 최댓값, 위=고위험)"
+        else:
+            row_note = f"{N}점 (위=고위험)"
+        norm = np.clip(crim / (cri.max() + 1e-9), 0, 1)
+        try:                                             # 컬러맵(파랑→초록→노랑→빨강)으로 가독성↑
+            import matplotlib
+            img = (matplotlib.colormaps["turbo"](norm)[:, :, :3] * 255).astype(np.uint8)
+        except Exception:                                # matplotlib 없으면 그레이스케일 폴백
+            img = (norm * 255).astype(np.uint8)
+        st.image(img, use_container_width=True,
+                 caption=f"세로=측정점({row_note}) · 가로=시점 · 파랑(낮음)→빨강(높음)")
 
     # ── 🗺️ 위험 지점 지도 (실 경위도일 때만) ──
     lon, lat = xyz[:, 0], xyz[:, 1]
