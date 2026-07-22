@@ -105,6 +105,29 @@ python -m inframon --demo --insar-source track.h5 --out data/project.h5 \
   --engine cv=real --engine insar=real --engine pinn=real --engine fram=real
 ```
 
+**Accuracy corrections (opt-in).** `--insar-corrections` runs three steps on the LOS series
+*before* PINN/FRAM consume it, and stores the corrected rate at `/insar/velocity_mm_yr`:
+
+```bash
+python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
+  --insar-corrections --insar-dem dem.tif \
+  --insar-thermal --insar-temp-csv temps.csv    # or --insar-fetch-temp (ERA5, no key)
+```
+
+The same flags apply to the full chain (`--demo --engine insar=real --insar-source track.h5 …`),
+but that path registers Track coordinates against the CV frame, so it needs a geo-referenced CV
+input (GeoTIFF / override) — without one the points fall outside the ROI. `--import-track-h5`
+is the verified route for a bare SARvey/MintPy product.
+
+| Step | What it removes | Requires | Notes |
+|---|---|---|---|
+| Common-mode (APS) | epoch-wise atmospheric phase, as the median of high-coherence stable points | `coherence` | `--ref-min-coherence` (default 0.9). **Benefit-guarded**: kept only if temporal std actually drops — SARvey already APS-filters, so it self-skips there |
+| Height-correlated | stratified troposphere ∝ elevation | point `z` (Track `height`, or `--insar-dem` GeoTIFF) | skipped when the z spread < 1 m |
+| Thermal | seasonal expansion via `los = a + b·t + c·T` | `--insar-thermal` + a temperature source | CSV (`date,temp_C`) is deterministic and preferred; `--insar-fetch-temp` pulls ERA5 (Open-Meteo, no API key) |
+
+Every step is opt-in and logs what it applied/skipped into the `insar_source` attribute, so the
+default and golden-regression paths are unchanged.
+
 ### Reproducibility
 
 | Aspect | Detail |
@@ -238,6 +261,27 @@ python -m inframon --check-track track.h5      # 투입 전 사전검증 (exit 0
 python -m inframon --demo --insar-source track.h5 --out data/project.h5 \
   --engine cv=real --engine insar=real --engine pinn=real --engine fram=real
 ```
+
+**정확도 보정(opt-in).** `--insar-corrections` 는 PINN/FRAM 이 소비하기 **전에** LOS 시계열에
+3단계 보정을 적용하고, 보정된 속도를 `/insar/velocity_mm_yr` 에 저장한다.
+
+```bash
+python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
+  --insar-corrections --insar-dem dem.tif \
+  --insar-thermal --insar-temp-csv temps.csv    # 또는 --insar-fetch-temp (ERA5, 키 불필요)
+```
+
+같은 플래그가 전체 체인(`--demo --engine insar=real --insar-source track.h5 …`)에도 적용되지만,
+그 경로는 Track 좌표를 CV 프레임에 정합하므로 **지오참조된 CV 입력**(GeoTIFF/override)이 필요하다
+— 없으면 점이 ROI 밖으로 떨어진다. 맨 SARvey/MintPy 산출물은 `--import-track-h5` 가 검증된 경로다.
+
+| 단계 | 제거 대상 | 필요 | 비고 |
+|---|---|---|---|
+| 공통성분(APS) | 에폭별 대기위상 — 고결맞음 안정점의 **중앙값** | `coherence` | `--ref-min-coherence`(기본 0.9). **이득 가드**: 시간변동이 실제로 줄 때만 채택 — SARvey 출력은 이미 APS 필터링돼 자동 skip |
+| 고도상관 | 고도에 비례하는 성층 대류권 | 점별 z (Track `height` 또는 `--insar-dem` GeoTIFF) | z 스프레드 < 1 m 이면 skip |
+| 열팽창 | `los = a + b·t + c·T` 회귀로 계절 열변형 분리 | `--insar-thermal` + 온도원 | CSV(`date,temp_C`)가 결정론적이라 우선, 없으면 `--insar-fetch-temp` 로 ERA5(Open-Meteo) 조회 |
+
+모두 opt-in 이고 적용/skip 내역을 `insar_source` attr 에 남긴다 — 기본 경로와 골든 회귀는 불변.
 
 ### 재현성
 

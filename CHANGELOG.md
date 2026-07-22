@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- InSAR accuracy corrections wired into real ingest (`--insar-corrections`, opt-in) — common-mode/APS removal from high-coherence stable points (benefit-guarded), height-correlated stratified troposphere, and thermal-expansion separation (`--insar-thermal` with `--insar-temp-csv` or ERA5 `--insar-fetch-temp`); corrected rate stored at `/insar/velocity_mm_yr`. · InSAR 정확도 보정을 실 인제스트에 연결(opt-in·이득 가드) — 공통성분·고도상관·열팽창 + 보정 속도 저장.
+- Real DEM `z` connection — `import_track_h5` samples a DEM GeoTIFF (`--insar-dem`) and the SARvey→inframon converter exports per-point elevation, so the height-correlated correction can engage. · DEM z 실연결 — DEM 샘플링 + 58 변환기 점별 고도 export.
 - Support-zone (ZONE) monitoring mode — pier/abutment point extraction + settlement rate + dashboard, with support CLI. · 지지부(ZONE) 모니터링 모드 — 교각·교대 점 추출 + 침하 속도 + 대시보드(지지부 CLI 포함).
 - Ascending+Descending dashboard enhancement — asc/desc UNION (more points) + vertical/EW decomposition. · 대시보드 Asc+Desc 강화 — 상승·하강 궤도 UNION(점 증가) + 연직/EW 분해.
 - README: repository-structure and reproducibility sections (EN/KR). · README 디렉터리 구조 + 재현성 섹션(영/한).
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preview honesty — synthetic demo labeled as such; sparse deck PS on real data made explicit. · 미리보기 정직화.
 
 ### Fixed
+- Dashboard InSAR tab crashed on project switch when a stale slider value exceeded the new project's epoch/point count. · 프로젝트 전환 시 슬라이더 범위 초과로 InSAR 탭이 크래시하던 문제.
+- FRAM CRI heat map dominated the tab at large point counts — now collapsible, risk-sorted, band-downsampled (block max) and color-mapped. · CRI 히트맵이 탭을 압도하던 문제 — 접기·위험순 정렬·밴드 다운샘플·컬러맵.
 - LOS heading unit correction. · heading 단위 보정.
 
 ## [0.1.0] - 2026-07-01
