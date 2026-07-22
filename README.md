@@ -157,6 +157,38 @@ for stiffness (needs time-resolved EI), fatigue and durability are recorded as *
 stated reason** rather than silently omitted. Full design and data requirements:
 [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
 
+### BIM / digital-twin alignment
+
+`--bim-align` maps monitoring results onto IFC elements. Most of "merging with BIM" is
+**coordinate alignment**: InSAR lives in a geographic/projected CRS, IFC in a local engineering
+frame with its own origin, rotation and height datum.
+
+```bash
+python -m inframon --bim-inspect model.ifc          # IfcMapConversion? element types?
+python -m inframon --bim-align project.h5,elements.json,out/bridge \
+  --bim-control-points control.json --bim-max-rms 0.3
+```
+
+- **Two georeferencing paths.** `IfcMapConversion` (IFC4) when the model has it; otherwise a
+  Helmert fit from surveyed control-point pairs. Scale is **fixed to 1 by default** — leaving it
+  free lets control-point error be absorbed into the scale, so the residual looks small while the
+  alignment is wrong. The fit fails loudly above an RMS threshold: a silently wrong alignment
+  produces a normal-looking, entirely incorrect result, which is the worst failure mode here.
+- **Height is not used by default.** IFC `OrthogonalHeight` is datum-based, InSAR z comes from a
+  DEM; Korea's geoid undulation is ~25 m, which would invert deck-vs-pier. 3D association is only
+  permitted once a height offset has actually been fitted.
+- **Overlap is ambiguous, and named as such.** In plan view a deck bounding box contains the piers.
+  Ties are broken by the InSAR member label (independent evidence) then by element specificity, and
+  the ambiguity is counted rather than hidden. Points beyond `--bim-max-dist` stay unassigned.
+- **Time series stay out of IFC.** Psets carry current state plus `SourceProject`/`SourceGroups`
+  keys back into `project.h5`; pushing thousands of epochs into `IfcPropertySingleValue` makes the
+  IFC unopenable. Association quality is injected alongside the values so a BIM-side reader can
+  judge how much to trust them.
+
+The alignment core needs no IFC file or `ifcopenshell` — an element table (JSON/CSV, UTF-8 or
+cp949) is enough. Only `bim/ifc_io.py` touches real IFC, and that path is **not yet verified**.
+Details: [`docs/BIM_정합.md`](docs/BIM_정합.md).
+
 ### Reproducibility
 
 | Aspect | Detail |
@@ -337,6 +369,37 @@ python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
 점별로 두 하위 한계를 본다: 절대 변위(부재별)와 **부등침하**(각변위 vs 1/500) — 실제로는
 부등침하가 절대 한계보다 먼저 걸리는 경우가 많다. 강성열화·피로·내구성 채널은 조용히 빼지
 않고 **비활성 + 사유**로 남긴다. 설계·필요 데이터: [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
+
+### BIM / 디지털 트윈 정합
+
+`--bim-align` 이 모니터링 결과를 IFC 부재에 붙인다. "BIM 과 합친다"의 대부분은 **좌표계
+정합**이다 — InSAR 는 지리/투영 좌표에, IFC 는 원점·회전·표고기준이 제각각인 로컬
+엔지니어링 좌표계에 있다.
+
+```bash
+python -m inframon --bim-inspect model.ifc          # IfcMapConversion 유무·부재 타입 확인
+python -m inframon --bim-align project.h5,elements.json,out/bridge \
+  --bim-control-points control.json --bim-max-rms 0.3
+```
+
+- **정합 경로 둘.** 모델에 `IfcMapConversion`(IFC4)이 있으면 그대로, 없으면 측량 기준점 쌍으로
+  Helmert 적합. **축척은 기본 1 고정** — 자유롭게 두면 기준점 오차를 축척이 흡수해 잔차는
+  작아지면서 정합은 틀어진다. RMS 임계를 넘으면 값을 내지 않고 실패한다. 조용히 틀린 정합은
+  정상처럼 보이는 완전히 잘못된 결과를 만들고, 이게 여기서 최악의 실패 방식이다.
+- **표고는 기본적으로 안 쓴다.** IFC `OrthogonalHeight` 는 수직기준면 기준이고 InSAR z 는
+  DEM 에서 온다. 한국 지오이드고 ~25m 면 상판/교각 구분이 뒤집힌다. 3D 연결은 표고 오프셋이
+  실제로 적합된 뒤에만 허용한다.
+- **겹침은 모호하고, 모호하다고 말한다.** 평면에서 상판 bbox 는 교각을 포함한다. 동률은
+  InSAR 부재 라벨(독립 증거) → 부재 구체성 순으로 깨고, 모호했다는 사실을 숨기지 않고 센다.
+  `--bim-max-dist` 를 넘는 점은 억지로 붙이지 않고 미연결로 남긴다.
+- **시계열은 IFC 에 안 넣는다.** Pset 에는 현재 상태와 `SourceProject`/`SourceGroups` 키만
+  넣어 `project.h5` 로 되짚게 한다 — 수천 시점을 `IfcPropertySingleValue` 에 밀어 넣으면 IFC 가
+  열리지 않는다. 정합 품질도 값 옆에 함께 주입해, BIM 쪽에서 값만 보는 사람도 신뢰도를
+  판단할 수 있게 한다.
+
+정합 코어는 IFC 파일도 `ifcopenshell` 도 필요 없다 — 부재 테이블(JSON/CSV, UTF-8·cp949 자동)만
+있으면 된다. 실 IFC 를 만지는 건 `bim/ifc_io.py` 뿐이고 그 경로는 **아직 미검증**이다.
+자세히: [`docs/BIM_정합.md`](docs/BIM_정합.md).
 
 ### 재현성
 

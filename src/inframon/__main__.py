@@ -151,6 +151,26 @@ def main() -> None:
                    help="--export-bim LOS→연직 투영 입사각(H5에 없을 때, 기본 39°).")
     p.add_argument("--bim-fram", default=None, metavar="PROJECT_H5",
                    help="--export-bim CRI 색: /fram/CRI 있는 project.h5 를 InSAR 점에 최근접 매핑.")
+    # ── BIM/디지털 트윈 정합 (좌표 정합 + 부재 연결 + Pset) ──
+    p.add_argument("--bim-align", default=None, metavar="PROJECT_H5,ELEMENTS,OUT_PREFIX",
+                   help="project.h5 를 BIM 부재에 정합·연결해 부재별 상태와 IFC Pset 페이로드를 낸다. "
+                        "ELEMENTS = 부재 테이블(JSON/CSV) 또는 .ifc(ifcopenshell 필요)")
+    p.add_argument("--bim-control-points", default=None, metavar="JSON",
+                   help="측량 기준점 쌍(local↔map). IFC 에 IfcMapConversion 이 없을 때 필수.")
+    p.add_argument("--bim-map-conversion", default=None, metavar="JSON",
+                   help="IfcMapConversion 을 JSON 으로 직접 지정(IFC 없이 정합).")
+    p.add_argument("--bim-source-crs", default=None, metavar="EPSG",
+                   help="project.h5 점 좌표의 CRS. 생략 시 경위도/투영 범위로 추정.")
+    p.add_argument("--bim-max-dist", type=float, default=5.0, metavar="M",
+                   help="점→부재 연결 최대 거리[m] (기본 5). 초과하면 미연결로 남긴다.")
+    p.add_argument("--bim-max-rms", type=float, default=0.5, metavar="M",
+                   help="기준점 정합 허용 RMS 잔차[m] (기본 0.5). 초과하면 정합 실패.")
+    p.add_argument("--bim-use-z", action="store_true",
+                   help="3D 로 부재 연결(상판/교각 분리). 표고 오프셋이 검증된 경우에만.")
+    p.add_argument("--bim-write-ifc", default=None, metavar="IFC_OUT",
+                   help="--bim-align 결과를 원본 IFC 사본에 Pset 으로 주입(ifcopenshell 필요).")
+    p.add_argument("--bim-inspect", default=None, metavar="IFC",
+                   help="IFC 사전점검 — IfcMapConversion·좌표계·부재 타입 분포 출력 후 종료.")
     p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
                    help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
     p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
@@ -525,6 +545,88 @@ def main() -> None:
         print(f"  값(UI 토글): {', '.join(r['values'])}")
         print(f"  GeoJSON: {r['geojson']}")
         print(f"  CSV    : {r['csv']}")
+        print("=" * 56)
+        return
+
+    if args.bim_inspect:
+        from .bim import ifc_io
+        from .bim.georef import AlignmentError as _AE
+        try:
+            info = ifc_io.inspect(args.bim_inspect)
+        except _AE as exc:
+            p.error(str(exc))
+        print("=" * 56)
+        print("  IFC 사전점검")
+        print("=" * 56)
+        print(f"  스키마          : {info['schema']}")
+        print(f"  부재 수         : {info['n_elements']}")
+        print(f"  투영 좌표계     : {', '.join(info['projected_crs']) or '없음'}")
+        print(f"  IfcMapConversion: {'있음' if info['has_map_conversion'] else '없음'}")
+        if info["map_conversion"]:
+            mc = info["map_conversion"]
+            print(f"    원점 E/N/H    : {mc['eastings']:.3f} / {mc['northings']:.3f} / "
+                  f"{mc['orthogonal_height']:.3f}")
+            print(f"    회전/축척     : {mc['rotation_deg']:.4f}° / {mc['scale']}")
+        print(f"  타입 분포       : {info['element_types']}")
+        print(f"  안내            : {info['advice']}")
+        print("=" * 56)
+        return
+
+    if args.bim_align:
+        import json as _json
+
+        from .bim import align_project_to_bim, write_result
+        from .bim.georef import AlignmentError as _AE
+        parts = [s.strip() for s in args.bim_align.split(",")]
+        if len(parts) != 3:
+            p.error("--bim-align 형식은 PROJECT_H5,ELEMENTS,OUT_PREFIX 입니다")
+        proj_h5, els_path, out_pref = parts
+
+        mc = None
+        if args.bim_map_conversion:
+            mc = _json.loads(Path(args.bim_map_conversion).read_text(encoding="utf-8"))
+        elif els_path.lower().endswith(".ifc"):
+            from .bim import ifc_io
+            try:                                  # IFC 에 지오레퍼런싱이 있으면 그것이 1순위
+                mc = ifc_io.read_map_conversion(els_path)
+                els_path = ifc_io.read_elements(els_path)
+            except _AE as exc:
+                p.error(str(exc))
+        try:
+            res = align_project_to_bim(
+                proj_h5, els_path, map_conversion=mc,
+                control_points=args.bim_control_points, source_crs=args.bim_source_crs,
+                target_crs=args.bim_crs, max_dist_m=args.bim_max_dist,
+                max_rms_m=args.bim_max_rms, use_z=args.bim_use_z)
+        except (_AE, FileNotFoundError, KeyError, ValueError) as exc:
+            p.error(str(exc))
+        paths = write_result(res, out_pref)
+
+        a, s = res["alignment"], res["association"]
+        print("=" * 56)
+        print("  BIM 정합 — project.h5 → IFC 부재")
+        print("=" * 56)
+        print(f"  정합 근거       : {a['source']}"
+              + (f" (RMS {a['fit']['rms_m']}m, 기준점 {a['fit']['n_control_points']}개)"
+                 if a.get("fit", {}).get("rms_m") is not None else ""))
+        print(f"  회전/축척       : {a['rotation_deg']:.4f}° / {a['scale']}")
+        print(f"  좌표            : {a['source_crs']} → {a['target_crs']}"
+              f"{' (재투영)' if a['reprojected'] else ''} → IFC 로컬 "
+              f"{'3D' if a['use_z'] else '2D'}")
+        print(f"  연결            : {s['n_assigned']}/{s['n_points']}점 "
+              f"({s['assigned_fraction'] * 100:.0f}%) → 부재 {s['n_elements_covered']}/{s['n_elements']}")
+        print(f"  부재별 상태     : {paths['elements_json']}")
+        print(f"  Pset 페이로드   : {paths['pset_json']}")
+        for w in res["warnings"]:
+            print(f"  ⚠ {w}")
+        if args.bim_write_ifc:
+            from .bim import ifc_io
+            try:
+                wr = ifc_io.write_psets(els_path if isinstance(els_path, str) else "",
+                                        res["payload"], args.bim_write_ifc)
+            except _AE as exc:
+                p.error(str(exc))
+            print(f"  IFC 주입        : {wr['n_injected']}개 부재 → {wr['ifc_out']}")
         print("=" * 56)
         return
 
