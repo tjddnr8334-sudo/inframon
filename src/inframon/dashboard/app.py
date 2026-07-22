@@ -1915,11 +1915,18 @@ def tab_life(path: str, start: date) -> None:
     vals, srcs = a.get("values", {}), a.get("sources", {})
     st.dataframe(pd.DataFrame([{"항목": k, "값": v, "출처": srcs.get(k, "")} for k, v in vals.items()]),
                  use_container_width=True, hide_index=True)
-    st.caption(
-        f"변위 원: {a.get('displacement_source', '-')} · "
-        f"열성분: {'제거됨 — ' + str(a.get('thermal_removal')) if a.get('thermal_removed') else '⚠ 미분리(계절 열팽창이 속도에 섞임)'}\n\n"
-        f"한계 적용: {a.get('limit_basis', '-')}\n\n"
-        f"기존 누적 변위: {a.get('consumed_mm', 0)} mm — {a.get('consumed_note', '')}")
+    pj = a.get("vertical_projection")
+    _lines = [
+        f"변위 원: {a.get('displacement_source', '-')} · 열성분: "
+        + (f"제거됨 — {a.get('thermal_removal')}" if a.get("thermal_removed")
+           else "⚠ 미분리(계절 열팽창이 속도에 섞임)"),
+        # 사용성 한계는 연직 규정이므로 LOS 를 그대로 쓰면 1/cosθ 만큼 낙관적이 된다.
+        (f"연직 투영: ×{pj['scale_1_over_cos']['median']} — {pj['incidence_source']} "
+         f"({pj['assumption']})" if pj else "연직 성분: asc+desc 융합 실측 — 기하 가정 없음"),
+        f"한계 적용: {a.get('limit_basis', '-')}",
+        f"기존 누적 변위: {a.get('consumed_mm', 0)} mm — {a.get('consumed_note', '')}",
+    ]
+    st.caption("\n\n".join(_lines))
     for n in a.get("notes", []):
         st.caption(f"· {n}")
     st.info("**측정할 수 없는 것**: 프리스트레스 손실 · 부식률 · 균열폭 · 실제 활하중 응력범위. "

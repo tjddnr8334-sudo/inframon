@@ -39,6 +39,7 @@ def _run_remaining_life(args, cfg=None) -> None:
                 store, cfg, user_limits=user_limits,
                 consumed_mm=args.life_consumed_mm,
                 min_cluster=args.life_min_cluster,
+                default_incidence_deg=args.life_incidence_deg,
             )
     except (KeyError, ValueError) as exc:
         print(f"  잔존수명       : 계산 불가 — {exc}")
@@ -53,6 +54,10 @@ def _run_remaining_life(args, cfg=None) -> None:
         print(f"  사용성 채널    : 비활성 — {sv.inactive_reason}")
     print(f"  변위 원        : {out.assumptions['displacement_source']}"
           f" · 열성분 {'제거됨' if out.assumptions['thermal_removed'] else '미분리(주의)'}")
+    _pj = out.assumptions.get("vertical_projection")
+    if _pj:
+        print(f"  연직 투영      : ×{_pj['scale_1_over_cos']['median']} "
+              f"({_pj['incidence_source']})")
     print(f"  기록           : /life (스키마 {out.schema_version})")
     print("-" * 56)
 
@@ -282,6 +287,9 @@ def main() -> None:
                         "수준측량 등 실측 누적치가 있으면 반드시 지정")
     p.add_argument("--life-min-cluster", type=int, default=3, metavar="K",
                    help="교량 대표값 인정에 필요한 인접 열화점 수(기본 3) — 고립 노이즈점 배제")
+    p.add_argument("--life-incidence-deg", type=float, default=39.0, metavar="DEG",
+                   help="LOS→연직 투영에 쓸 입사각[deg]. Track 에 점별 입사각이 있으면 그것이 "
+                        "우선이고 이 값은 폴백(기본 39 = Sentinel-1 IW 대표값).")
     p.add_argument("--resume", action="store_true",
                    help="기존 --out 에서 입력이 안 바뀐 단계는 재계산 생략(증분 재개)")
     p.add_argument("--force-stage", action="append", default=[], metavar="STAGE",

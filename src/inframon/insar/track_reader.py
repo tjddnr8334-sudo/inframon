@@ -167,11 +167,15 @@ def write_insar_contract(
     date_labels: np.ndarray | None = None,
     vertical: np.ndarray | None = None,
     deck_station: np.ndarray | None = None,
+    incidence: np.ndarray | None = None,
 ) -> InSAROutput:
     """표준 /insar 데이터셋 + InSAROutput 메타를 적재한다(출처 attr 은 호출 측에서).
 
     `vertical`([N,M], asc+desc 융합 연직 성분)을 주면 /insar/vertical 에 쓰고
     계약 필드 vertical_ds 를 채운다(단일 궤도면 None → 미적재).
+    `incidence`([N], deg)는 상류가 주는 LOS 입사각 — 하류에서 LOS↔연직 투영에 쓴다.
+    지금까지 종축 분해에만 쓰고 버렸는데, 그러면 잔존수명처럼 **연직 한계**를 보는
+    소비자가 LOS 를 연직으로 오인해 1/cos(θ)≈1.29배 낙관적인 값을 낸다.
     `deck_station`([N], 데크 호길이)을 주면 /insar/deck_station 에 쓴다 — 곡선 교량에서
     공간전파·구조축 정렬을 데크를 따라(직선 X정렬 대신) 하기 위함.
     """
@@ -193,6 +197,11 @@ def write_insar_contract(
     vertical_ds = None
     if vertical is not None:
         vertical_ds = store.write_array(f"{g}/vertical", vertical)
+    incidence_ds = None
+    if incidence is not None:
+        inc = np.asarray(incidence, dtype=np.float32).ravel()
+        if inc.size == n_points:
+            incidence_ds = store.write_array(f"{g}/incidence_deg", inc)
 
     out = InSAROutput(
         n_points=n_points,
@@ -207,6 +216,7 @@ def write_insar_contract(
         dates_ds=f"{g}/dates",
         temporal_coherence_ds=f"{g}/temporal_coherence",
         vertical_ds=vertical_ds,
+        incidence_ds=incidence_ds,
     )
     store.write_meta("insar", out)
     return out
@@ -288,7 +298,7 @@ def import_track_h5(
     out = write_insar_contract(
         store, xyz=xyz, member=member, coherence=td.coherence, l_from_fixed=l_from_fixed,
         los=los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
-        deck_station=station,
+        deck_station=station, incidence=td.incidence,
     )
     from .atmo import temporal_decompose
     velocity = temporal_decompose(longitudinal, td.dates)["velocity_mm_yr"].astype(np.float32)

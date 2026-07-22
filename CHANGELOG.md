@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Preview honesty — synthetic demo labeled as such; sparse deck PS on real data made explicit. · 미리보기 정직화.
 
 ### Fixed
+- **Remaining life compared LOS displacement against vertical limits.** Settlement (25 mm) and angular-distortion (1/500) limits are vertical quantities, but single-orbit InSAR measures only the line-of-sight component, so remaining life was optimistic by 1/cos θ — 29% at a 39° incidence. LOS is now projected to vertical using the incidence angle, which is preserved through ingest as `/insar/incidence_deg` (schema 1.4) instead of being consumed and discarded. Real Jeongja re-run: 1.7 yr → 1.2 yr. · 잔존수명이 연직 한계에 LOS 를 그대로 비교하던 오류 — 입사각 투영 추가(39°에서 29%), 입사각을 인제스트에서 보존.
+- Ingest-applied thermal correction was invisible to the remaining-life estimator on the `--import-track-h5` path, which records provenance under `track_source` while the estimator read only `insar_source` — confidence was wrongly downgraded to "low". · 인제스트 열보정이 `--import-track-h5` 경로에서 무시되던 문제(출처 attr 이름 불일치).
 - Dashboard InSAR tab crashed on project switch when a stale slider value exceeded the new project's epoch/point count. · 프로젝트 전환 시 슬라이더 범위 초과로 InSAR 탭이 크래시하던 문제.
 - Dashboard tabs rendered a stray `None` — a conditional expression used as a statement, which Streamlit's magic displays. · 조건식을 문장으로 써서 탭 하단에 `None` 이 찍히던 문제.
 - FRAM CRI heat map dominated the tab at large point counts — now collapsible, risk-sorted, band-downsampled (block max) and color-mapped. · CRI 히트맵이 탭을 압도하던 문제 — 접기·위험순 정렬·밴드 다운샘플·컬러맵.

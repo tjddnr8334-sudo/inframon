@@ -18,7 +18,8 @@ from pydantic import BaseModel, Field
 # 1.1: InSAROutput.vertical_ds 추가(asc+desc 융합 연직 성분, Optional — 1.0 파일과 호환).
 # 1.2: PINNOutput 에 가상센싱(상부거더 전체 변위장) Optional 필드 추가 — 1.0/1.1 파일과 호환.
 # 1.3: RemainingLifeOutput(/life 그룹) 추가 — 4엔진 계약 불변, 잔존수명은 opt-in 후처리.
-SCHEMA_VERSION = "1.3"
+# 1.4: InSAROutput.incidence_ds 추가(Optional) — LOS→연직 투영에 필요. 1.0~1.3 파일과 호환.
+SCHEMA_VERSION = "1.4"
 
 # 부재 종류 (CV → InSAR → PINN → FRAM 전체에서 공유하는 표준 라벨)
 MEMBER_TYPES = ("deck", "pier", "abutment", "bearing")
@@ -73,7 +74,12 @@ class InSAROutput(BaseModel):
     temporal_coherence_ds: str  # [N]
     # 연직 변위 [N,M] (mm) — asc+desc 융합 시에만 채워진다(처짐·침하). 단일 궤도면 None.
     # PINN 이 있으면 처짐/침하 분리에 쓰고, Bmaps 가 연직 레이어로 노출한다.
+    # ★ 단일 궤도에서 입사각으로 투영한 "가정 연직"을 여기 넣지 말 것 — 이 필드는 **실제
+    #   기하 분해**를 뜻하고, 소비자는 그렇게 신뢰한다. 투영은 소비 측에서 가정을 밝히고 한다.
     vertical_ds: str | None = None
+    # LOS 입사각 [N] (deg) — 상류(Track H5)가 줄 때만. LOS↔연직 투영에 필요하다.
+    # 없으면 소비자가 대표값을 가정해야 하고, 그 사실이 결과에 기록된다.
+    incidence_ds: str | None = None
 
 
 # ───────────────────────────── 모듈 2: PINN ────────────────────────────

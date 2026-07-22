@@ -22,6 +22,7 @@ from ..contracts.schema import (
 from . import limits as limits_mod
 from .aggregate import cohesive_min
 from .channels import serviceability
+from .geometry import DEFAULT_INCIDENCE_DEG, los_to_vertical
 
 # 잔존수명이 이 값을 넘으면 표시 의미가 없다(검열 상한의 하한선).
 MIN_HORIZON_YEARS = 10.0
@@ -42,30 +43,40 @@ def _xy_meters(xyz: np.ndarray) -> tuple[np.ndarray, str]:
     return xy - np.median(xy, axis=0), "투영좌표"
 
 
-def _resolve_displacement(store: ProjectStore, ins: InSAROutput) -> dict:
-    """외삽에 쓸 변위 시계열을 고르고, 열성분 제거 여부를 기록한다.
+def _resolve_displacement(store: ProjectStore, ins: InSAROutput,
+                          *, default_incidence_deg: float = DEFAULT_INCIDENCE_DEG) -> dict:
+    """외삽에 쓸 **연직** 변위 시계열을 고르고, 어떤 변환·가정을 거쳤는지 기록한다.
 
-    열성분이 남은 신호를 외삽하면 관측창의 계절 위상이 속도를 통째로 바꾼다.
-    그래서 원 LOS 직접 사용은 최후수단이고, 그 경우 신뢰도를 낮춘다.
+    두 가지를 반드시 처리한다.
+    - **기하**: 사용성 한계(침하·각변위)는 연직량 규정인데 단일 궤도 관측은 LOS 다.
+      LOS 를 그대로 쓰면 1/cos θ ≈ 1.29 배 낙관적이 된다(`geometry.los_to_vertical`).
+    - **열성분**: 계절 성분이 남은 신호를 외삽하면 관측창의 계절 위상이 속도를 바꾼다.
     """
-    src, why = None, ""
-    if ins.vertical_ds and store.has_array(ins.vertical_ds):
-        src, why = store.read_array(ins.vertical_ds), "asc+desc 융합 연직(/insar/vertical)"
+    fused = bool(ins.vertical_ds and store.has_array(ins.vertical_ds))
+    if fused:
+        d = np.asarray(store.read_array(ins.vertical_ds), dtype=np.float64)
+        why = "asc+desc 융합 연직(/insar/vertical)"
     else:
-        src, why = store.read_array(ins.los_ds), "LOS(/insar/los)"
-    d = np.asarray(src, dtype=np.float64)
+        d = np.asarray(store.read_array(ins.los_ds), dtype=np.float64)
+        why = "LOS(/insar/los)"
 
-    # ① 인제스트에서 이미 열팽창을 분리했는가(--insar-thermal)
+    # ── 열성분 제거는 **투영 전에** 한다 ────────────────────────────────
+    # PINN comp_thermal 은 LOS 기하로 산출된 값이다. 먼저 투영하고 나서 빼면 서로 다른
+    # 기하의 양을 빼게 된다. (투영은 점별 스칼라 배라 순서를 바꿔도 대수적으로는 같지만,
+    # 융합 연직 경로에서는 투영이 없으므로 뺄셈을 한 곳으로 모아야 분기가 안 갈린다.)
     thermal_removed, how = False, "없음"
-    try:
-        corr = store.read_json_attr("insar", "insar_source").get("corrections") or {}
+    # ① 인제스트에서 이미 분리했는가(--insar-thermal). 출처 attr 이름이 경로마다 다르다 —
+    #    run_insar_real 은 `insar_source`, import_track_h5 는 `track_source` 로 쓴다.
+    #    한쪽만 보면 --import-track-h5 경로에서 열보정이 통째로 무시된다(실제로 그랬다).
+    for attr in ("insar_source", "track_source"):
+        try:
+            corr = (store.read_json_attr("insar", attr) or {}).get("corrections") or {}
+        except (KeyError, ValueError):
+            continue
         if "thermal" in (corr.get("applied") or []):
-            thermal_removed, how = True, "인제스트 열팽창 보정(--insar-thermal)"
-    except (KeyError, ValueError):
-        pass
-
-    # ② 아니면 PINN 성분분해의 열성분을 뺀다
-    if not thermal_removed and store.has_meta("pinn"):
+            thermal_removed, how = True, f"인제스트 열팽창 보정(--insar-thermal, {attr})"
+            break
+    if not thermal_removed and store.has_meta("pinn"):     # ② 아니면 PINN 열성분 차감
         try:
             from ..contracts.schema import PINNOutput
             pn = store.read_meta("pinn", PINNOutput)
@@ -76,7 +87,18 @@ def _resolve_displacement(store: ProjectStore, ins: InSAROutput) -> dict:
         except (KeyError, ValueError, AttributeError):
             pass
 
-    return {"disp": d, "source": why, "thermal_removed": thermal_removed, "thermal_how": how}
+    # ── 기하 투영: LOS → 연직 (융합 연직이면 이미 연직이라 건너뛴다) ──
+    projection = None
+    if not fused:
+        inc = None
+        if ins.incidence_ds and store.has_array(ins.incidence_ds):
+            inc = np.asarray(store.read_array(ins.incidence_ds), dtype=np.float64)
+        d, projection = los_to_vertical(d, inc, default_deg=default_incidence_deg)
+        why += (" → 연직 투영"
+                + ("(관측 입사각)" if not projection["incidence_assumed"] else "(가정 입사각)"))
+
+    return {"disp": d, "source": why, "thermal_removed": thermal_removed, "thermal_how": how,
+            "projection": projection}
 
 
 def _span_m(store: ProjectStore, xy_m: np.ndarray) -> tuple[float, str, bool]:
@@ -137,6 +159,7 @@ def estimate_remaining_life(
     min_cluster: int = 3,
     alpha: float = 0.05,
     as_of: str | None = None,
+    default_incidence_deg: float = DEFAULT_INCIDENCE_DEG,
 ) -> RemainingLifeOutput:
     """`/life` 를 계산해 project.h5 에 기록하고 계약 객체를 돌려준다."""
     ins = store.read_meta("insar", InSAROutput)
@@ -152,7 +175,7 @@ def estimate_remaining_life(
     point_limit, limit_basis = limits_mod.point_limits(
         member, span_m, lim_vals, span_known=span_known)
 
-    dsrc = _resolve_displacement(store, ins)
+    dsrc = _resolve_displacement(store, ins, default_incidence_deg=default_incidence_deg)
     disp = dsrc["disp"]
 
     # 관측이 너무 짧으면 어떤 추세도 유의하지 않다 — 계산하지 않고 사유를 남긴다.
@@ -209,10 +232,14 @@ def estimate_remaining_life(
             conf, conf_why = "low", f"관측 {observed_years:.1f}년 — 2년 미만은 추세 신뢰 곤란"
         elif observed_years < 3.0:
             conf, conf_why = "medium", f"관측 {observed_years:.1f}년 — 3년 이상 권장"
-        elif "연직" not in dsrc["source"]:
-            conf, conf_why = "medium", "단일 궤도 LOS — 연직 성분 분리 안 됨(asc+desc 융합 권장)"
+        elif dsrc["projection"] is not None:
+            pj = dsrc["projection"]
+            conf, conf_why = "medium", (
+                f"단일 궤도 — LOS 를 연직으로 투영함(×{pj['scale_1_over_cos']['median']}, "
+                f"{pj['incidence_source']}). 변위가 주로 연직이라는 가정이며, "
+                "수평 이동이 크면 과대평가된다. asc+desc 융합이면 가정이 사라진다.")
         else:
-            conf, conf_why = "high", (f"관측 {observed_years:.1f}년 · 연직 분리 · 열성분 제거")
+            conf, conf_why = "high", (f"관측 {observed_years:.1f}년 · asc+desc 실측 연직 · 열성분 제거")
 
     # 잔존수명 표시 상한 — 설계공용수명에서 공용연수를 뺀 값
     by = _build_year(cfg) if cfg is not None else None
@@ -239,6 +266,8 @@ def estimate_remaining_life(
         "displacement_source": dsrc["source"],
         "thermal_removed": dsrc["thermal_removed"],
         "thermal_removal": dsrc["thermal_how"],
+        # 기하 투영 — 사용성 한계는 연직 규정이므로 LOS 는 반드시 되돌려야 한다.
+        "vertical_projection": dsrc["projection"],
         "consumed_mm": float(consumed_mm),
         "consumed_note": ("관측 시작 이전 누적 변위를 0 으로 가정(낙관적). 수준측량 등 실측 "
                           "누적치가 있으면 지정해야 한다." if consumed_mm == 0 else "사용자 지정"),

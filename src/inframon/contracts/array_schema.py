@@ -48,6 +48,7 @@ ARRAY_SPECS: dict[str, dict[str, tuple[tuple, frozenset]]] = {
         "dates_ds": (("M",), _FLOAT),
         "temporal_coherence_ds": (("N",), _FLOAT),
         "vertical_ds": (("N", "M"), _FLOAT),  # 선택(asc+desc 융합) — None 이면 검증 생략
+        "incidence_ds": (("N",), _FLOAT),     # 선택(상류가 입사각을 줄 때) — LOS↔연직 투영용
     },
     "pinn": {
         "comp_thermal_ds": (("N", "M"), _FLOAT),

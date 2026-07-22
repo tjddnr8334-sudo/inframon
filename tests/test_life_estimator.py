@@ -1,6 +1,8 @@
 """잔존수명 후처리 통합 — project.h5 → /life 계약·검열·불변성."""
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -72,7 +74,8 @@ def test_settling_project_gives_finite_life_and_contract(project):
     assert out.rsl_lower_years is not None
     assert out.rsl_lower_years <= out.rsl_years        # 하한이 더 보수적
     assert out.governing == "serviceability"
-    assert np.allclose(rate, 2.0, atol=0.1)
+    # 사용성 한계는 **연직** 규정이므로 LOS 2.0mm/yr 는 2.0/cos(39°) 로 되돌려져야 한다.
+    assert np.allclose(rate, 2.0 / math.cos(math.radians(39.0)), atol=0.1)
     assert rsl.shape == lo.shape == (out.n_points,)
     assert out.censored_fraction < 0.05
 
@@ -118,6 +121,22 @@ def test_shorter_limit_gives_shorter_life(project):
             out = estimate_remaining_life(s, PipelineConfig(), user_limits={"settlement_mm": lim})
         lives.append(out.rsl_lower_years)
     assert lives[0] < lives[1]                          # 한계가 낮을수록 잔존수명 짧다
+
+
+@pytest.mark.parametrize("attr", ["insar_source", "track_source"])
+def test_ingest_thermal_correction_is_detected_under_either_attr(project, attr):
+    """출처 attr 이름이 경로마다 다르다 — run_insar_real 은 insar_source,
+    import_track_h5 는 track_source. 한쪽만 보면 --import-track-h5 경로에서
+    인제스트 열보정이 통째로 무시되고 신뢰도가 잘못 'low' 로 떨어진다(실제 버그였다).
+    """
+    from inframon.contracts.schema import PINNOutput
+    with ProjectStore(project) as s:
+        pn = s.read_meta("pinn", PINNOutput)          # PINN 경유 차감을 막아 attr 만 남긴다
+        s.write_array(pn.comp_thermal_ds, np.zeros((1, 1)))
+        s.write_json_attr("insar", attr, {"corrections": {"applied": ["thermal"]}})
+        out = estimate_remaining_life(s, PipelineConfig())
+    assert out.assumptions["thermal_removed"] is True
+    assert attr in out.assumptions["thermal_removal"]
 
 
 def test_meta_roundtrip(project):

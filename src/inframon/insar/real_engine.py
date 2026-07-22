@@ -231,6 +231,7 @@ def run_insar_real(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> In
         store, xyz=xyz, member=member, coherence=coherence, l_from_fixed=l_from_fixed,
         los=los, longitudinal=longitudinal, dates=td.dates, date_labels=td.date_labels,
         vertical=vertical,   # 융합 연직(있으면) → 계약 필드 vertical_ds
+        incidence=(td.incidence[keep] if td.incidence is not None else None),
     )
     # 점별 선형 속도[mm/yr] — 보정된 종방향 시계열에서 최소제곱. 대시보드/리포트가 바로 소비.
     from .atmo import temporal_decompose

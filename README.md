@@ -150,6 +150,11 @@ Three properties make the number defensible rather than decorative:
 - **Spatial cohesion.** The bridge value is not the per-point minimum — one noisy point would
   govern the whole structure. Only a connected cluster of ≥ k points counts, and the governing
   cluster's coordinates, extent and rate are reported so the result names an inspection target.
+- **LOS is projected to vertical.** Settlement and angular-distortion limits are vertical
+  quantities; a single-orbit track measures only the line-of-sight component, so using LOS
+  directly is optimistic by 1/cos θ (29% at 39°). The incidence angle is carried through ingest
+  as `/insar/incidence_deg`; when absent, a representative 39° is assumed and recorded. With
+  ascending+descending fusion the assumption disappears entirely.
 
 Two sub-limits are checked per point: absolute displacement (member-dependent) and **differential
 settlement** (angular distortion vs 1/500), which often governs before the absolute limit. Channels
@@ -365,6 +370,10 @@ python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
 - **공간 응집** — 교량 값은 점별 최솟값이 아니다(노이즈 한 점이 교량 전체를 지배한다).
   반경 안에 연결된 k점 이상 군집만 인정하고, **지배 군집의 좌표·범위·속도**를 함께 기록해
   결과가 점검 대상을 지목하게 한다.
+- **LOS 를 연직으로 되돌린다** — 침하·각변위 한계는 연직량 규정인데 단일 궤도는 시선 성분만
+  잰다. LOS 를 그대로 쓰면 1/cos θ 만큼(39°에서 29%) 낙관적이다. 입사각은 인제스트에서
+  `/insar/incidence_deg` 로 보존되고, 없으면 대표값 39°를 가정하고 그 사실을 기록한다.
+  asc+desc 융합이면 이 가정 자체가 사라진다.
 
 점별로 두 하위 한계를 본다: 절대 변위(부재별)와 **부등침하**(각변위 vs 1/500) — 실제로는
 부등침하가 절대 한계보다 먼저 걸리는 경우가 많다. 강성열화·피로·내구성 채널은 조용히 빼지
