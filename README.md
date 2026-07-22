@@ -191,8 +191,9 @@ python -m inframon --bim-align project.h5,elements.json,out/bridge \
   judge how much to trust them.
 
 The alignment core needs no IFC file or `ifcopenshell` — an element table (JSON/CSV, UTF-8 or
-cp949) is enough. Only `bim/ifc_io.py` touches real IFC, and that path is **not yet verified**.
-Details: [`docs/BIM_정합.md`](docs/BIM_정합.md).
+cp949) is enough; install `.[bim]` to read and write real IFC. The IFC path is verified by a
+round-trip test that builds a bridge IFC with ifcopenshell, reads its georeferencing and element
+bounding boxes back, and injects Psets. Details: [`docs/BIM_정합.md`](docs/BIM_정합.md).
 
 ### Reproducibility
 
@@ -407,7 +408,8 @@ python -m inframon --bim-align project.h5,elements.json,out/bridge \
   판단할 수 있게 한다.
 
 정합 코어는 IFC 파일도 `ifcopenshell` 도 필요 없다 — 부재 테이블(JSON/CSV, UTF-8·cp949 자동)만
-있으면 된다. 실 IFC 를 만지는 건 `bim/ifc_io.py` 뿐이고 그 경로는 **아직 미검증**이다.
+있으면 되고, 실 IFC 를 읽고 쓰려면 `.[bim]` 를 설치한다. IFC 경로는 ifcopenshell 로 교량 IFC 를
+만들어 지오레퍼런싱·부재 AABB 를 되읽고 Pset 을 주입하는 **왕복 테스트로 검증**된다.
 자세히: [`docs/BIM_정합.md`](docs/BIM_정합.md).
 
 ### 재현성

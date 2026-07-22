@@ -64,6 +64,22 @@ def test_overlap_ambiguity_is_broken_by_specificity_and_flagged():
     assert r2["guid"][0] == "PIER1"
 
 
+def test_tolerance_does_not_steal_points_already_inside_another_element():
+    """상판 바닥(z=8)과 교각 상단(z=8)은 맞닿아 있다.
+
+    정합 오차 흡수용 허용오차(0.5m)를 교각에도 적용하면 z=8.3 인 상판 점이 교각 AABB
+    확장분에 걸려 동률이 되고, 부재 구체성 규칙이 교각을 골라 버린다. 허용오차는 아무
+    부재에도 안 걸리는 점을 구제하려는 것이지 이미 안에 있는 점을 뺏으라는 게 아니다.
+    """
+    els = _els()
+    r = associate(np.array([[32.0, 0.0, 8.3]]), els, use_z=True, max_dist_m=2.0, tol_m=0.5)
+    assert r["guid"][0] == "DECK1"        # 허용오차 없이도 상판 안 → 상판이 이긴다
+    assert not r["ambiguous"][0]
+    # 두 부재 어디에도 엄밀히 속하지 않는 점은 여전히 허용오차로 구제된다
+    r2 = associate(np.array([[32.0, 3.5, 4.0]]), els, use_z=True, max_dist_m=2.0, tol_m=2.0)
+    assert r2["guid"][0] == "PIER1" and not r2["inside"][0]
+
+
 def test_insar_member_label_breaks_the_tie():
     """CV/InSAR 부재 라벨은 독립 증거다 — 모호할 때 그것을 우선한다."""
     from inframon.contracts.schema import MEMBER_TYPES

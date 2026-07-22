@@ -590,16 +590,17 @@ def main() -> None:
             p.error("--bim-align 형식은 PROJECT_H5,ELEMENTS,OUT_PREFIX 입니다")
         proj_h5, els_path, out_pref = parts
 
-        mc = None
-        if args.bim_map_conversion:
-            mc = _json.loads(Path(args.bim_map_conversion).read_text(encoding="utf-8"))
-        elif els_path.lower().endswith(".ifc"):
+        mc, ifc_src = None, None
+        if els_path.lower().endswith(".ifc"):
             from .bim import ifc_io
+            ifc_src = els_path                    # 원본 IFC 경로 — 주입(--bim-write-ifc)에 필요
             try:                                  # IFC 에 지오레퍼런싱이 있으면 그것이 1순위
-                mc = ifc_io.read_map_conversion(els_path)
-                els_path = ifc_io.read_elements(els_path)
+                mc = ifc_io.read_map_conversion(ifc_src)
+                els_path = ifc_io.read_elements(ifc_src)
             except _AE as exc:
                 p.error(str(exc))
+        if args.bim_map_conversion:               # 명시 지정이 IFC 내장보다 우선
+            mc = _json.loads(Path(args.bim_map_conversion).read_text(encoding="utf-8"))
         try:
             res = align_project_to_bim(
                 proj_h5, els_path, map_conversion=mc,
@@ -628,13 +629,17 @@ def main() -> None:
         for w in res["warnings"]:
             print(f"  ⚠ {w}")
         if args.bim_write_ifc:
+            if ifc_src is None:
+                p.error("--bim-write-ifc 는 ELEMENTS 가 .ifc 일 때만 씁니다"
+                        "(부재 테이블만으로는 주입할 원본 IFC 가 없습니다).")
             from .bim import ifc_io
             try:
-                wr = ifc_io.write_psets(els_path if isinstance(els_path, str) else "",
-                                        res["payload"], args.bim_write_ifc)
+                wr = ifc_io.write_psets(ifc_src, res["payload"], args.bim_write_ifc)
             except _AE as exc:
                 p.error(str(exc))
             print(f"  IFC 주입        : {wr['n_injected']}개 부재 → {wr['ifc_out']}")
+            if wr["n_guid_not_found"]:
+                print(f"  ⚠ GUID 미발견   : {wr['n_guid_not_found']}개")
         print("=" * 56)
         return
 

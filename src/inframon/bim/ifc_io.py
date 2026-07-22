@@ -124,6 +124,23 @@ def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement
     return out
 
 
+def _drop_pset(f, element, pset_name: str) -> int:
+    """부재에 붙은 동명 PropertySet 과 그 관계를 제거한다. 제거한 개수 반환."""
+    dropped = 0
+    for rel in list(getattr(element, "IsDefinedBy", ()) or ()):
+        if not rel.is_a("IfcRelDefinesByProperties"):
+            continue
+        ps = rel.RelatingPropertyDefinition
+        if not (ps.is_a("IfcPropertySet") and ps.Name == pset_name):
+            continue
+        for prop in list(ps.HasProperties or ()):
+            f.remove(prop)
+        f.remove(ps)
+        f.remove(rel)
+        dropped += 1
+    return dropped
+
+
 def write_psets(ifc_in: str | Path, payload: dict, ifc_out: str | Path) -> dict:
     """페이로드의 속성을 부재별 IfcPropertySet 으로 주입해 새 IFC 로 저장한다.
 
@@ -137,20 +154,25 @@ def write_psets(ifc_in: str | Path, payload: dict, ifc_out: str | Path) -> dict:
     owner = (f.by_type("IfcOwnerHistory") or [None])[0]
     pset_name = payload.get("pset_name", "Inframon_Monitoring")
 
-    injected, missing = 0, []
+    injected, missing, replaced = 0, [], 0
     for guid, psets in payload.get("elements", {}).items():
         try:
             el = f.by_guid(guid)
         except Exception:  # noqa: BLE001 — GUID 가 이 IFC 에 없음
             missing.append(guid)
             continue
+        # 같은 이름의 기존 Pset 은 지우고 새로 넣는다. 모니터링은 주기적으로 다시 도는데
+        # 덧붙이기만 하면 실행할 때마다 동명 Pset 이 쌓여 뷰어에서 어느 게 최신인지 알 수 없다.
+        replaced += _drop_pset(f, el, pset_name)
         props = []
         for k, v in psets.get(pset_name, {}).items():
             if v is None:
                 continue
-            if isinstance(v, bool):
+            if isinstance(v, bool):          # bool 이 int 의 하위형이라 반드시 먼저 본다
                 val = f.create_entity("IfcBoolean", bool(v))
-            elif isinstance(v, (int, float)):
+            elif isinstance(v, int):         # 개수는 정수다 — IfcReal 로 넣으면 13.0 으로 보인다
+                val = f.create_entity("IfcInteger", int(v))
+            elif isinstance(v, float):
                 val = f.create_entity("IfcReal", float(v))
             else:
                 val = f.create_entity("IfcText", str(v))
@@ -168,7 +190,7 @@ def write_psets(ifc_in: str | Path, payload: dict, ifc_out: str | Path) -> dict:
 
     Path(ifc_out).parent.mkdir(parents=True, exist_ok=True)
     f.write(str(ifc_out))
-    return {"ifc_out": str(ifc_out), "n_injected": injected,
+    return {"ifc_out": str(ifc_out), "n_injected": injected, "n_replaced": replaced,
             "n_guid_not_found": len(missing), "guid_not_found": missing[:20],
             "pset_name": pset_name}
 

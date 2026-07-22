@@ -69,7 +69,9 @@ class Element:
             self.member = member_from_ifc_type(self.ifc_type, self.name)
         lo = np.minimum(np.asarray(self.bbox_min, float), np.asarray(self.bbox_max, float))
         hi = np.maximum(np.asarray(self.bbox_min, float), np.asarray(self.bbox_max, float))
-        self.bbox_min, self.bbox_max = tuple(lo), tuple(hi)
+        # 파이썬 float 로 되돌린다 — np.float64 가 남으면 json.dumps 가 못 쓴다.
+        self.bbox_min = tuple(float(v) for v in lo)
+        self.bbox_max = tuple(float(v) for v in hi)
 
     @property
     def center(self) -> np.ndarray:
@@ -168,42 +170,52 @@ def associate(
                             "reason": "부재 테이블이 비어 있습니다"}}
 
     J = len(elements)
-    dists = np.empty((n, J))
+    dists = np.empty((n, J))       # 허용오차 포함 거리 — 연결 판정에 쓴다
+    strict = np.empty((n, J))      # 허용오차 없는 거리 — "진짜 안에 있는가"
     sizes = np.empty(J)
     for j, el in enumerate(elements):
-        lo = np.asarray(el.bbox_min, float)[:dim] - tol_m
-        hi = np.asarray(el.bbox_max, float)[:dim] + tol_m
-        dists[:, j] = _aabb_distance(P, lo, hi)
-        sizes[j] = float(np.prod(np.maximum(hi - lo, 1e-9)))
+        lo0 = np.asarray(el.bbox_min, float)[:dim]
+        hi0 = np.asarray(el.bbox_max, float)[:dim]
+        dists[:, j] = _aabb_distance(P, lo0 - tol_m, hi0 + tol_m)
+        strict[:, j] = _aabb_distance(P, lo0, hi0)
+        sizes[j] = float(np.prod(np.maximum(hi0 - lo0 + 2 * tol_m, 1e-9)))
 
-    # 동률 깨기 — 2D 로 보면 상판 AABB 가 교각을 통째로 포함해 두 부재가 모두 거리 0 이
-    # 된다. 배열 순서로 아무거나 고르면 부재 배치 순서에 따라 결과가 달라진다. 그래서
-    #   ① InSAR 부재 라벨(CV 가 준 **독립 증거**)과 맞는 후보를 우선
-    #   ② 그래도 동률이면 더 작은(구체적인) 부재 — 교각이 상판보다 특정적이다
-    # 를 거리에 극소값으로 얹어 정렬한다(1e-6 로 반올림한 거리 차보다 작아 순서 불변).
+    # 동률 깨기 — 부재는 서로 맞닿고(상판 바닥 = 교각 상단) 2D 로 보면 상판 AABB 가 교각을
+    # 통째로 포함하므로 거리 0 인 후보가 여럿 나온다. 배열 순서로 고르면 부재 배치 순서에
+    # 결과가 달라지므로, 증거가 강한 순으로 얹는다(전부 1e-6 반올림 거리 차보다 작아 순서 불변).
+    #   ① **허용오차 없이도 안에 있는가** — 허용오차는 아무 부재에도 안 걸리는 점을 구제하려는
+    #      것이지, 이미 명확히 어느 부재 안에 있는 점을 뺏어가라는 게 아니다. 상판 바닥과
+    #      교각 상단이 맞닿은 지점에서 이 규칙이 없으면 상판 점이 교각으로 넘어간다.
+    #   ② InSAR 부재 라벨(CV 가 준 독립 증거) — 다만 CV 분할은 완벽하지 않으므로 ①보다 약하다.
+    #   ③ 그래도 동률이면 더 작은(구체적인) 부재 — 교각이 상판보다 특정적이다.
     d = np.round(dists, 6)
+    outside = (strict > 1e-9).astype(float) * 1e-7              # ① 엄밀 포함이 아니면 감점
     pen = np.zeros((n, J))
     if member is not None:
         mem = np.asarray(member).ravel().astype(int)
-        el_mem = [e.member for e in elements]
-        for j, em in enumerate(el_mem):
+        for j, em in enumerate(e.member for e in elements):
             if em is None:
                 continue
             match = np.array([0 <= m < len(MEMBER_TYPES) and MEMBER_TYPES[m] == em for m in mem])
             pen[:, j] = np.where(match, 0.0, 1.0)
-        pen *= 1e-7
-    rank = np.argsort(np.argsort(sizes)).astype(float)          # 작을수록 우선
-    d_tb = d + pen + (rank / max(J, 1)) * 1e-8
+        pen *= 1e-8                                             # ②
+    rank = np.argsort(np.argsort(sizes)).astype(float)          # ③ 작을수록 우선
+    d_tb = d + outside + pen + (rank / max(J, 1)) * 1e-9
 
     best = np.argmin(d_tb, axis=1)
     best_d = dists[np.arange(n), best]
     ok = best_d <= max_dist_m
-    # 같은 최단거리에 후보가 여럿이면 본질적으로 모호하다(2D 투영의 한계) — 숫자로 남긴다.
-    ambiguous = ((d <= d.min(axis=1, keepdims=True) + 1e-6).sum(axis=1) > 1) & ok
+    # `inside` 는 **허용오차 없이** 부재 안에 있다는 뜻이다. 확장 박스 기준으로 세면
+    # 허용오차를 키울수록 "내부"가 늘어나 신뢰도 지표로 못 쓴다.
+    strictly_in = strict[np.arange(n), best] <= 1e-9
+    # 모호성은 **동등한 증거**의 후보가 여럿일 때다. 엄밀 포함 여부까지 같아야 진짜 동률이므로
+    # ①까지 반영한 키로 센다(안 그러면 허용오차로만 걸린 후보가 모호성을 부풀린다).
+    key = d + outside
+    ambiguous = ((key <= key.min(axis=1, keepdims=True) + 1e-9).sum(axis=1) > 1) & ok
 
     guid = np.array([""] * n, dtype=object)
     guid[ok] = [elements[j].guid for j in best[ok]]
-    inside = ok & (best_d <= 1e-9)
+    inside = ok & strictly_in
 
     mismatch = np.zeros(n, dtype=bool)
     if member is not None:

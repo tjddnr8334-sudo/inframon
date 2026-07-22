@@ -1,8 +1,8 @@
 # BIM / 디지털 트윈 정합 — 위성 관측을 IFC 부재에 붙이기
 
-> **상태: 정합 코어 구현됨.** `--bim-align` 으로 동작한다. IFC 직접 읽기/쓰기(`ifc_io`)는
-> `ifcopenshell` 선택 의존이며 **실 IFC 로는 아직 검증되지 않았다**(개발 환경 미설치).
-> 부재 테이블(JSON/CSV)을 주면 IFC 없이도 전 과정이 동작한다.
+> **상태: 정합 코어 + IFC 읽기/쓰기 모두 구현·검증됨.** `--bim-align` 으로 동작한다.
+> IFC I/O 는 `ifcopenshell` 선택 의존(`pip install -e ".[bim]"`)이고, 없으면 부재
+> 테이블(JSON/CSV)로 전 과정이 그대로 동작한다.
 
 ---
 
@@ -162,11 +162,15 @@ python -m inframon --bim-align project.h5,elements.json,out/bridge \
 python -m inframon --bim-align project.h5,elements.json,out/bridge \
   --bim-control-points control.json --bim-max-rms 0.3
 
-# 실 IFC (ifcopenshell 필요) — 사전점검 후 정합·주입
+# 실 IFC (pip install -e ".[bim]") — 사전점검 후 정합·주입
 python -m inframon --bim-inspect model.ifc
 python -m inframon --bim-align project.h5,model.ifc,out/bridge \
-  --bim-write-ifc out/model_monitored.ifc
+  --bim-use-z --bim-write-ifc out/model_monitored.ifc
 ```
+
+ELEMENTS 가 `.ifc` 면 부재 테이블과 `IfcMapConversion` 을 모두 그 파일에서 읽는다
+(`--bim-map-conversion` 을 주면 그쪽이 우선). 실 IFC 는 `OrthogonalHeight` 로 표고 기준이
+정의돼 있으므로 `--bim-use-z` 가 정당하고, 그래야 상판과 그 아래 교각이 갈린다.
 
 부재 테이블 형식(둘 다 UTF-8/cp949 자동 인식 — 국내 BIM 산출물은 cp949 가 흔하다):
 
@@ -191,17 +195,36 @@ PIER1,교각1,IfcColumn,30,-2,0,34,2,8
 | 부재 연결·동률 해소·미연결 | ✅ 배치 순서 무관성 포함 |
 | 부재 집계·Pset 평탄화 | ✅ 스칼라만 나오는지 포함 |
 | 오케스트레이션(실 project.h5) | ✅ 정자교 2661점 → 부재 4개, 100% 연결 |
-| **IFC 파일 직접 읽기/쓰기** | ❌ **미검증** — ifcopenshell 미설치 |
+| **IFC 읽기** (`IfcMapConversion`·부재 AABB·타입 추론) | ✅ 실 IFC 왕복 |
+| **IFC 쓰기** (Pset 주입·재주입·원본 보존) | ✅ 실 IFC 왕복 |
 
-실 IFC 투입 시 반드시 `--bim-inspect` 로 `IfcMapConversion` 유무·부재 수·타입 분포를
-먼저 확인할 것.
+IFC 왕복은 `tests/test_bim_ifc_roundtrip.py` 가 **ifcopenshell 로 교량 IFC 를 만들어**
+검증한다(지오레퍼런싱 + 박스 형상 부재 4개 + 형상 없는 부재). 실 교량 IFC 가 없어도
+실제로 겪을 문제(단위, 형상 AABB, GUID 매칭, 재주입 누적)를 대부분 만난다.
+
+### 6.1 실 IFC 에서 실제로 걸린 것들
+
+- **단위**: IFC 길이 단위를 지정하지 않으면 밀리미터가 된다. 100(m 의도)이 0.1m 로 읽힌다.
+  가장 흔한 함정이라 테스트가 이 축을 고정한다. 투입 전 `--bim-inspect` 로 확인할 것.
+- **정수/실수**: 점 개수를 `IfcReal` 로 넣으면 뷰어에 `13.0` 으로 보인다 → `IfcInteger` 사용.
+- **재주입 누적**: 모니터링은 주기적으로 다시 도는데 덧붙이기만 하면 동명 Pset 이 쌓여
+  뷰어에서 최신을 구분할 수 없다 → 같은 이름의 기존 Pset 을 지우고 새로 넣는다(`n_replaced`).
+- **허용오차가 점을 뺏는 문제**: 상판 바닥(z=8)과 교각 상단(z=8)은 맞닿는다. 정합 오차
+  흡수용 허용오차를 교각에도 적용하면 상판 안의 점이 교각과 동률이 되어 넘어간다.
+  → **허용오차 없이도 안에 있는 후보를 우선**한다. 허용오차는 아무 부재에도 안 걸리는
+  점을 구제하려는 것이지 이미 안에 있는 점을 뺏으라는 게 아니다.
+- `inside` 는 허용오차를 뺀 **엄밀 포함**을 뜻한다(확장 박스 기준이면 허용오차를 키울수록
+  "내부"가 늘어나 신뢰도 지표로 못 쓴다).
+
+실 IFC 투입 시 반드시 `--bim-inspect` 로 `IfcMapConversion` 유무·부재 수·타입 분포·
+**길이 단위**를 먼저 확인할 것.
 
 ---
 
 ## 7. 남은 것
 
-- **IFC 실검증** — ifcopenshell 설치 후 실 교량 IFC 로 `read_elements`/`write_psets` 확인.
-  형상 AABB 는 `ifcopenshell.geom`(OCC) 필요, 실패 부재는 배치 원점 fallback 으로 들어간다.
+- **실 교량 IFC 투입** — 합성 IFC 로는 못 만나는 것들: 대형 모델 성능, `IfcBridge`/
+  `IfcBridgePart`(IFC4.3) 타입 매핑, 복잡 형상의 AABB 품질, 좌표계가 여러 개인 모델.
 - **3D 연결 상시화** — 수직기준면 변환(지오이드 모델 KNGeoid) 연결.
 - **부재 단위 시계열 API** — IFC 에서 `SourceProject` 를 따라와 시계열을 조회하는 엔드포인트
   (현재는 project.h5 직접 접근).
