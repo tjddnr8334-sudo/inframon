@@ -66,6 +66,9 @@ ARRAY_SPECS: dict[str, dict[str, tuple[tuple, frozenset]]] = {
         "V_settle_ds": (("N",), _FLOAT),
         "V_anomaly_ds": (("N",), _FLOAT),
         "V_func_series_ds": (("F", "M"), _FLOAT),
+        # 시간분해 EI — 콜로케이션 시점 수 E. 선택(real) — None 이면 검증 생략.
+        "EI_series_ds": (("E",), _FLOAT),
+        "EI_series_t_ds": (("E",), _FLOAT),
         # 가상센싱(상부거더 전체 변위장) — 가상센서 수 V. 선택(real) — None 이면 검증 생략.
         "vsens_x_ds": (("V",), _FLOAT),
         "vsens_l_from_fixed_ds": (("V",), _FLOAT),
@@ -103,7 +106,8 @@ ARRAY_SPECS: dict[str, dict[str, tuple[tuple, frozenset]]] = {
 # Pydantic 스칼라 -> 차원 심볼 (선언 스칼라 ↔ 실제 배열 차원 교차검증)
 _SCALAR_SYMBOLS: dict[str, dict[str, str]] = {
     "insar": {"n_points": "N", "n_dates": "M"},
-    "pinn": {"n_points": "N", "n_dates": "M", "n_virtual": "V", "n_deck": "G"},
+    "pinn": {"n_points": "N", "n_dates": "M", "n_virtual": "V", "n_deck": "G",
+             "n_ei_epochs": "E"},
     "fram": {"n_points": "N", "n_dates": "M"},
     "life": {"n_points": "N"},
 }

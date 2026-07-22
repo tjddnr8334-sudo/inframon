@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 # 1.2: PINNOutput 에 가상센싱(상부거더 전체 변위장) Optional 필드 추가 — 1.0/1.1 파일과 호환.
 # 1.3: RemainingLifeOutput(/life 그룹) 추가 — 4엔진 계약 불변, 잔존수명은 opt-in 후처리.
 # 1.4: InSAROutput.incidence_ds 추가(Optional) — LOS→연직 투영에 필요. 1.0~1.3 파일과 호환.
-SCHEMA_VERSION = "1.4"
+# 1.5: PINNOutput 에 시간분해 EI(EI_series) 추가(Optional) — 강성열화 채널용. 하위호환.
+SCHEMA_VERSION = "1.5"
 
 # 부재 종류 (CV → InSAR → PINN → FRAM 전체에서 공유하는 표준 라벨)
 MEMBER_TYPES = ("deck", "pier", "abutment", "bearing")
@@ -109,6 +110,13 @@ class PINNOutput(BaseModel):
     # variability 시계열 [n_func, M]  — FRAM 공명 계산용
     V_func_series_ds: str
     func_names: list[str] = Field(default_factory=lambda: list(FRAM_FUNCTIONS))
+    # ── 시간분해 EI — 강성열화 잔존수명 채널의 유일한 근거 ──
+    # EI_ds[N] 은 관측창 전체에 대한 점당 한 값이라 **추세를 못 낸다**. 절대 EI 식별은
+    # 원래 시점별 d4 를 구한 뒤 평균하므로, 그 평균을 걷어내면 재학습 없이 EI(t) 가 나온다.
+    # 길이 E 는 PDE 콜로케이션 시점 부분집합(≈12). real 엔진만 채운다(stub·구버전은 None).
+    n_ei_epochs: int | None = None
+    EI_series_ds: str | None = None      # [E] 전역 EI(t) [N·m²]
+    EI_series_t_ds: str | None = None    # [E] 첫 취득일 기준 경과 [년]
     # ── 가상센싱(virtual sensing): 상부거더 전체 변위장 ──
     # InSAR 관측점(N개·희소·불규칙)에서 학습한 PINN 연속장을 거더 종축을 따라 촘촘한
     # 가상센서 격자(V개)로 재평가한 결과 — 관측이 없는 위치까지 포함한 거더 전체 변위량.

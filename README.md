@@ -158,8 +158,14 @@ Three properties make the number defensible rather than decorative:
 
 Two sub-limits are checked per point: absolute displacement (member-dependent) and **differential
 settlement** (angular distortion vs 1/500), which often governs before the absolute limit. Channels
-for stiffness (needs time-resolved EI), fatigue and durability are recorded as **inactive with a
-stated reason** rather than silently omitted. Full design and data requirements:
+A second measured channel, **stiffness degradation**, regresses PINN's time-resolved `EI(t)` —
+which comes free, since the absolute-EI identification already evaluates the PDE residual per
+epoch and only the averaging discarded the time axis. It is implemented and gated but **does not
+activate on any dataset available so far**: on both the synthetic demo and the real Jeongja track
+the identified `EI` saturates at its physical clip bound, because neither point cloud carries
+resolvable bending curvature (`d4 ≈ 0`). The gate says exactly that instead of reporting a
+trend fitted to a numerical artefact. Fatigue and durability are likewise recorded as **inactive
+with a stated reason** rather than silently omitted. Full design and data requirements:
 [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
 
 ### BIM / digital-twin alignment
@@ -377,8 +383,15 @@ python -m inframon --import-track-h5 track.h5 --out data/project.h5 \
   asc+desc 융합이면 이 가정 자체가 사라진다.
 
 점별로 두 하위 한계를 본다: 절대 변위(부재별)와 **부등침하**(각변위 vs 1/500) — 실제로는
-부등침하가 절대 한계보다 먼저 걸리는 경우가 많다. 강성열화·피로·내구성 채널은 조용히 빼지
-않고 **비활성 + 사유**로 남긴다. 설계·필요 데이터: [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
+부등침하가 절대 한계보다 먼저 걸리는 경우가 많다.
+
+두 번째 측정기반 채널인 **강성열화**는 PINN 의 시간분해 `EI(t)` 를 회귀한다. 절대 EI 식별이
+원래 시점별로 PDE 잔차를 구한 뒤 평균만 취하므로, 그 평균을 걷어내면 재학습 없이 얻어진다.
+구현·게이팅은 끝났지만 **지금까지 가진 어떤 데이터로도 활성화되지 않는다** — 합성 데모와
+정자교 실 트랙 모두 식별 EI 가 물리 클립 상한에 포화한다. 두 점군 다 분해 가능한 휨 곡률이
+없기 때문이다(`d4≈0`). 게이트는 수치 인공물에 맞춘 추세를 내놓는 대신 그 사실을 그대로
+말한다. 피로·내구성도 조용히 빼지 않고 **비활성 + 사유**로 남긴다.
+설계·필요 데이터: [`docs/잔존수명_설계.md`](docs/잔존수명_설계.md).
 
 ### BIM / 디지털 트윈 정합
 

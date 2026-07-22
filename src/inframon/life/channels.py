@@ -1,4 +1,4 @@
-"""한계상태 채널별 잔존수명 계산 — P1 은 사용성(serviceability).
+"""한계상태 채널별 잔존수명 계산 — 사용성(점별)과 강성열화(전역).
 
 사용성 채널은 두 하위 한계를 동시에 본다.
 
@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from .degradation import (
@@ -24,6 +26,100 @@ from .degradation import (
 )
 
 SUB_CENSORED, SUB_ABSOLUTE, SUB_DIFFERENTIAL = 0, 1, 2
+
+# 강성열화 채널 게이트 — 이 채널은 쉽게 거짓말을 한다(아래 stiffness 참조).
+STIFFNESS_MIN_YEARS = 3.0      # 관측기간 하한
+STIFFNESS_MAX_CV = 0.5         # EI 식별 변동계수 상한
+STIFFNESS_MAX_SATURATED = 0.2  # 클립 경계에 붙은 표본 비율 상한
+EI_CLIP = (1e6, 1e14)          # _identify_EI_from_pde 의 물리 클립 범위
+
+
+def stiffness(
+    t_years: np.ndarray,
+    ei: np.ndarray,
+    *,
+    observed_years: float,
+    r_limit: float = 0.80,
+    alpha: float = 0.05,
+    min_years: float = STIFFNESS_MIN_YEARS,
+    max_cv: float = STIFFNESS_MAX_CV,
+    geometric_ei: float | None = None,
+) -> dict:
+    """강성열화 채널 — `EI(t)/EI₀ < r_limit` 까지 남은 시간[년].
+
+    모형은 지수 열화 `EI(t) = EI₀·exp(−λt)` 이고, `log EI` 를 Theil–Sen 으로 회귀해
+    λ 를 얻는다. 기준 EI₀ 는 **관측 시작 시점의 자기 값**(회귀 절편)이다 — 설계
+    기하 EI 를 기준으로 삼으면 식별 EI 와의 계통 편차가 통째로 열화로 잡힌다.
+    그래서 설계 대비 비는 참고로만 보고하고 외삽에는 쓰지 않는다.
+
+    **이 채널은 쉽게 거짓말을 한다.** EI 식별은 4차 도함수에 의존해 노이즈에 매우
+    민감하고, 표본이 ~12개뿐이다. 그래서 값을 내기 전에 네 겹으로 막는다.
+
+    1. 관측기간 < `min_years`(기본 3년) → 비활성. 짧은 창에서는 어떤 추세도 유의하지 않다.
+    2. EI 표본이 물리 클립 경계에 몰림 → 비활성("식별 포화"). 합성·저휨 데이터에서
+       d4≈0 이면 EI 가 상한에 박혀 추세가 전부 인공물이다.
+    3. 변동계수 > `max_cv` → 비활성("식별 불안정").
+    4. λ 의 신뢰구간이 0 을 포함 → 검열. 강성이 **증가**하는 방향이면 열화가 아니다.
+
+    게이트 없이 EI 추세를 노출하면 사용자는 노이즈를 열화로 읽는다.
+    """
+    t = np.asarray(t_years, dtype=np.float64).ravel()
+    e = np.asarray(ei, dtype=np.float64).ravel()
+    detail: dict = {"n_samples": int(e.size), "observed_years": round(float(observed_years), 3),
+                    "r_limit": float(r_limit)}
+
+    def off(reason):
+        return {"active": False, "inactive_reason": reason, "rsl_years": None,
+                "rsl_lower_years": None, "censored": False, "detail": detail}
+
+    if e.size != t.size or e.size < 4:
+        return off(f"시간분해 EI 표본 부족({e.size}개, 최소 4)")
+    finite = np.isfinite(e) & np.isfinite(t) & (e > 0)
+    if int(finite.sum()) < 4:
+        return off("유효한 EI 표본이 4개 미만")
+    t, e = t[finite], e[finite]
+
+    # 식별 품질 게이트를 관측기간보다 **먼저** 본다. 포화/불안정은 시간이 지나도 해결되지
+    # 않는데, "관측 3년 미만"이라고만 알리면 사용자가 3년을 더 기다린 뒤에야 진짜 원인을
+    # 알게 된다. 더 근본적인 차단 사유를 먼저 말해야 한다.
+    sat = float(np.mean((e <= EI_CLIP[0] * 1.001) | (e >= EI_CLIP[1] * 0.999)))
+    detail["saturated_fraction"] = round(sat, 3)
+    cv = float(np.std(e) / (np.mean(e) + 1e-30))
+    detail["coefficient_of_variation"] = round(cv, 4)
+    detail["EI_median_Nm2"] = float(np.median(e))
+    if geometric_ei:
+        detail["EI_over_geometric"] = round(float(np.median(e) / geometric_ei), 4)
+        detail["geometric_EI_Nm2"] = float(geometric_ei)
+
+    if sat > STIFFNESS_MAX_SATURATED:
+        return off(f"EI 식별이 물리 클립 경계에 포화({sat * 100:.0f}%) — 휨이 약해 d4≈0 인 "
+                   "경우로 추세가 전부 인공물이다. 관측을 더 모아도 해결되지 않는다"
+                   "(실측 처짐이 있는 데이터가 필요).")
+    if cv > max_cv:
+        return off(f"EI 식별 변동계수 {cv:.2f} > {max_cv} — 식별 불안정")
+    if observed_years < min_years:
+        return off(f"관측 {observed_years:.1f}년 < {min_years:.0f}년 — EI 추세는 "
+                   "4차 도함수 기반이라 짧은 창에서 유의하지 않다")
+
+    fit = theil_sen(t, np.log(e)[None, :], alpha=alpha)
+    slope, lo, hi = float(fit["slope"][0]), float(fit["lo"][0]), float(fit["hi"][0])
+    detail["log_ei_slope_per_year"] = round(slope, 6)
+    detail["log_ei_slope_ci"] = [round(lo, 6), round(hi, 6)]
+
+    if hi >= 0:      # 열화 방향(감소)이 유의하지 않음 — 증가/무변화 포함
+        detail["direction"] = "강성 증가 또는 무변화" if slope >= 0 else "감소하나 유의하지 않음"
+        return {"active": True, "inactive_reason": None, "rsl_years": None,
+                "rsl_lower_years": None, "censored": True, "detail": detail}
+
+    lam, lam_hi = -slope, -lo                  # λ>0 이 열화. lo 가 가장 가파른 감소.
+    budget = -math.log(float(r_limit))         # ln(1/r_limit) > 0
+    detail["lambda_per_year"] = round(lam, 6)
+    detail["half_life_years"] = round(math.log(2.0) / lam, 2) if lam > 0 else None
+    rsl = max(0.0, budget / lam - float(observed_years))
+    rsl_lo = max(0.0, budget / lam_hi - float(observed_years))
+    return {"active": True, "inactive_reason": None,
+            "rsl_years": round(rsl, 3), "rsl_lower_years": round(rsl_lo, 3),
+            "censored": False, "detail": detail}
 
 
 def _pairwise_neighbors(xy: np.ndarray, radius_m: float, *, block: int = 512):

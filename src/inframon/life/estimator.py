@@ -21,7 +21,7 @@ from ..contracts.schema import (
 )
 from . import limits as limits_mod
 from .aggregate import cohesive_min
-from .channels import serviceability
+from .channels import serviceability, stiffness
 from .geometry import DEFAULT_INCIDENCE_DEG, los_to_vertical
 
 # 잔존수명이 이 값을 넘으면 표시 의미가 없다(검열 상한의 하한선).
@@ -129,6 +129,38 @@ def _build_year(cfg) -> int | None:
         if 1800 <= y <= 2200:
             return y
     return None
+
+
+def _stiffness_channel(store: ProjectStore, observed_years: float,
+                       r_limit: float, alpha: float) -> RSLChannel:
+    """PINN 시간분해 EI 로 강성열화 채널을 만든다. 없으면 사유를 남기고 비활성."""
+    ch = RSLChannel(name="stiffness", kind="measured", active=False)
+    if not store.has_meta("pinn"):
+        ch.inactive_reason = "PINN 결과가 없음 — 강성 추세를 낼 근거가 없다"
+        return ch
+    try:
+        from ..contracts.schema import PINNOutput
+        pn = store.read_meta("pinn", PINNOutput)
+    except (KeyError, ValueError):
+        ch.inactive_reason = "PINN 메타를 읽지 못함"
+        return ch
+    if not (pn.EI_series_ds and store.has_array(pn.EI_series_ds)
+            and pn.EI_series_t_ds and store.has_array(pn.EI_series_t_ds)):
+        ch.inactive_reason = ("시간분해 EI(EI_series)가 없음 — pinn=real 로 다시 돌리거나 "
+                              "구버전 project.h5 다(EI_ds[N] 은 관측창 전체 한 값이라 추세 불가)")
+        return ch
+    geo = None
+    try:
+        geo = (store.read_json_attr("pinn", "inputs") or {}).get("geometric_EI_Nm2")
+    except (KeyError, ValueError):
+        pass
+    r = stiffness(store.read_array(pn.EI_series_t_ds), store.read_array(pn.EI_series_ds),
+                  observed_years=observed_years, r_limit=r_limit, alpha=alpha,
+                  geometric_ei=geo)
+    return RSLChannel(name="stiffness", kind="measured", active=r["active"],
+                      inactive_reason=r["inactive_reason"], rsl_years=r["rsl_years"],
+                      rsl_lower_years=r["rsl_lower_years"], censored=r["censored"],
+                      detail=r["detail"])
 
 
 def _hotspot(members, xyz: np.ndarray, xy_m: np.ndarray, res: dict) -> dict | None:
@@ -276,20 +308,26 @@ def estimate_remaining_life(
         "observed_years": round(observed_years, 3),
     })
 
+    # 강성열화 채널(P2) — PINN 시간분해 EI 가 있을 때만. 게이트는 channels.stiffness 참조.
+    channels.append(_stiffness_channel(store, observed_years, lim_vals["ei_limit_ratio"], alpha))
+
     # 미구현 채널도 사유와 함께 남긴다 — 침묵하면 검토된 것으로 오해된다.
     channels += [
-        RSLChannel(name="stiffness", kind="measured", active=False,
-                   inactive_reason="P2 미구현 — PINN 시간분해 EI(EI_series) 필요, 관측 3년 이상"),
         RSLChannel(name="fatigue", kind="model_based", active=False,
                    inactive_reason="P3 미구현 — 피로상세등급·대형차 혼입률 입력 필요(설계코드 추정)"),
         RSLChannel(name="durability", kind="model_based", active=False,
                    inactive_reason="P4 미구현 — 피복두께·노출등급·w/c 점검자료 필요(위성 무관)"),
     ]
 
-    active = [c for c in channels if c.active and c.rsl_lower_years is not None]
-    governing = min(active, key=lambda c: c.rsl_lower_years).name if active else None
-    b_rsl = bridge_rsl if not too_short else None
-    b_lo = bridge_lo if not too_short else None
+    # 교량 대표값 = **활성 채널 중 최소**. 한 채널만 보면 그 채널이 검열됐을 때 다른
+    # 한계상태가 이미 임박했어도 "> horizon" 으로 보인다.
+    usable = [c for c in channels
+              if c.active and not c.censored and c.rsl_lower_years is not None]
+    if usable:
+        gov = min(usable, key=lambda c: c.rsl_lower_years)
+        governing, b_rsl, b_lo = gov.name, gov.rsl_years, gov.rsl_lower_years
+    else:
+        governing, b_rsl, b_lo = None, None, None
 
     out = RemainingLifeOutput(
         n_points=int(ins.n_points),

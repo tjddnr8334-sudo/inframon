@@ -310,6 +310,14 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         # 연직 관측이 있으면 실측 처짐으로부터 EI 식별(더 정확).
         q_eff, load_basis = _effective_load_for_ei(prof, use_traffic, traffic)
         EI_global = _identify_EI_from_pde(d4_hat, L_m, q_eff, w_scale_used * 1e-3)
+        # 시간분해 EI — 위 루프가 이미 시점별 d4 를 구해 놓고 평균만 취했다. 그 평균을
+        # 걷어내면 **재학습 없이** EI(t) 가 나온다. 강성열화 채널(잔존수명 P2)이 소비한다.
+        EI_series = np.array(
+            [_identify_EI_from_pde(v, L_m, q_eff, w_scale_used * 1e-3) for v in d4_vals],
+            dtype=np.float64)
+        # t_sub 는 정규화 시간(0~1) → 첫 취득일 기준 연 단위로 되돌린다.
+        EI_series_t = (t_sub.detach().cpu().numpy().astype(np.float64)
+                       * float(np.ptp(dates)) / 365.25)
 
     comp_thermal, comp_load = thermal, w_load
     comp_settle, comp_anomaly = settle, anom
@@ -473,6 +481,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         ("V_thermal", V_thermal), ("V_load", V_load),
         ("V_settle", V_settle), ("V_anomaly", V_anomaly),
         ("V_func_series", V_func_series),
+        # 시간분해 EI(강성열화 채널용) — 콜로케이션 시점 부분집합 길이 E
+        ("EI_series", EI_series), ("EI_series_t", EI_series_t),
         # 가상센싱(상부거더 전체 변위장)
         ("vsens_x", xv), ("vsens_l_from_fixed", vsens_l),
         ("vsens_total", vsens_total), ("vsens_deflection", vsens_deflection),
@@ -499,6 +509,8 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         V_settle_ds=paths["V_settle"], V_anomaly_ds=paths["V_anomaly"],
         V_func_series_ds=paths["V_func_series"],
         func_names=list(FRAM_FUNCTIONS),
+        n_ei_epochs=int(EI_series.shape[0]),
+        EI_series_ds=paths["EI_series"], EI_series_t_ds=paths["EI_series_t"],
         n_virtual=n_vsens,
         vsens_x_ds=paths["vsens_x"], vsens_l_from_fixed_ds=paths["vsens_l_from_fixed"],
         vsens_total_ds=paths["vsens_total"], vsens_deflection_ds=paths["vsens_deflection"],
