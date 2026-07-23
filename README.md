@@ -207,6 +207,13 @@ InSAR footprint (≤2 km) — farther out there is no guarantee the ground betwe
 so the tie is refused and the anchor serves as regional datum context. A lookup failure never
 blocks bundle generation; GNSS strengthens the evidence, it is not a precondition.
 
+`--gnss-extend-aoi` goes one step further: it widens the processing AOI to enclose the station so
+InSAR points exist *at* it. That turns validation from "bridge-area median vs a station 11 km
+away" into a **co-located, point-to-point** comparison, and lets the reference point sit on the
+station so relative displacement is tied to an absolute datum. The extra processing area is
+reported before you commit (for Jeongja: 57.5 km², ~144k pixels at 20 m multilook), and stations
+are skipped rather than silently blowing past an area budget.
+
 ### BIM / digital-twin alignment
 
 `--bim-align` maps monitoring results onto IFC elements. Most of "merging with BIM" is
@@ -465,6 +472,12 @@ InSAR 연직 −0.12 mm/yr   vs   SUWN −0.62 (29yr) · SON2 +0.03 (9yr) · SG2
 아니라 관측에 근거하게** 한다. 절대 타이는 관측소가 InSAR 발자국 안(≤2km)일 때만 허용한다 —
 그보다 멀면 사이 지반이 같이 움직인다는 보장이 없으므로 타이를 거부하고 지역 연직 기준계
 참고로만 쓴다. 조회 실패가 번들 생성을 막지는 않는다(근거를 더하는 것이지 전제조건이 아니다).
+
+`--gnss-extend-aoi` 는 한 걸음 더 간다 — **AOI 를 관측소까지 넓혀 그 지점에도 InSAR 점이
+생기게** 한다. 그러면 검증이 "교량 일대 중앙값 vs 11km 밖 관측소"가 아니라 **같은 지점
+점 대 점** 대조가 되고, 기준점을 관측소에 두어 상대 변위를 절대 기준에 묶을 수 있다.
+늘어나는 처리 면적은 **결정 전에** 보여준다(정자교: 57.5 km², 멀티룩 20m 기준 약 14만 화소).
+면적 상한을 넘으면 조용히 넘기지 않고 그 관측소를 제외하고 사유를 남긴다.
 
 ### BIM / 디지털 트윈 정합
 

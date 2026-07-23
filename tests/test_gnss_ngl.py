@@ -271,3 +271,105 @@ def test_anchor_survives_station_fetch_failure():
     a = gn.reference_anchor(37.2755, 127.0542, max_km=60, fetch_fn=flaky)
     assert a.best is None
     assert any("취득실패" in (c["rejected"] or "") for c in a.candidates)
+
+
+# ── AOI 확장: GNSS 관측소를 InSAR 발자국 안으로 ────────────────────────
+# 교량만 처리하면 GNSS 는 항상 발자국 밖이라 검증이 "지역 중앙값 vs 수 km 밖 관측소"에
+# 머문다. AOI 를 넓혀 같은 지점에 InSAR 점을 만들면 점 대 점 대조가 된다.
+
+_BRIDGE_BBOX = (127.1080, 37.3630, 127.1100, 37.3640)
+
+
+def _anchor(rows, **kw):
+    return gn.reference_anchor(37.3634, 127.1090, max_km=60,
+                               fetch_fn=_anchor_fetch(rows, **kw))
+
+
+def test_extended_aoi_contains_the_station():
+    a = _anchor({"SUWN": (37.2755, 127.0542, -0.6)})
+    ext = gn.extend_aoi_to_stations(_BRIDGE_BBOX, a)
+    lon0, lat0, lon1, lat1 = ext["aoi"]
+    assert lon0 <= 127.0542 <= lon1 and lat0 <= 37.2755 <= lat1      # 관측소 포함
+    assert lon0 <= _BRIDGE_BBOX[0] and lat1 >= _BRIDGE_BBOX[3]       # 교량도 그대로 포함
+    assert [s["sta"] for s in ext["included"]] == ["SUWN"]
+
+
+def test_extended_aoi_reports_processing_cost():
+    """조용히 키우면 사용자가 몇 시간 뒤 메모리 부족으로 알게 된다."""
+    a = _anchor({"SUWN": (37.2755, 127.0542, -0.6)})
+    ext = gn.extend_aoi_to_stations(_BRIDGE_BBOX, a)
+    assert ext["cost"]["area_km2"] > ext["bridge_cost"]["area_km2"]
+    assert ext["cost_ratio_vs_bridge_only"] > 1
+    assert ext["cost"]["approx_pixels_multilook20m"] > 0
+    assert any("unwrapping" in w or "펼침" in w for w in ext["warnings"])
+
+
+def test_extended_aoi_stops_at_area_budget():
+    """상한을 넘기면 포함을 멈추고 사유를 남긴다 — 넘긴 채로 돌려주지 않는다."""
+    a = _anchor({"SUWN": (37.2755, 127.0542, 0.0)})   # 10.9km — 포함하면 ~57km²
+    ext = gn.extend_aoi_to_stations(_BRIDGE_BBOX, a, max_area_km2=10.0)
+    assert ext["included"] == []
+    assert ext["skipped"] and "상한" in ext["skipped"][0]["reason"]
+    assert ext["aoi"] == pytest.approx(_BRIDGE_BBOX)     # 교량 AOI 그대로
+    assert "절대 타이는 불가" in ext["benefit"]
+
+
+def test_extended_aoi_honours_max_stations():
+    a = _anchor({"AAAA": (37.36, 127.11, 0.0), "BBBB": (37.30, 127.05, 0.0)})
+    one = gn.extend_aoi_to_stations(_BRIDGE_BBOX, a, max_stations=1)
+    two = gn.extend_aoi_to_stations(_BRIDGE_BBOX, a, max_stations=2)
+    assert len(one["included"]) == 1 and len(two["included"]) == 2
+    assert two["cost"]["area_km2"] >= one["cost"]["area_km2"]
+    assert any("max_stations" in s["reason"] for s in one["skipped"])
+
+
+def test_aoi_cost_scales_with_area():
+    small = gn.aoi_cost((127.10, 37.36, 127.11, 37.37))
+    big = gn.aoi_cost((127.00, 37.30, 127.20, 37.40))
+    assert big["area_km2"] > small["area_km2"] * 50
+    assert big["approx_pixels_multilook20m"] > big["approx_pixels_slc"] * 0  # 존재만 확인
+    assert small["width_km"] > 0 and small["height_km"] > 0
+
+
+# ── 검증: 공동위치 대조 ────────────────────────────────────────────────
+def test_colocated_comparison_uses_points_at_the_station(tmp_path):
+    """AOI 가 관측소를 포함하면 그 지점 점들로 대조한다 — 지역 중앙값이 아니라."""
+    import h5py
+    from datetime import date, timedelta
+    m, years = 30, 8.0
+    d0 = date(2016, 1, 1)
+    labels = [(d0 + timedelta(days=int(i * years * 365.25 / (m - 1)))).strftime("%Y%m%d")
+              for i in range(m)]
+    t = np.array([i * years / (m - 1) for i in range(m)])
+    cos = math.cos(math.radians(39.0))
+    # 교량 점 40개(연직 -5mm/yr) + 관측소 SUWN 위 점 10개(연직 0mm/yr)
+    bridge = np.column_stack([np.full(40, 127.109), np.full(40, 37.3634), np.zeros(40)])
+    at_sta = np.column_stack([np.full(10, 127.0542), np.full(10, 37.2755), np.zeros(10)])
+    los = np.vstack([np.tile(-5.0 * cos * t, (40, 1)), np.tile(0.0 * t, (10, 1))])
+    p = tmp_path / "p.h5"
+    with h5py.File(p, "w") as f:
+        g = f.create_group("insar")
+        g.create_dataset("xyz", data=np.vstack([bridge, at_sta]))
+        g.create_dataset("los", data=los)
+        g.create_dataset("date_labels", data=np.array(labels, dtype="S8"))
+
+    r = gn.validate_insar_vs_gnss(str(p), incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+                                  fetch_fn=_fetch({"SUWN": 0.0}))
+    s = next(x for x in r.stations if x["sta"] == "SUWN")
+    assert s["colocated"] is True and s["n_colocated_points"] == 10
+    assert s["insar_up"] == pytest.approx(0.0, abs=0.1)   # 지역(-5)이 아니라 그 지점(0)
+    assert r.n_colocated == 1
+    assert r.rms_up_resid_mm_yr < 0.2                     # 같은 지점끼리라 정합
+    assert "공동위치" in r.summary()
+    assert r.as_dict()["comparison_kind"] == "co-located"
+
+
+def test_regional_fallback_is_labelled_when_no_points_at_station(tmp_path):
+    proj = _project(tmp_path, vel_mm_yr=0.0)              # 교량에만 점
+    r = gn.validate_insar_vs_gnss(proj, incidence_deg=39.0, heading_deg=-13.0, max_km=60,
+                                  fetch_fn=_fetch({"SUWN": 0.0, "SON2": 0.0}))
+    assert r.n_colocated == 0
+    assert all(not s["colocated"] for s in r.stations)
+    assert r.as_dict()["comparison_kind"] == "regional"
+    assert "AOI 에 관측소가 없음" in r.summary()
+    assert "--gnss-extend-aoi" in r.summary()             # 개선 경로를 알려준다

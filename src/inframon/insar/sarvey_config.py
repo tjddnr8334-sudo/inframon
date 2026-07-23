@@ -69,7 +69,8 @@ class RecipeBundle:
             )
 
 
-def build_processing_manifest(b: RecipeBundle, *, gnss_anchor: dict | None = None) -> dict:
+def build_processing_manifest(b: RecipeBundle, *, gnss_anchor: dict | None = None,
+                              gnss_aoi: dict | None = None) -> dict:
     """상류 SLC 스택 생성(ISCE2/MiaplPy)을 위한 매니페스트.
 
     `gnss_anchor` 를 주면 `gnss_reference` 블록으로 실어 **기준점 선정의 지상 근거**와
@@ -91,6 +92,10 @@ def build_processing_manifest(b: RecipeBundle, *, gnss_anchor: dict | None = Non
             "osm": t.osm_url,
             "length_m": t.length_m,
             "buffer_deg": prof.aoi_buffer_deg,   # 교량 규모·해상 여부로 유도(기본 0.05 대체)
+            # GNSS 관측소를 발자국에 넣는 확장 AOI(요청 시). 교량 전용 bbox 는 위에 그대로
+            # 두고 이것을 **대안으로** 제시한다 — 처리 면적이 커지므로 선택은 사용자가 한다.
+            "gnss_extended": gnss_aoi,
+            "processing_bbox_lonlat": (list(gnss_aoi["aoi"]) if gnss_aoi else list(t.bbox)),
         },
         # ── 교량특화: 형식·수계 기반 마스킹/기준점 ──
         "bridge_profile": {
@@ -200,7 +205,8 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
 
 
 def write_sarvey_bundle(recipe_dir: str | Path, out_dir: str | Path | None = None,
-                        *, gnss_km: float | None = None) -> dict[str, Path]:
+                        *, gnss_km: float | None = None, extend_aoi: bool = False,
+                        aoi_stations: int = 1, aoi_max_km2: float = 400.0) -> dict[str, Path]:
     """레시피 4종 → processing_manifest.json + sarvey_config.json 생성.
 
     `gnss_km` 을 주면 그 반경의 NGL 상시 GNSS 를 조회해 **기준점 선정의 지상 근거**를
@@ -211,17 +217,24 @@ def write_sarvey_bundle(recipe_dir: str | Path, out_dir: str | Path | None = Non
     out = Path(out_dir) if out_dir else Path(recipe_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    anchor = None
+    anchor, aoi_ext = None, None
     if gnss_km and bundle.target is not None:
-        from ..gnss_ngl import reference_anchor
+        from .. import gnss_ngl as _gn
         try:
             lat, lon = bundle.target.selected_lat, bundle.target.selected_lon
-            anchor = reference_anchor(lat, lon, max_km=float(gnss_km)).to_dict()
+            a = _gn.reference_anchor(lat, lon, max_km=float(gnss_km))
+            anchor = a.to_dict()
+            if extend_aoi:
+                aoi_ext = _gn.extend_aoi_to_stations(
+                    tuple(bundle.target.bbox), a, max_stations=aoi_stations,
+                    max_area_km2=aoi_max_km2)
+                aoi_ext["aoi"] = list(aoi_ext["aoi"])
+                aoi_ext["bridge_aoi"] = list(aoi_ext["bridge_aoi"])
         except Exception as exc:  # noqa: BLE001 — 네트워크·NGL 장애가 번들을 막으면 안 된다
             anchor = {"error": f"GNSS 조회 실패: {type(exc).__name__}: {str(exc)[:120]}",
                       "note": "GNSS 근거 없이 진행 — 결과를 절대 침하로 읽지 말 것(상대값)."}
 
-    manifest = build_processing_manifest(bundle, gnss_anchor=anchor)
+    manifest = build_processing_manifest(bundle, gnss_anchor=anchor, gnss_aoi=aoi_ext)
     config = build_sarvey_config(bundle)
     manifest_path = out / "processing_manifest.json"
     config_path = out / "sarvey_config.json"

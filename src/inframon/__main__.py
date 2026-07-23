@@ -184,6 +184,14 @@ def main() -> None:
     p.add_argument("--gnss-anchor-km", type=float, default=None, metavar="KM",
                    help="--make-sarvey-config 에 GNSS 기준앵커 근거를 이 반경[km]으로 조회해 "
                         "processing_manifest.json 의 gnss_reference 에 싣는다(네트워크 필요).")
+    p.add_argument("--gnss-extend-aoi", action="store_true",
+                   help="AOI 를 GNSS 관측소까지 넓혀 그 지점에도 InSAR 점이 생기게 한다 — "
+                        "기준점을 관측소에 두어 절대 기준에 묶고, 검증이 지역 대조가 아니라 "
+                        "**같은 지점 점 대 점** 대조가 된다. 처리 면적이 커지므로 비용을 함께 낸다.")
+    p.add_argument("--gnss-aoi-stations", type=int, default=1, metavar="N",
+                   help="--gnss-extend-aoi 에 포함할 관측소 수(기본 1, 점수 상위순).")
+    p.add_argument("--gnss-aoi-max-km2", type=float, default=400.0, metavar="KM2",
+                   help="--gnss-extend-aoi AOI 면적 상한[km²] (기본 400). 넘으면 포함을 멈춘다.")
     p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
                    help="--gnss-validate GNSS 탐색 반경(기본 50km).")
     p.add_argument("--gnss-incidence", type=float, default=39.0, metavar="DEG",
@@ -673,6 +681,26 @@ def main() -> None:
               if a.datum_up_mm_yr is not None else "  지역 연직 기준 : 없음")
         print(f"  절대 타이      : {'가능' if a.can_tie_absolute else f'불가(≤{2.0}km 안에 없음)'}")
         print(f"  권고           : {a.advice}")
+        if args.gnss_extend_aoi:
+            from .gnss_ngl import extend_aoi_to_stations
+            # 교량 AOI 가 따로 없으므로 좌표 주변 최소 상자(±200m)를 기준으로 확장한다.
+            d = 200.0 / 111_000.0
+            ext = extend_aoi_to_stations((_lon - d, _lat - d, _lon + d, _lat + d), a,
+                                         max_stations=args.gnss_aoi_stations,
+                                         max_area_km2=args.gnss_aoi_max_km2)
+            print("-" * 56)
+            print("  AOI 확장(관측소 포함)")
+            print(f"    포함 관측소  : {', '.join(s['sta'] for s in ext['included']) or '없음'}")
+            print(f"    AOI          : {ext['aoi']}")
+            print(f"    면적/화소    : {ext['cost']['area_km2']:.1f} km² "
+                  f"({ext['cost']['width_km']:.1f}×{ext['cost']['height_km']:.1f}km) · "
+                  f"멀티룩20m {ext['cost']['approx_pixels_multilook20m']:,}화소 "
+                  f"· 교량전용 대비 {ext['cost_ratio_vs_bridge_only']:.0f}배")
+            print(f"    이득         : {ext['benefit']}")
+            for w in ext["warnings"]:
+                print(f"    ⚠ {w}")
+            for s in ext["skipped"]:
+                print(f"    · 제외 {s['sta']} — {s['reason']}")
         print("=" * 56)
         return
 
@@ -829,7 +857,10 @@ def main() -> None:
         from .insar.sarvey_config import write_sarvey_bundle
 
         try:
-            paths = write_sarvey_bundle(args.make_sarvey_config, gnss_km=args.gnss_anchor_km)
+            paths = write_sarvey_bundle(args.make_sarvey_config, gnss_km=args.gnss_anchor_km,
+                                        extend_aoi=args.gnss_extend_aoi,
+                                        aoi_stations=args.gnss_aoi_stations,
+                                        aoi_max_km2=args.gnss_aoi_max_km2)
         except FileNotFoundError as exc:
             p.error(str(exc))
         print("=" * 56)

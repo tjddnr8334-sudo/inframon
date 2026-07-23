@@ -215,6 +215,10 @@ def gnss_los_velocities(lat: float, lon: float, *, incidence_deg: float,
 # 수직 대조 판정 임계[mm/yr]. InSAR 연직 정밀도(장기 시계열 ~0.5~1)와 GNSS Up(~0.5)를
 # 감안한 값 — 2 이내면 정합, 5 이내면 허용, 그 이상은 편차.
 VERT_OK_MM_YR, VERT_MARGINAL_MM_YR = 2.0, 5.0
+# 관측소 주변 이 반경[m] 안에 InSAR 점이 있으면 **공동위치(co-location)** 대조로 본다.
+# 지역 중앙값 대조와 달리 같은 지점을 재는 것이라 훨씬 강한 근거다.
+COLOCATION_M = 500.0
+COLOCATION_MIN_POINTS = 5
 # 수직속도 이상치 판정(MAD 배수). 장비 스텝이 남은 관측소를 데이터 기반으로 걸러낸다.
 VERT_OUTLIER_MAD = 5.0
 
@@ -254,6 +258,9 @@ class GnssValidation:
     rms_up_resid_mm_yr: float | None = None    # 이상치 제외 후 수직 잔차 RMS
     n_vertical_used: int = 0
     vertical_outliers: list = field(default_factory=list)
+    # 공동위치 — AOI 가 관측소를 포함해 같은 지점을 잰 관측소 수. 0 이면 간접(지역) 대조다.
+    n_colocated: int = 0
+    colocation_m: float = COLOCATION_M
 
     def summary(self) -> str:
         lines = ["════ InSAR ↔ GNSS(NGL) 신뢰도 지표 ════",
@@ -264,9 +271,11 @@ class GnssValidation:
             flag = "  ⊘이상치" if s.get("vertical_outlier") else ""
             up_r = s.get("up_resid")
             up_txt = f"{up_r:+.2f}" if up_r is not None else "—"
+            co = (f"  ★공동위치({s['n_colocated_points']}점)" if s.get("colocated")
+                  else "  (지역 중앙값 — 관측소에 InSAR 점 없음)")
             lines.append(f"   {s['sta']} {s['dist_km']:.1f}km: 수직 {s['up_vel']:+.2f} "
                          f"→ InSAR−GNSS(수직) {up_txt} mm/yr"
-                         f"  [{s['span_yr']:.0f}yr]{flag}")
+                         f"  [{s['span_yr']:.0f}yr]{flag}{co}")
             lines.append(f"          (LOS {s['gnss_los']:+.2f}, 차 {s['resid']:+.2f} "
                          "— 기준프레임 차 포함이라 판정에 쓰지 않음)")
         if self.dropped:
@@ -280,8 +289,14 @@ class GnssValidation:
                 verdict = "🟡 허용 범위 — 관측기간·기준점 확인 권장"
             else:
                 verdict = "⚠️ 수직 편차 큼 — InSAR 기준프레임/보정 점검 필요"
+            kind = (f"공동위치 {self.n_colocated}개 포함" if self.n_colocated
+                    else "전부 지역 대조 — AOI 에 관측소가 없음")
             lines.append(f" 수직 잔차 RMS {self.rms_up_resid_mm_yr:.2f} mm/yr "
-                         f"(관측소 {self.n_vertical_used}개) — {verdict}")
+                         f"(관측소 {self.n_vertical_used}개, {kind}) — {verdict}")
+            if not self.n_colocated:
+                lines.append("   ⓘ AOI 를 GNSS 관측소까지 넓혀 처리하면(--gnss-extend-aoi) 같은"
+                             " 지점 점 대 점 대조가 되고, 기준점을 그 지점에 두어 절대 기준에"
+                             " 묶을 수 있습니다.")
             if self.vertical_outliers:
                 lines.append("   ⊘ 수직 이상치 제외: " + ", ".join(self.vertical_outliers)
                              + " (장비 스텝 잔재로 판단)")
@@ -316,6 +331,8 @@ class GnssValidation:
                                        else round(self.rms_up_resid_mm_yr, 3)),
                 "n_vertical_used": self.n_vertical_used,
                 "vertical_outliers": self.vertical_outliers,
+                "n_colocated": self.n_colocated, "colocation_m": self.colocation_m,
+                "comparison_kind": ("co-located" if self.n_colocated else "regional"),
                 "primary_metric": "rms_up_resid_mm_yr",
                 "note": ("LOS 잔차는 기준프레임(플레이트 운동) 차를 포함해 판정에 쓰지 않는다. "
                          "판정은 플레이트-무관 수직 잔차로 한다.")}
@@ -323,7 +340,8 @@ class GnssValidation:
 
 def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
                            heading_deg: float | None = None, max_km: float = 50.0,
-                           k: int = 5, fetch_fn=_http_text) -> GnssValidation:
+                           k: int = 5, colocation_m: float = COLOCATION_M,
+                           fetch_fn=_http_text) -> GnssValidation:
     """project.h5 /insar LOS 속도를 인근 NGL GNSS LOS 속도와 대조(광역 기준 신뢰도).
 
     교량 InSAR 점은 GNSS 와 수 km 떨어져 직접 co-location 은 안 되나, **광역 지반 LOS
@@ -369,18 +387,38 @@ def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
     ups = [s.up_vel_mm_yr for s in gnss]
     outlier_mask = _mad_outliers(ups)
 
+    # 관측소별 **공동위치** 판정 — AOI 가 관측소를 포함하도록 처리했다면 그 지점에
+    # InSAR 점이 있다. 그러면 지역 중앙값이 아니라 그 점들로 대조한다(같은 지점 비교).
+    plon, plat = xyz[:, 0], xyz[:, 1]
+    n_colocated_total = 0
+
     stations, resids, up_resids, outliers = [], [], [], []
     for s, is_out in zip(gnss, outlier_mask):
-        r = insar_vel - s.los_vel_mm_yr
+        cosl = math.cos(math.radians(s.lat))
+        d_m = np.hypot((plon - s.lon) * cosl, plat - s.lat) * 111_000.0
+        near = d_m <= float(colocation_m)
+        n_near = int(near.sum())
+        if n_near >= COLOCATION_MIN_POINTS:
+            v_los = float(np.median(vel[near]))          # 그 지점의 InSAR LOS 속도
+            colocated = True
+            n_colocated_total += 1
+        else:
+            v_los = insar_vel                            # 폴백: 지역 중앙값(간접 대조)
+            colocated = False
+        v_up = (v_los / cos_t) if abs(cos_t) > 1e-6 else None
+
+        r = v_los - s.los_vel_mm_yr
         resids.append(r)
-        ur = None if insar_up is None else round(insar_up - s.up_vel_mm_yr, 3)
+        ur = None if v_up is None else round(v_up - s.up_vel_mm_yr, 3)
         if is_out:
             outliers.append(f"{s.sta}(수직 {s.up_vel_mm_yr:+.1f}mm/yr, {s.span_yr:.0f}yr)")
         elif ur is not None:
             up_resids.append(ur)
         stations.append({"sta": s.sta, "dist_km": s.dist_km, "gnss_los": s.los_vel_mm_yr,
-                         "up_vel": s.up_vel_mm_yr, "insar": round(insar_vel, 3),
+                         "up_vel": s.up_vel_mm_yr, "insar": round(v_los, 3),
+                         "insar_up": (None if v_up is None else round(v_up, 3)),
                          "resid": round(r, 3), "up_resid": ur,
+                         "colocated": colocated, "n_colocated_points": n_near,
                          "vertical_outlier": bool(is_out),
                          "n_epochs": s.n_epochs, "span_yr": s.span_yr})
     rms = float(np.sqrt(np.mean(np.square(resids)))) if resids else float("nan")
@@ -392,7 +430,8 @@ def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
                           insar_span_yr=insar_span,
                           insar_up_vel_mm_yr=(None if insar_up is None else round(insar_up, 3)),
                           rms_up_resid_mm_yr=(None if rms_up is None else round(rms_up, 3)),
-                          n_vertical_used=len(up_resids), vertical_outliers=outliers)
+                          n_vertical_used=len(up_resids), vertical_outliers=outliers,
+                          n_colocated=n_colocated_total, colocation_m=float(colocation_m))
 
 
 # ═══════════════ SLC 처리의 지상 근거 — GNSS 기준앵커 ═══════════════
@@ -532,3 +571,105 @@ def reference_anchor(lat: float, lon: float, *, max_km: float = 50.0, k: int = 8
                       can_tie_absolute=can_tie,
                       datum_up_mm_yr=(best.up_vel_mm_yr if best else None),
                       verdict=verdict, advice=advice)
+
+
+# ═══════════ AOI 확장 — GNSS 관측소를 InSAR 발자국 안에 넣는다 ═══════════
+# 교량만 처리하면 GNSS 는 항상 발자국 밖이라 (a) 절대 타이가 불가능하고 (b) 검증이
+# "교량 일대 중앙값 vs 수 km 밖 관측소"라는 간접 비교에 머문다.
+# AOI 를 관측소까지 넓히면 **같은 지점에 InSAR 점이 생겨** 점 대 점 대조가 되고,
+# 기준점을 관측소에 두어 상대 변위를 절대 기준에 묶을 수 있다.
+#
+# 대가는 처리 면적이다. 그래서 넓히기 전에 **비용을 계산해 보여준다** — 조용히
+# 키우면 사용자가 몇 시간 뒤 메모리 부족으로 알게 된다.
+
+# Sentinel-1 IW SLC 화소 간격[m] (range × azimuth) 과 흔히 쓰는 멀티룩 지상간격[m]
+S1_SLC_SPACING_M = (2.3, 13.9)
+S1_ML_SPACING_M = 20.0
+# AOI 확장 기본 상한 — 이보다 커지면 경고한다(처리 시간·메모리).
+DEFAULT_MAX_AOI_KM2 = 400.0
+# 관측소 주변에 확보할 여유[m] — 그 지점에 산란체가 잡히도록.
+DEFAULT_STATION_BUFFER_M = 500.0
+
+
+def _bbox_area_km2(bbox: tuple[float, float, float, float]) -> float:
+    lon0, lat0, lon1, lat1 = bbox
+    lat_m = (lat1 - lat0) * 111.0
+    lon_m = (lon1 - lon0) * 111.0 * math.cos(math.radians((lat0 + lat1) / 2))
+    return abs(lat_m * lon_m)
+
+
+def aoi_cost(bbox: tuple[float, float, float, float]) -> dict:
+    """AOI 처리 비용 추정 — 면적과 화소 수. 판단은 사용자가 한다."""
+    lon0, lat0, lon1, lat1 = bbox
+    h_km = abs(lat1 - lat0) * 111.0
+    w_km = abs(lon1 - lon0) * 111.0 * math.cos(math.radians((lat0 + lat1) / 2))
+    area = h_km * w_km
+    n_slc = (w_km * 1000 / S1_SLC_SPACING_M[0]) * (h_km * 1000 / S1_SLC_SPACING_M[1])
+    n_ml = (w_km * 1000 / S1_ML_SPACING_M) * (h_km * 1000 / S1_ML_SPACING_M)
+    return {"width_km": round(w_km, 3), "height_km": round(h_km, 3),
+            "area_km2": round(area, 3),
+            "approx_pixels_slc": int(n_slc), "approx_pixels_multilook20m": int(n_ml)}
+
+
+def extend_aoi_to_stations(
+    bridge_bbox: tuple[float, float, float, float],
+    anchor: "GnssAnchor",
+    *,
+    max_stations: int = 1,
+    station_buffer_m: float = DEFAULT_STATION_BUFFER_M,
+    max_area_km2: float = DEFAULT_MAX_AOI_KM2,
+) -> dict:
+    """교량 AOI ∪ GNSS 관측소 → 확장 AOI 와 비용.
+
+    점수 상위 `max_stations` 개를 포함한다. 관측소를 넣을수록 검증은 강해지지만 처리
+    면적이 커지므로, `max_area_km2` 를 넘으면 **포함을 멈추고 사유를 남긴다**(넘긴 채로
+    돌려주지 않는다 — 사용자가 몇 시간 뒤에 알게 되면 안 된다).
+
+    Returns: {aoi, included, skipped, cost, cost_ratio, benefit, warnings}
+    """
+    lon0, lat0, lon1, lat1 = (float(v) for v in bridge_bbox)
+    base = (lon0, lat0, lon1, lat1)
+    base_cost = aoi_cost(base)
+
+    usable = [c for c in anchor.candidates if not c["rejected"]]
+    usable.sort(key=lambda c: -c["score"])
+
+    cur = list(base)
+    included, skipped, warnings = [], [], []
+    for c in usable[:max(0, int(max_stations))]:
+        dlat = station_buffer_m / 111_000.0
+        dlon = station_buffer_m / (111_000.0 * math.cos(math.radians(c["lat"])) + 1e-9)
+        cand = (min(cur[0], c["lon"] - dlon), min(cur[1], c["lat"] - dlat),
+                max(cur[2], c["lon"] + dlon), max(cur[3], c["lat"] + dlat))
+        area = _bbox_area_km2(cand)
+        if area > max_area_km2:
+            skipped.append({"sta": c["sta"], "dist_km": c["dist_km"],
+                            "reason": f"포함 시 AOI {area:.0f}km² > 상한 {max_area_km2:.0f}km²"})
+            continue
+        cur = list(cand)
+        included.append({"sta": c["sta"], "dist_km": c["dist_km"],
+                         "span_yr": c["span_yr"], "up_vel_mm_yr": c["up_vel_mm_yr"]})
+    for c in usable[max(0, int(max_stations)):]:
+        skipped.append({"sta": c["sta"], "dist_km": c["dist_km"],
+                        "reason": f"max_stations={max_stations} 초과"})
+
+    aoi = tuple(round(v, 6) for v in cur)
+    cost = aoi_cost(aoi)
+    ratio = round(cost["area_km2"] / max(base_cost["area_km2"], 1e-9), 2)
+
+    if included:
+        benefit = ("GNSS 관측소가 InSAR 발자국 안에 들어옵니다 — 기준점을 그 지점에 두어 "
+                   "상대 변위를 절대 기준에 묶을 수 있고, 검증이 '지역 중앙값 대조'가 아니라 "
+                   "**같은 지점 점 대 점 대조**가 됩니다.")
+        if ratio > 20:
+            warnings.append(f"AOI 면적이 교량 전용 대비 {ratio:.0f}배 — 처리 시간·메모리 확인 필요")
+        warnings.append("교량과 관측소 사이 구간에 결맞음 점이 희소하면 위상 펼침(unwrapping)이 "
+                        "끊길 수 있습니다. 스택 후 연결성을 확인하세요.")
+    else:
+        benefit = ("포함 가능한 관측소가 없어 AOI 는 교량 전용 그대로입니다 — 검증은 지역 "
+                   "대조에 머물고 절대 타이는 불가합니다.")
+
+    return {"bridge_aoi": base, "aoi": aoi, "included": included, "skipped": skipped,
+            "bridge_cost": base_cost, "cost": cost, "cost_ratio_vs_bridge_only": ratio,
+            "station_buffer_m": station_buffer_m, "max_area_km2": max_area_km2,
+            "benefit": benefit, "warnings": warnings}
