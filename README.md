@@ -198,6 +198,15 @@ This validates the wide-area reference frame and atmospheric correction, **not**
 members: the GNSS stations are kilometres away on the ground, and the vertical comparison still
 assumes the InSAR reference point is stable.
 
+The same network also feeds the SLC processing recipe *before* processing. `--gnss-anchor
+LAT,LON` scores nearby stations by record length, vertical stability, scatter and distance, and
+`--make-sarvey-config --gnss-anchor-km 60` carries the best one into `processing_manifest.json`
+as `gnss_reference`, so reference-point selection rests on observation instead of a
+per-bridge-type heuristic. An absolute tie is permitted only when a station falls inside the
+InSAR footprint (≤2 km) — farther out there is no guarantee the ground between moves together,
+so the tie is refused and the anchor serves as regional datum context. A lookup failure never
+blocks bundle generation; GNSS strengthens the evidence, it is not a precondition.
+
 ### BIM / digital-twin alignment
 
 `--bim-align` maps monitoring results onto IFC elements. Most of "merging with BIM" is
@@ -449,6 +458,13 @@ InSAR 연직 −0.12 mm/yr   vs   SUWN −0.62 (29yr) · SON2 +0.03 (9yr) · SG2
 
 이것이 검증하는 것은 **광역 기준프레임과 대기보정**이지 교량 부재가 아니다. GNSS 관측소는
 수 km 떨어진 지반에 있고, 수직 대조도 InSAR 기준점이 안정하다는 가정 위에 있다.
+
+같은 GNSS 망은 **SLC 처리 전** 레시피에도 들어간다. `--gnss-anchor LAT,LON` 이 인근 관측소를
+관측기간·연직 안정성·산포·거리로 점수 매기고, `--make-sarvey-config --gnss-anchor-km 60` 이
+최적 관측소를 `processing_manifest.json` 의 `gnss_reference` 로 실어 **기준점 선정이 휴리스틱이
+아니라 관측에 근거하게** 한다. 절대 타이는 관측소가 InSAR 발자국 안(≤2km)일 때만 허용한다 —
+그보다 멀면 사이 지반이 같이 움직인다는 보장이 없으므로 타이를 거부하고 지역 연직 기준계
+참고로만 쓴다. 조회 실패가 번들 생성을 막지는 않는다(근거를 더하는 것이지 전제조건이 아니다).
 
 ### BIM / 디지털 트윈 정합
 

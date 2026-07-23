@@ -178,6 +178,12 @@ def main() -> None:
                    help="IFC 사전점검 — IfcMapConversion·좌표계·부재 타입 분포 출력 후 종료.")
     p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
                    help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
+    p.add_argument("--gnss-anchor", default=None, metavar="LAT,LON",
+                   help="NGL 상시 GNSS 기준앵커 조회 후 종료 — SLC 처리 기준점 선정의 지상 근거. "
+                        "반경은 --gnss-km.")
+    p.add_argument("--gnss-anchor-km", type=float, default=None, metavar="KM",
+                   help="--make-sarvey-config 에 GNSS 기준앵커 근거를 이 반경[km]으로 조회해 "
+                        "processing_manifest.json 의 gnss_reference 에 싣는다(네트워크 필요).")
     p.add_argument("--gnss-km", type=float, default=50.0, metavar="KM",
                    help="--gnss-validate GNSS 탐색 반경(기본 50km).")
     p.add_argument("--gnss-incidence", type=float, default=39.0, metavar="DEG",
@@ -643,6 +649,33 @@ def main() -> None:
         print("=" * 56)
         return
 
+    if args.gnss_anchor:
+        from .gnss_ngl import reference_anchor
+        try:
+            _lat, _lon = (float(v) for v in args.gnss_anchor.split(","))
+        except ValueError:
+            p.error("--gnss-anchor 형식은 LAT,LON 입니다")
+        try:
+            a = reference_anchor(_lat, _lon, max_km=args.gnss_km)
+        except (OSError, ValueError) as exc:
+            p.error(f"NGL 조회 실패: {exc}")
+        print("=" * 56)
+        print("  GNSS 기준앵커 — SLC 처리의 지상 근거")
+        print("=" * 56)
+        print(f"  교량 좌표      : {a.bridge_lat}, {a.bridge_lon} (반경 {a.max_km:.0f}km)")
+        for c in a.candidates:
+            mark = "★" if a.best and c["sta"] == a.best["sta"] else " "
+            tail = (f"연직 {c['up_vel_mm_yr']:+.2f} mm/yr · 산포 {c['up_scatter_mm']:.1f}mm "
+                    f"· 점수 {c['score']}" if not c["rejected"] else f"제외 — {c['rejected']}")
+            print(f"  {mark} {c['sta']:5} {c['dist_km']:6.1f}km  {c['span_yr']:5.1f}년  {tail}")
+        print(f"  판정           : {a.verdict}")
+        print(f"  지역 연직 기준 : {a.datum_up_mm_yr} mm/yr"
+              if a.datum_up_mm_yr is not None else "  지역 연직 기준 : 없음")
+        print(f"  절대 타이      : {'가능' if a.can_tie_absolute else f'불가(≤{2.0}km 안에 없음)'}")
+        print(f"  권고           : {a.advice}")
+        print("=" * 56)
+        return
+
     if args.gnss_validate:
         from .gnss_ngl import validate_insar_vs_gnss
         try:
@@ -796,7 +829,7 @@ def main() -> None:
         from .insar.sarvey_config import write_sarvey_bundle
 
         try:
-            paths = write_sarvey_bundle(args.make_sarvey_config)
+            paths = write_sarvey_bundle(args.make_sarvey_config, gnss_km=args.gnss_anchor_km)
         except FileNotFoundError as exc:
             p.error(str(exc))
         print("=" * 56)
@@ -804,6 +837,19 @@ def main() -> None:
         print("=" * 56)
         print(f"  처리 매니페스트 : {paths['manifest']}  (ISCE2/MiaplPy 스택 생성용)")
         print(f"  SARvey config   : {paths['config']}  (시계열 추정용)")
+        if args.gnss_anchor_km:
+            import json as _json
+            _gr = _json.loads(Path(paths["manifest"]).read_text(encoding="utf-8")).get("gnss_reference")
+            if not _gr:
+                print("  GNSS 근거      : 없음")
+            elif _gr.get("error"):
+                print(f"  GNSS 근거      : {_gr['error']}")
+            else:
+                _a = _gr.get("anchor")
+                print(f"  GNSS 근거      : {_gr['verdict']}"
+                      + (f" — {_a['sta']} {_a['dist_km']:.1f}km, 관측 {_a['span_yr']:.0f}년, "
+                         f"연직 {_a['up_vel_mm_yr']:+.2f} mm/yr" if _a else ""))
+                print(f"                   {_gr['advice']}")
         print("=" * 56)
         return
 

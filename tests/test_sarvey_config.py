@@ -207,3 +207,52 @@ def test_manifest_carries_insar_conditions(tmp_path):
     assert "ready" in cond and "counts" in cond
     ids = {c["id"] for c in cond["conditions"]}
     assert {"G1", "G2", "T1", "S1"} <= ids       # 기하·시간·산란체 조건 포함
+
+
+# ── SLC 처리 매니페스트에 실리는 지상 근거(GNSS 기준앵커) ──────────────
+def test_manifest_has_no_gnss_block_by_default(tmp_path):
+    """네트워크 조회는 명시할 때만 — 기본 번들 생성은 오프라인으로 동작해야 한다."""
+    _seed_recipes(tmp_path)
+    man = json.loads(write_sarvey_bundle(tmp_path)["manifest"].read_text(encoding="utf-8"))
+    assert man["gnss_reference"] is None
+    assert "휴리스틱만" in man["mask"]["reference_point_evidence"]
+
+
+def test_manifest_carries_gnss_reference_evidence(tmp_path, monkeypatch):
+    """--gnss-anchor-km 를 주면 기준점 선정의 지상 근거가 매니페스트에 실린다."""
+    import inframon.gnss_ngl as gn
+    _seed_recipes(tmp_path)
+
+    def fake_anchor(lat, lon, **kw):
+        assert (round(lat, 4), round(lon, 4)) == (37.3667, 127.1075)   # 타깃 좌표로 조회
+        return gn.GnssAnchor(bridge_lat=lat, bridge_lon=lon, max_km=kw.get("max_km", 50),
+                             candidates=[{"sta": "SUWN", "dist_km": 10.9, "rejected": None}],
+                             best={"sta": "SUWN", "dist_km": 10.9, "span_yr": 28.6,
+                                   "up_vel_mm_yr": -0.62},
+                             can_tie_absolute=False, datum_up_mm_yr=-0.62,
+                             verdict="지역 기준계 참고만", advice="…")
+    monkeypatch.setattr(gn, "reference_anchor", fake_anchor)
+
+    man = json.loads(write_sarvey_bundle(tmp_path, gnss_km=60)["manifest"]
+                     .read_text(encoding="utf-8"))
+    gr = man["gnss_reference"]
+    assert gr["anchor"]["sta"] == "SUWN"
+    assert gr["can_tie_absolute"] is False
+    assert gr["holdings_url"].startswith("https://geodesy.unr.edu")   # 출처 명시
+    assert "gnss_reference" in man["mask"]["reference_point_evidence"]
+
+
+def test_gnss_lookup_failure_does_not_block_bundle(tmp_path, monkeypatch):
+    """GNSS 는 근거를 더해 주는 것이지 SLC 처리의 전제조건이 아니다."""
+    import inframon.gnss_ngl as gn
+    _seed_recipes(tmp_path)
+
+    def boom(lat, lon, **kw):
+        raise OSError("network down")
+    monkeypatch.setattr(gn, "reference_anchor", boom)
+
+    paths = write_sarvey_bundle(tmp_path, gnss_km=60)
+    man = json.loads(paths["manifest"].read_text(encoding="utf-8"))
+    assert paths["config"].exists()                       # 번들은 그대로 생성
+    assert "GNSS 조회 실패" in man["gnss_reference"]["error"]
+    assert "상대값" in man["gnss_reference"]["note"]       # 한계를 알린다

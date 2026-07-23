@@ -192,3 +192,82 @@ def test_mad_outliers_needs_three_samples():
     assert gn._mad_outliers([1.0, 99.0]) == [False, False]   # 표본 부족 → 판단 보류
     flags = gn._mad_outliers([0.0, 0.1, -0.1, 30.0])
     assert flags[-1] and not any(flags[:-1])
+
+
+# ── SLC 처리의 지상 근거: 기준앵커 ─────────────────────────────────────
+# InSAR 는 상대 변위다. 기준점을 어디 두느냐가 전 결과의 원점을 정하는데 지금까지 근거가
+# 형식별 휴리스틱 문자열뿐이었다. 인근 상시 GNSS 가 그 선택을 관측으로 뒷받침한다.
+# 다만 절대 타이는 GNSS 가 발자국 안(≤TIE_MAX_KM)일 때만 정당하다.
+
+def _anchor_fetch(rows: dict, *, span_yr: float = 10.0, n: int = 25):
+    """{sta: (lat, lon, up_mm_yr)} → holdings/tenv3 fetch_fn."""
+    lines = ["Sta Lat Long Hgt X Y Z Dtbeg Dtend"]
+    for sta, (la, lo, _u) in rows.items():
+        lines.append(f"{sta}  {la}  {lo}  80.0  0 0 0  2010-01-01 2026-01-01")
+    holdings = "\n".join(lines)
+
+    def fake(url):
+        if url == gn.HOLDINGS_URL:
+            return holdings
+        for sta, (_la, _lo, up) in rows.items():
+            if f"/{sta}." in url or url.endswith(f"{sta}.tenv3"):
+                step = span_yr / (n - 1)
+                return _tenv3([(2010.0 + i * step, 0.0, 0.0, 100.0 + i * step * up / 1000.0)
+                               for i in range(n)])
+        raise OSError("no data")
+    return fake
+
+
+def test_anchor_prefers_long_stable_close_station():
+    """오래 관측되고·연직으로 안 움직이고·가까운 곳이 기준점 근거로 낫다."""
+    a = gn.reference_anchor(37.3634, 127.1090, max_km=60, fetch_fn=_anchor_fetch({
+        "AAAA": (37.36, 127.11, 0.0),      # 가깝고 안정
+        "BBBB": (37.60, 127.40, -5.0),     # 멀고 침하 중
+    }))
+    assert a.best["sta"] == "AAAA"
+    assert a.datum_up_mm_yr == pytest.approx(0.0, abs=0.1)
+    assert all(c["score"] > 0 for c in a.candidates if not c["rejected"])
+
+
+def test_anchor_refuses_absolute_tie_when_far():
+    """수 km 떨어진 GNSS 로 절대 타이를 하면 사이 지반이 같이 움직인다는 보장이 없다."""
+    a = gn.reference_anchor(37.3634, 127.1090, max_km=60, fetch_fn=_anchor_fetch({
+        "FARR": (37.45, 127.20, 0.0)}))
+    assert a.best["dist_km"] > gn.TIE_MAX_KM
+    assert a.can_tie_absolute is False
+    assert "절대 침하로는 읽지 마세요" in a.advice
+
+
+def test_anchor_allows_tie_inside_footprint():
+    a = gn.reference_anchor(37.3634, 127.1090, max_km=60, fetch_fn=_anchor_fetch({
+        "NEAR": (37.3640, 127.1100, 0.0)}))
+    assert a.best["dist_km"] <= gn.TIE_MAX_KM
+    assert a.can_tie_absolute is True and a.verdict == "절대 타이 가능"
+
+
+def test_anchor_rejects_short_record_with_reason():
+    a = gn.reference_anchor(37.3634, 127.1090, max_km=60,
+                            fetch_fn=_anchor_fetch({"SHRT": (37.36, 127.11, 0.0)}, span_yr=2.0))
+    rej = [c for c in a.candidates if c["rejected"]]
+    assert rej and "속도 신뢰 곤란" in rej[0]["rejected"]
+    assert a.best is None and a.verdict == "지상 근거 없음"
+    assert "상대값" in a.advice
+
+
+def test_anchor_dict_carries_provenance_and_limits():
+    a = gn.reference_anchor(37.3634, 127.1090, max_km=60,
+                            fetch_fn=_anchor_fetch({"AAAA": (37.36, 127.11, 0.0)})).to_dict()
+    assert a["holdings_url"] == gn.HOLDINGS_URL          # 출처를 결과에 남긴다
+    assert a["tie_max_km"] == gn.TIE_MAX_KM
+    assert "상대 변위" in a["note"]
+    assert a["search_radius_km"] == 60
+
+
+def test_anchor_survives_station_fetch_failure():
+    def flaky(url):
+        if url == gn.HOLDINGS_URL:
+            return _HOLDINGS
+        raise OSError("timeout")
+    a = gn.reference_anchor(37.2755, 127.0542, max_km=60, fetch_fn=flaky)
+    assert a.best is None
+    assert any("취득실패" in (c["rejected"] or "") for c in a.candidates)

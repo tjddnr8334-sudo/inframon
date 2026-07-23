@@ -69,8 +69,12 @@ class RecipeBundle:
             )
 
 
-def build_processing_manifest(b: RecipeBundle) -> dict:
-    """상류 SLC 스택 생성(ISCE2/MiaplPy)을 위한 매니페스트."""
+def build_processing_manifest(b: RecipeBundle, *, gnss_anchor: dict | None = None) -> dict:
+    """상류 SLC 스택 생성(ISCE2/MiaplPy)을 위한 매니페스트.
+
+    `gnss_anchor` 를 주면 `gnss_reference` 블록으로 실어 **기준점 선정의 지상 근거**와
+    지역 연직 기준계를 함께 남긴다(`gnss_ngl.reference_anchor` 결과).
+    """
     b.require()
     t, trk, crit, mst = b.target, b.track, b.criteria, b.master
     prof = profile_for(t)
@@ -103,7 +107,12 @@ def build_processing_manifest(b: RecipeBundle) -> dict:
                 "note": "정확한 데크 마스크는 이 OSM way 지오메트리를 deck_buffer_m 로 버퍼링해 생성",
             },
             "reference_point_hint": prof.reference_hint,
+            "reference_point_evidence": (
+                "gnss_reference 블록 참조 — 형식별 휴리스틱보다 지상 GNSS 근거가 우선"
+                if gnss_anchor else "형식별 휴리스틱만(인근 GNSS 미조회)"),
         },
+        # 지상 근거 — InSAR 는 상대 변위이므로 기준점 선정과 기준계 해석의 근거가 필요하다.
+        "gnss_reference": gnss_anchor,
         "stack": {
             "mission": "SENTINEL-1",
             "product": "SLC",
@@ -190,13 +199,29 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
     }
 
 
-def write_sarvey_bundle(recipe_dir: str | Path, out_dir: str | Path | None = None) -> dict[str, Path]:
-    """레시피 4종 → processing_manifest.json + sarvey_config.json 생성."""
+def write_sarvey_bundle(recipe_dir: str | Path, out_dir: str | Path | None = None,
+                        *, gnss_km: float | None = None) -> dict[str, Path]:
+    """레시피 4종 → processing_manifest.json + sarvey_config.json 생성.
+
+    `gnss_km` 을 주면 그 반경의 NGL 상시 GNSS 를 조회해 **기준점 선정의 지상 근거**를
+    매니페스트에 싣는다(네트워크 필요). 조회에 실패해도 번들 생성은 계속한다 —
+    GNSS 는 근거를 더해 주는 것이지 SLC 처리의 전제조건이 아니다.
+    """
     bundle = RecipeBundle(recipe_dir)
     out = Path(out_dir) if out_dir else Path(recipe_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    manifest = build_processing_manifest(bundle)
+    anchor = None
+    if gnss_km and bundle.target is not None:
+        from ..gnss_ngl import reference_anchor
+        try:
+            lat, lon = bundle.target.selected_lat, bundle.target.selected_lon
+            anchor = reference_anchor(lat, lon, max_km=float(gnss_km)).to_dict()
+        except Exception as exc:  # noqa: BLE001 — 네트워크·NGL 장애가 번들을 막으면 안 된다
+            anchor = {"error": f"GNSS 조회 실패: {type(exc).__name__}: {str(exc)[:120]}",
+                      "note": "GNSS 근거 없이 진행 — 결과를 절대 침하로 읽지 말 것(상대값)."}
+
+    manifest = build_processing_manifest(bundle, gnss_anchor=anchor)
     config = build_sarvey_config(bundle)
     manifest_path = out / "processing_manifest.json"
     config_path = out / "sarvey_config.json"

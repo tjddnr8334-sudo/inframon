@@ -393,3 +393,142 @@ def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
                           insar_up_vel_mm_yr=(None if insar_up is None else round(insar_up, 3)),
                           rms_up_resid_mm_yr=(None if rms_up is None else round(rms_up, 3)),
                           n_vertical_used=len(up_resids), vertical_outliers=outliers)
+
+
+# ═══════════════ SLC 처리의 지상 근거 — GNSS 기준앵커 ═══════════════
+# InSAR 는 **상대** 변위만 준다. 기준점을 어디에 두느냐가 전 결과의 원점을 정하는데,
+# 지금까지 그 근거는 형식별 휴리스틱 문자열(`reference_hint`)뿐이었다. 인근 상시 GNSS
+# 관측소는 그 선택을 **관측으로 뒷받침**할 수 있는 유일한 지상 근거다.
+#
+# 다만 절대 타이(relative → absolute)는 GNSS 가 InSAR 발자국 안에 있을 때만 정당하다.
+# 정자교처럼 최근접이 11km 면 그 사이 지반이 같이 움직인다는 보장이 없다. 그래서
+# 앵커는 **근거와 기준계 맥락**으로 제공하고, 멀면 자동 타이를 거부한다.
+
+# 절대 타이를 허용할 최대 거리[km]. 이보다 멀면 지역 기준계 정보로만 쓴다.
+TIE_MAX_KM = 2.0
+# 앵커 후보의 최소 관측기간[년]. 속도를 신뢰하려면 이 정도는 필요하다.
+ANCHOR_MIN_SPAN_YR = 5.0
+
+
+@dataclass
+class GnssAnchorCandidate:
+    sta: str
+    lat: float
+    lon: float
+    dist_km: float
+    span_yr: float
+    n_epochs: int
+    up_vel_mm_yr: float
+    up_scatter_mm: float
+    score: float
+    rejected: str | None = None
+
+
+@dataclass
+class GnssAnchor:
+    """SLC 처리 레시피에 실을 지상 기준 근거."""
+    bridge_lat: float
+    bridge_lon: float
+    max_km: float
+    candidates: list          # GnssAnchorCandidate → dict
+    best: dict | None         # 최적 앵커(없으면 None)
+    can_tie_absolute: bool    # 발자국 안(≤TIE_MAX_KM)이라 절대 타이가 정당한가
+    datum_up_mm_yr: float | None   # 지역 연직 기준 속도(앵커의 Up)
+    verdict: str
+    advice: str
+
+    def to_dict(self) -> dict:
+        return {
+            "source": "NGL (Nevada Geodetic Laboratory) 상시 GNSS",
+            "holdings_url": HOLDINGS_URL,
+            "timeseries_url_pattern": TENV3_URL,
+            "bridge": {"lat": self.bridge_lat, "lon": self.bridge_lon},
+            "search_radius_km": self.max_km,
+            "candidates": self.candidates,
+            "anchor": self.best,
+            "can_tie_absolute": self.can_tie_absolute,
+            "tie_max_km": TIE_MAX_KM,
+            "datum_up_mm_yr": self.datum_up_mm_yr,
+            "verdict": self.verdict,
+            "advice": self.advice,
+            "note": ("InSAR 는 상대 변위다. 이 블록은 기준점 선정의 지상 근거와 지역 연직 "
+                     "기준계를 제공한다. 절대 타이는 GNSS 가 InSAR 발자국 안(≤"
+                     f"{TIE_MAX_KM}km)일 때만 정당하다 — 그보다 멀면 사이 지반이 같이 "
+                     "움직인다는 보장이 없다."),
+        }
+
+
+def _anchor_score(dist_km: float, span_yr: float, up_vel: float, scatter: float) -> float:
+    """앵커 적합도 — 클수록 좋다.
+
+    기준점은 **오래 관측됐고, 연직으로 안 움직이고, 산포가 작고, 가까운** 곳이어야 한다.
+    각 항을 물리적으로 의미 있는 스케일로 정규화해 곱이 아니라 합으로 둔다(한 항이 0 이어도
+    나머지 정보가 살아 있게).
+    """
+    s_span = min(span_yr / 10.0, 2.0)             # 10년이면 만점권
+    s_stab = 1.0 / (1.0 + abs(up_vel) / 1.0)      # |연직속도| 1mm/yr 에서 0.5
+    s_scat = 1.0 / (1.0 + scatter / 10.0)         # 산포 10mm 에서 0.5
+    s_dist = 1.0 / (1.0 + dist_km / 10.0)         # 10km 에서 0.5
+    return round(s_span + s_stab + s_scat + s_dist, 4)
+
+
+def reference_anchor(lat: float, lon: float, *, max_km: float = 50.0, k: int = 8,
+                     min_span_yr: float = ANCHOR_MIN_SPAN_YR,
+                     max_scatter_mm: float = 60.0,
+                     fetch_fn=_http_text) -> GnssAnchor:
+    """교량 좌표 → SLC 처리에 실을 GNSS 기준앵커 근거.
+
+    `--make-sarvey-config` 가 이 결과를 `processing_manifest.json` 의 `gnss_reference`
+    블록으로 실어, SARvey/MintPy 기준점 선정과 결과 해석의 지상 근거로 쓰게 한다.
+    """
+    holdings = parse_holdings(fetch_fn(HOLDINGS_URL))
+    cands: list[GnssAnchorCandidate] = []
+    for s in nearest_stations(lat, lon, holdings, max_km=max_km, k=k):
+        try:
+            ser = parse_tenv3(fetch_fn(TENV3_URL.format(sta=s.sta)), s.sta)
+        except Exception as exc:  # noqa: BLE001 — 개별 관측소 실패는 후보에서만 제외
+            cands.append(GnssAnchorCandidate(s.sta, s.lat, s.lon, s.dist_km, 0.0, 0, 0.0, 0.0,
+                                             0.0, f"취득실패:{type(exc).__name__}"))
+            continue
+        vu, su = robust_rate_mm_yr(ser.decyr, ser.du_mm)
+        rej = None
+        if ser.span_yr < min_span_yr:
+            rej = f"관측 {ser.span_yr:.1f}yr < {min_span_yr:.0f}yr — 속도 신뢰 곤란"
+        elif su > max_scatter_mm:
+            rej = f"산포 {su:.0f}mm — 장비 스텝/불량해 의심"
+        cands.append(GnssAnchorCandidate(
+            s.sta, s.lat, s.lon, s.dist_km, round(ser.span_yr, 2), ser.n_epochs,
+            round(vu, 3), round(su, 2),
+            0.0 if rej else _anchor_score(s.dist_km, ser.span_yr, vu, su), rej))
+
+    ok = [c for c in cands if c.rejected is None]
+    ok.sort(key=lambda c: -c.score)
+    best = ok[0] if ok else None
+    can_tie = bool(best and best.dist_km <= TIE_MAX_KM)
+
+    if best is None:
+        verdict = "지상 근거 없음"
+        advice = (f"반경 {max_km:.0f}km 안에 쓸 만한 상시 GNSS 가 없습니다. 기준점은 형식별 "
+                  "휴리스틱으로 두되, 결과를 절대 침하로 읽지 마세요(상대값).")
+    elif can_tie:
+        verdict = "절대 타이 가능"
+        advice = (f"{best.sta} 가 {best.dist_km:.1f}km — InSAR 발자국 안입니다. 이 점을 "
+                  "기준점 근처에 두고 GNSS 연직속도로 절대 기준을 맞출 수 있습니다.")
+    else:
+        verdict = "지역 기준계 참고만"
+        advice = (f"최근접 {best.sta} 가 {best.dist_km:.1f}km 로 발자국 밖입니다"
+                  f"(타이 허용 {TIE_MAX_KM}km). 기준점 선정 근거와 지역 연직 기준"
+                  f"({best.up_vel_mm_yr:+.2f} mm/yr)으로만 쓰고, 절대 침하로는 읽지 마세요. "
+                  "결과 검증은 --gnss-validate 의 수직 대조로 합니다.")
+
+    def _d(c: GnssAnchorCandidate) -> dict:
+        return {"sta": c.sta, "lat": c.lat, "lon": c.lon, "dist_km": c.dist_km,
+                "span_yr": c.span_yr, "n_epochs": c.n_epochs,
+                "up_vel_mm_yr": c.up_vel_mm_yr, "up_scatter_mm": c.up_scatter_mm,
+                "score": c.score, "rejected": c.rejected}
+
+    return GnssAnchor(bridge_lat=round(lat, 6), bridge_lon=round(lon, 6), max_km=max_km,
+                      candidates=[_d(c) for c in cands], best=(_d(best) if best else None),
+                      can_tie_absolute=can_tie,
+                      datum_up_mm_yr=(best.up_vel_mm_yr if best else None),
+                      verdict=verdict, advice=advice)
