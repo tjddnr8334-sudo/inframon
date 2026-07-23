@@ -1,0 +1,7 @@
+{
+  "perp_baseline_max_m": 150.0,
+  "temporal_baseline_max_days": 60.0,
+  "polarization": "VV",
+  "orbit_direction": null,
+  "prefer_most_data_track": true
+}

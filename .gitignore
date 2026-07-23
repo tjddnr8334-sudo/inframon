@@ -26,3 +26,8 @@ data/
 # make_readme_media 의 실데이터 애니메이션 — 5MB 대라 README 에 안 쓰고 커밋도 안 한다
 # (README 가 쓰는 개념 데모는 docs/img/demo_bridge.gif, make_demo_preview.py 산출)
 docs/img/demo.gif
+
+# configs/ 는 **입력**만 추적한다. 아래는 --make-sarvey-config 생성물이라 입력에서
+# 언제든 재생성되고, 커밋해 두면 입력과 어긋난 채 남아 오해를 부른다.
+configs/*/processing_manifest.json
+configs/*/sarvey_config.json

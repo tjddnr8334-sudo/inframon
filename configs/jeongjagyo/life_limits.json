@@ -1,0 +1,13 @@
+{
+  "_README": "잔존수명 한계값. --life-* 플래그로도 줄 수 있지만 여기 두면 공유·검토된다.",
+  "design_life_years": 100.0,
+  "deck_deflection_ratio": 800.0,
+  "settlement_mm": 25.0,
+  "angular_distortion": 0.002,
+  "ei_limit_ratio": 0.8,
+  "_sources": {
+    "design_life_years": "도로교설계기준 설계공용수명 — 발주처 확인 필요",
+    "settlement_mm": "지반조사 보고서 기준 — 현재는 기본가정 25mm",
+    "angular_distortion": "1/500 부등침하 각변위"
+  }
+}

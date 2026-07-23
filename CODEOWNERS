@@ -1,0 +1,6 @@
+# 기본 리뷰어
+*                       @tjddnr8334-sudo
+
+# 계약은 성역 — 여기 변경은 반드시 리뷰를 거친다.
+/src/inframon/contracts/  @tjddnr8334-sudo
+/tests/golden/            @tjddnr8334-sudo
