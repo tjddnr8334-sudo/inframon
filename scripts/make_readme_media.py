@@ -48,6 +48,10 @@ with h5py.File(PROJECT, "r") as f:
     ct = f["/pinn/comp_thermal"][()] if "/pinn/comp_thermal" in f else None
     cl = f["/pinn/comp_load"][()] if "/pinn/comp_load" in f else None
     cs = f["/pinn/comp_settle"][()] if "/pinn/comp_settle" in f else None
+    # 인제스트에서 보정된 속도[mm/yr] — 있으면 즉석 회귀 대신 이걸 쓴다(단위도 mm/yr 로 정확).
+    vel_stored = f["/insar/velocity_mm_yr"][()] if "/insar/velocity_mm_yr" in f else None
+    life_meta = json.loads(f["/life"].attrs["meta"]) if "/life" in f and "meta" in f["/life"].attrs else None
+    days = f["/insar/dates"][()] if "/insar/dates" in f else None
     fm = json.loads(f["/fram"].attrs.get("meta", "{}"))
 lon, lat = xyz[:, 0], xyz[:, 1]
 N, M = los.shape
@@ -84,24 +88,97 @@ def _basemap(ax, extent=None):
         print("basemap 실패(오프라인?):", e)
     ax.set_xticks([]); ax.set_yticks([])
 
+# ── 교량 형상(선택) — 지도 패널에 위치를 표시하기 위해 먼저 읽는다 ──
+BRIDGE = sys.argv[2] if len(sys.argv) > 2 else None      # {"name","geometry":[[lat,lon],...]}
+bg = None
+if BRIDGE:
+    with open(BRIDGE, encoding="utf-8") as fh:
+        bg = json.load(fh)
+bx = by = None
+if bg:
+    _blat = np.array([p[0] for p in bg["geometry"]], dtype=float)
+    _blon = np.array([p[1] for p in bg["geometry"]], dtype=float)
+    bx, by = _tf.transform(_blon, _blat)
+BNAME = _label((bg or {}).get("name") or "bridge", (bg or {}).get("name_roman") or "Jeongja Br.")
+
+
+def _robust_lim(v):
+    """이상치에 죽지 않는 대칭 색범위. min/max 를 쓰면 극단점 몇 개가 전 범위를 먹어
+    나머지 99% 가 흰색으로 뭉개진다(예전 그림이 그랬다)."""
+    a = np.abs(np.asarray(v, float))
+    a = a[np.isfinite(a)]
+    m = float(np.percentile(a, 98)) if a.size else 1.0
+    return -max(m, 1e-9), max(m, 1e-9)
+
+
+def _map_panel(a, values, title, cbar_label):
+    """OSM 위에 점을 뿌리고 교량을 표시한다. 경위도 축(+1.271e2 오프셋 표기)은 읽을 수
+    없어 웹메르카토르 + 베이스맵으로 바꿨다 — 위치가 눈에 보여야 그림이 의미가 있다."""
+    vmin, vmax = _robust_lim(values)
+    sc = a.scatter(mx, my, c=values, cmap="RdBu_r", s=8, vmin=vmin, vmax=vmax,
+                   edgecolor="k", linewidth=.15, zorder=3)
+    if bx is not None:
+        a.plot(bx, by, "-", color="lime", lw=4, zorder=4, solid_capstyle="round")
+        a.plot(bx, by, "-", color="black", lw=1.2, zorder=5)
+    _basemap(a)
+    a.set_title(title, fontsize=11)
+    cb = fig.colorbar(sc, ax=a, shrink=.82)
+    cb.set_label(cbar_label, fontsize=9)
+    cb.ax.tick_params(labelsize=8)
+
+
 # ── overview 2x2 ──
-fig, ax = plt.subplots(2, 2, figsize=(11, 8))
-fig.suptitle(f"inframon — bridge InSAR monitoring (SARvey→PINN→FRAM)   N={N} pts, M={M} epochs, "
-             f"alert: {level}", fontsize=12, fontweight="bold")
-s0 = ax[0, 0].scatter(lon, lat, c=los[:, -1], cmap="RdBu_r", s=6)
-ax[0, 0].set_title("InSAR LOS displacement (last epoch, mm)"); fig.colorbar(s0, ax=ax[0, 0])
-vel = np.polyfit(np.arange(M), los.T, 1)[0]
-s1 = ax[0, 1].scatter(lon, lat, c=vel, cmap="RdBu_r", s=6)
-ax[0, 1].set_title("LOS velocity (mm/epoch)"); fig.colorbar(s1, ax=ax[0, 1])
-ax[1, 0].plot(cri.max(axis=0), color="crimson"); ax[1, 0].axhline(0.85, ls="--", c="r", alpha=.5)
+# 속도는 저장된 보정 속도[mm/yr] 우선. 없으면 즉석 회귀하되 **연 단위**로 낸다
+# (예전엔 mm/epoch 이라 취득 간격에 따라 값이 달라지는 비표준 단위였다).
+span_years = float(np.ptp(np.asarray(days, float)) / 365.25) if days is not None else float(M) / 12.0
+if vel_stored is not None and len(vel_stored) == N:
+    vel = np.asarray(vel_stored, float)
+    vel_src = "corrected, /insar/velocity_mm_yr"
+else:
+    vel = np.polyfit(np.arange(M), los.T, 1)[0] * (M / max(span_years, 1e-9))
+    vel_src = "least squares on LOS"
+
+fig, ax = plt.subplots(2, 2, figsize=(12.5, 9))
+fig.suptitle(f"inframon — bridge InSAR monitoring (SARvey→PINN→FRAM) · {BNAME}   "
+             f"N={N:,} pts, M={M} epochs ({span_years:.1f} yr), alert: {level}",
+             fontsize=12.5, fontweight="bold")
+
+_map_panel(ax[0, 0], los[:, -1] - los[:, 0],
+           "Cumulative LOS displacement over the record",
+           "displacement (mm)")
+_map_panel(ax[0, 1], vel, f"LOS velocity ({vel_src})", "velocity (mm/yr)")
+
+# CRI — 초반 램프는 FRAM 윈도우 신뢰도 상승 구간이라 버그처럼 보인다. 표시해 준다.
+cmax = cri.max(axis=0)
+ramp = int(np.argmax(cmax > 1e-6)) if (cmax > 1e-6).any() else 0
+ax[1, 0].plot(cmax, color="crimson", lw=1.2)
+ax[1, 0].axhline(0.85, ls="--", c="r", alpha=.5)
 ax[1, 0].axhline(0.6, ls="--", c="orange", alpha=.5)
-ax[1, 0].set_title("FRAM global max CRI over time"); ax[1, 0].set_xlabel("epoch"); ax[1, 0].grid(alpha=.3)
+if ramp > 0:
+    ax[1, 0].axvspan(0, ramp, color="0.85", alpha=.7, zorder=0)
+    ax[1, 0].annotate("FRAM window ramp\n(not yet defined)", xy=(ramp / 2, 0.45),
+                      ha="center", fontsize=8, color="0.35")
+ax[1, 0].set_title("FRAM global max CRI over time", fontsize=11)
+ax[1, 0].set_xlabel("epoch"); ax[1, 0].set_ylabel("CRI"); ax[1, 0].grid(alpha=.3)
+
+# PINN 성분분해 — 예전엔 |변위| 최대점(단일 이상치)을 골라 대표성이 없었다.
+# 잔존수명이 지목한 **지배 열화 군집**의 점을 쓴다(왜 이 점인지 설명 가능).
 if ct is not None:
-    p = int(np.argmax(np.abs(los[:, -1])))
-    ax[1, 1].plot(ct[p], label="thermal"); ax[1, 1].plot(cl[p], label="load")
+    p, why = int(np.argmax(np.abs(los[:, -1]))), "largest |LOS|"
+    try:
+        _hs = next(c for c in life_meta["channels"] if c["name"] == "serviceability")["detail"]["hotspot"]
+        p, why = int(_hs["point_index"][0]), "remaining-life hotspot"
+    except (TypeError, KeyError, StopIteration, IndexError):
+        pass
+    tt = np.linspace(0, span_years, M)
+    ax[1, 1].plot(tt, ct[p], label="thermal")
+    ax[1, 1].plot(tt, cl[p], label="load")
     if cs is not None:
-        ax[1, 1].plot(cs[p], label="settle")
-    ax[1, 1].set_title(f"PINN decomposition (pt #{p})"); ax[1, 1].legend(fontsize=8)
+        ax[1, 1].plot(tt, cs[p], label="settle")
+    ax[1, 1].set_title(f"PINN decomposition — point #{p} ({why})", fontsize=11)
+    ax[1, 1].set_xlabel("years from first acquisition"); ax[1, 1].set_ylabel("mm")
+    ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.3)
+
 for a in ax.ravel():
     a.tick_params(labelsize=8)
 fig.tight_layout()
@@ -111,12 +188,6 @@ print(f"wrote {OUT}/overview.png")
 # ── velocity map (OSM 베이스맵 위) ──
 # 예전 그림은 1.5km 일대를 한 장에 담아 "정자교가 어디냐"는 질문에 답을 못 했다.
 # 두 패널로 나눈다: 좌=전경(교량 위치 표시), 우=교량 확대(데크 위 점이 몇 개인지).
-BRIDGE = sys.argv[2] if len(sys.argv) > 2 else None      # {"name","geometry":[[lat,lon],...]}
-bg = None
-if BRIDGE:
-    with open(BRIDGE, encoding="utf-8") as fh:
-        bg = json.load(fh)
-
 if bg is None:
     fig, a = plt.subplots(figsize=(7, 6))
     sc = a.scatter(mx, my, c=vel, cmap="RdBu_r", s=14, edgecolor="k", linewidth=.2, zorder=3)
@@ -124,10 +195,7 @@ if bg is None:
     a.set_title("inframon — LOS velocity on OpenStreetMap")
     fig.colorbar(sc, ax=a, label="LOS velocity (mm/epoch)", shrink=.8)
 else:
-    blat = np.array([p[0] for p in bg["geometry"]], dtype=float)
-    blon = np.array([p[1] for p in bg["geometry"]], dtype=float)
-    bx, by = _tf.transform(blon, blat)
-    name = _label(bg.get("name") or "bridge", bg.get("name_roman") or "Jeongja Br.")
+    name = BNAME
 
     # 데크 근접 점 — 교량 선분까지의 거리로 판정(단순 최근접 노드가 아니라 선분 거리).
     def _seg_dist(px, py, ax_, ay_, bx_, by_):
