@@ -249,3 +249,90 @@ def test_unknown_guid_is_reported_not_silently_dropped(ifc, tmp_path):
                "elements": {"0NOTREALGUID0000000000": {"Inframon_Monitoring": {"PointCount": 1}}}}
     r = ifc_io.write_psets(ifc, payload, tmp_path / "o.ifc")
     assert r["n_injected"] == 0 and r["n_guid_not_found"] == 1
+
+
+# ── 실 BIM 산출물 호환성 ────────────────────────────────────────────────
+# 실 IFC 는 스키마·단위·지오레퍼런싱이 제각각이다. 특히 **단위**는 틀려도 오류가 안 나고
+# 결과만 1000배 어긋나므로, 여기서 축을 고정한다.
+
+def _unit_ifc(path, unit: str, *, nested: bool = False) -> str:
+    f = ifcopenshell.file(schema="IFC4")
+    ifcopenshell.api.root.create_entity(f, ifc_class="IfcProject", name="U")
+    ifcopenshell.api.unit.assign_unit(f, length={"is_metric": True, "raw": unit})
+    ctx = ifcopenshell.api.context.add_context(f, context_type="Model")
+    body = ifcopenshell.api.context.add_context(
+        f, context_type="Model", context_identifier="Body",
+        target_view="MODEL_VIEW", parent=ctx)
+    el = _box(f, body, "deck", "IfcSlab", (0, 0, 0), (100, 10, 1))   # 선언값 100
+    if nested:                                    # 사이트 배치 위의 상대 배치
+        site = f.create_entity("IfcLocalPlacement", RelativePlacement=f.create_entity(
+            "IfcAxis2Placement3D",
+            Location=f.create_entity("IfcCartesianPoint", (1000.0, 2000.0, 0.0))))
+        el.ObjectPlacement = f.create_entity(
+            "IfcLocalPlacement", PlacementRelTo=site, RelativePlacement=f.create_entity(
+                "IfcAxis2Placement3D",
+                Location=f.create_entity("IfcCartesianPoint", (5.0, 0.0, 0.0))))
+    f.write(str(path))
+    return str(path)
+
+
+def test_millimetre_model_is_read_in_metres(tmp_path):
+    """국내 IFC 는 밀리미터가 흔하다. 100mm 를 100m 로 읽으면 조용히 1000배 틀린다."""
+    m = ifc_io.read_elements(_unit_ifc(tmp_path / "m.ifc", "METERS"))[0]
+    mm = ifc_io.read_elements(_unit_ifc(tmp_path / "mm.ifc", "MILLIMETERS"))[0]
+    assert m.bbox_max[0] == pytest.approx(100.0, abs=1e-6)      # 100 m
+    assert mm.bbox_max[0] == pytest.approx(0.1, abs=1e-6)       # 100 mm = 0.1 m
+
+
+def test_length_scale_is_reported(tmp_path):
+    import ifcopenshell as ios
+    assert ifc_io.length_scale_to_m(ios.open(_unit_ifc(tmp_path / "a.ifc", "METERS"))) == pytest.approx(1.0)
+    assert ifc_io.length_scale_to_m(ios.open(_unit_ifc(tmp_path / "b.ifc", "MILLIMETERS"))) == pytest.approx(0.001)
+
+
+def test_nested_placement_chain_is_resolved(tmp_path):
+    """사이트/빌딩 배치 위에 부재가 놓이는 게 실 모델의 기본이다.
+
+    RelativePlacement 만 읽으면 부모 오프셋이 통째로 빠져 수백~수천 m 어긋난다.
+    """
+    import ifcopenshell as ios
+    p = _unit_ifc(tmp_path / "n.ifc", "METERS", nested=True)
+    el = ios.open(p).by_type("IfcSlab")[0]
+    xyz = ifc_io._placement_xyz(el, 1.0)
+    assert xyz[0] == pytest.approx(1005.0) and xyz[1] == pytest.approx(2000.0)
+    naive = el.ObjectPlacement.RelativePlacement.Location.Coordinates
+    assert float(naive[0]) == pytest.approx(5.0)               # 순진한 읽기는 5 (= 1000m 오차)
+    # 형상 경로도 같은 원점을 봐야 한다
+    assert ifc_io.read_elements(p)[0].bbox_min[0] == pytest.approx(1005.0, abs=1e-3)
+
+
+def test_inspect_reports_units_and_readiness(tmp_path):
+    ready = ifc_io.inspect(_make_ifc(tmp_path / "geo.ifc"))
+    assert ready["ready"] is True and ready["blockers"] == []
+    assert ready["length_unit"] == "m" and ready["n_with_geometry"] == ready["n_elements"]
+
+    bare = ifc_io.inspect(_unit_ifc(tmp_path / "bare.ifc", "MILLIMETERS"))
+    assert bare["ready"] is False
+    assert any("IfcMapConversion" in b for b in bare["blockers"])
+    assert any("기준점" in b for b in bare["blockers"])         # 무엇을 받아야 하는지 말한다
+    assert bare["length_unit"] == "mm"
+    assert any("mm" in n for n in bare["notes"])
+
+
+def test_inspect_flags_shapeless_and_unmappable_elements(tmp_path):
+    p = _make_ifc(tmp_path / "mixed.ifc", add_shapeless=True)
+    info = ifc_io.inspect(p)
+    assert info["n_with_geometry"] < info["n_elements"]
+    assert any("형상 없는 부재" in n for n in info["notes"])
+
+
+def test_ifc43_bridge_types_map_to_members():
+    """IFC4.3 교량 확장 타입 — 실 BIM 산출물이 이 타입을 쓰기 시작했다."""
+    from inframon.bim.elements import member_from_ifc_type
+    assert member_from_ifc_type("IfcBridgePart") == "deck"
+    assert member_from_ifc_type("IfcDeepFoundation") == "pier"
+    assert member_from_ifc_type("IfcCaisson") == "pier"
+    assert member_from_ifc_type("IfcBearing") == "bearing"
+    # 프록시는 타입으로 못 정하고 이름에 기대야 한다
+    assert member_from_ifc_type("IfcBuildingElementProxy") is None
+    assert member_from_ifc_type("IfcBuildingElementProxy", "P3 교각") == "pier"

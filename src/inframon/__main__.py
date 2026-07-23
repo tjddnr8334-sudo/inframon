@@ -578,10 +578,12 @@ def main() -> None:
         except _AE as exc:
             p.error(str(exc))
         print("=" * 56)
-        print("  IFC 사전점검")
+        print("  IFC 투입 준비도 점검")
         print("=" * 56)
         print(f"  스키마          : {info['schema']}")
-        print(f"  부재 수         : {info['n_elements']}")
+        print(f"  길이 단위       : {info['length_unit']}  (형상은 자동으로 미터 변환)")
+        print(f"  부재 수         : {info['n_elements']}  "
+              f"(형상 있음 {info['n_with_geometry']} · 타입에서 부재 추론 {info['n_type_mapped']})")
         print(f"  투영 좌표계     : {', '.join(info['projected_crs']) or '없음'}")
         print(f"  IfcMapConversion: {'있음' if info['has_map_conversion'] else '없음'}")
         if info["map_conversion"]:
@@ -589,8 +591,16 @@ def main() -> None:
             print(f"    원점 E/N/H    : {mc['eastings']:.3f} / {mc['northings']:.3f} / "
                   f"{mc['orthogonal_height']:.3f}")
             print(f"    회전/축척     : {mc['rotation_deg']:.4f}° / {mc['scale']}")
+        if info["site_georeference"]:
+            sg = info["site_georeference"]
+            print(f"  IfcSite 위경도  : {sg['lat']}, {sg['lon']}  (위치 힌트 — 정합엔 부족)")
         print(f"  타입 분포       : {info['element_types']}")
-        print(f"  안내            : {info['advice']}")
+        print("-" * 56)
+        print(f"  판정            : {'✅ 투입 가능' if info['ready'] else '⛔ 추가 자료 필요'}")
+        for b in info["blockers"]:
+            print(f"    ⛔ {b}")
+        for n in info["notes"]:
+            print(f"    ⓘ {n}")
         print("=" * 56)
         return
 

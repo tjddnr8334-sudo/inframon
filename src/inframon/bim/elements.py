@@ -29,9 +29,13 @@ from ..contracts.schema import MEMBER_TYPES
 
 # IFC 엔티티 타입 → inframon 표준 부재 라벨. 부분일치(소문자)로 본다.
 _IFC_TO_MEMBER = [
+    # 받침은 가장 특정적이라 먼저 본다(이름에 'bearing' 이 있는 거더와 충돌 방지).
     ("ifcbearing", "bearing"),
+    # IFC4.3 교량 확장 — 실 BIM 산출물이 이 타입을 쓰기 시작했다.
+    ("ifcdeepfoundation", "pier"), ("ifcpilecap", "pier"), ("ifccaisson", "pier"),
+    ("ifcbridgepart", "deck"), ("ifcbridge", "deck"),
     ("ifcslab", "deck"), ("ifcplate", "deck"), ("ifcbeam", "deck"), ("ifcgirder", "deck"),
-    ("ifcdeck", "deck"), ("ifcbridgepart", "deck"),
+    ("ifcdeck", "deck"), ("ifcmember", "deck"),
     ("ifccolumn", "pier"), ("ifcpier", "pier"), ("ifcpile", "pier"),
     ("ifcfooting", "abutment"), ("ifcabutment", "abutment"), ("ifcwall", "abutment"),
 ]
