@@ -1,0 +1,11 @@
+{
+  "_README": "데모용 항등 변환 — project.h5 좌표를 그대로 IFC 로컬로 본다.",
+  "eastings": 0.0,
+  "northings": 0.0,
+  "orthogonal_height": 0.0,
+  "x_axis_abscissa": 1.0,
+  "x_axis_ordinate": 0.0,
+  "scale": 1.0,
+  "target_crs": null,
+  "source": "manual"
+}

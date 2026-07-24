@@ -104,6 +104,9 @@ pytest -q                       # tests
 pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   # dashboard
 ```
 
+> **Trying it out?** A step-by-step, copy-paste testing guide (run order, dashboard, CLI, your own
+> IFC/SAR data) is in [`docs/테스트_가이드.md`](docs/테스트_가이드.md).
+
 ### Real data (real Sentinel-1 → CRI)
 
 Heavy SAR processing (ISCE2 / MiaplPy / SARvey) runs on **WSL2/Linux**; selection, ingest, analysis
@@ -380,6 +383,9 @@ python -m inframon --demo       # 전체 파이프라인(stub) → data/project.
 pytest -q                       # 테스트
 pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   # 대시보드
 ```
+
+> **직접 돌려 보려면** — 실행 순서부터 대시보드·CLI·내 IFC/SAR 데이터까지 복붙 가능한
+> 단계별 가이드: [`docs/테스트_가이드.md`](docs/테스트_가이드.md).
 
 ### 실데이터 (실 Sentinel-1 → CRI)
 

@@ -1,0 +1,65 @@
+{
+  "_README": "데모(--demo) project.h5 의 픽셀 좌표에 맞춘 부재 테이블. 실 교량 아님.",
+  "elements": [
+    {
+      "guid": "DECK1",
+      "name": "상판1",
+      "ifc_type": "IfcSlab",
+      "bbox_min": [
+        2.0,
+        114.0,
+        0.0
+      ],
+      "bbox_max": [
+        118.75,
+        141.0,
+        3.0
+      ]
+    },
+    {
+      "guid": "PIER1",
+      "name": "교각1",
+      "ifc_type": "IfcColumn",
+      "bbox_min": [
+        118.75,
+        114.0,
+        0.0
+      ],
+      "bbox_max": [
+        246.5,
+        141.0,
+        3.0
+      ]
+    },
+    {
+      "guid": "PIER2",
+      "name": "교각2",
+      "ifc_type": "IfcColumn",
+      "bbox_min": [
+        246.5,
+        114.0,
+        0.0
+      ],
+      "bbox_max": [
+        399.0,
+        141.0,
+        3.0
+      ]
+    },
+    {
+      "guid": "ABUT1",
+      "name": "교대",
+      "ifc_type": "IfcFooting",
+      "bbox_min": [
+        399.0,
+        114.0,
+        0.0
+      ],
+      "bbox_max": [
+        505.0,
+        141.0,
+        3.0
+      ]
+    }
+  ]
+}
