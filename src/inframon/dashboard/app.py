@@ -52,19 +52,35 @@ def _config_save(**kv) -> None:
         pass
 
 
+def _usable_dir(path: str) -> bool:
+    """이 경로에 폴더를 만들 수 있는가. 없는 드라이브(F:\\ 등)를 조용히 쓰다가
+    나중에 mkdir 이 크래시하는 걸 막는다 — 지정 시점에 걸러 폴백한다."""
+    try:
+        Path(path).mkdir(parents=True, exist_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def data_root() -> str:
     """모든 저장(project.h5·레시피·SLC·결과)의 루트 폴더.
 
     우선순위: 세션 설정 → 저장된 config → 환경변수 INFRAMON_DATA_ROOT →
     (frozen exe: exe 옆 data/) → 작업폴더 data/. 사용자가 F:\\inframon 등으로 지정 가능.
+
+    지정된 경로가 **만들 수 없으면**(없는 드라이브 등) 건너뛰고 다음 후보로 폴백한다.
+    예전에 F:\\ 를 지정해 config 에 남았는데 그 드라이브가 사라지면, 무시하고 작업폴더
+    data/ 로 돌아간다(크래시 대신).
     """
     for v in (st.session_state.get("data_root"),
               _config_load().get("data_root"),
               os.environ.get("INFRAMON_DATA_ROOT")):
-        if v and str(v).strip():
+        if v and str(v).strip() and _usable_dir(str(v).strip()):
             return str(v).strip()
     if getattr(sys, "frozen", False):
-        return str(Path(sys.executable).parent / "data")
+        exe_data = str(Path(sys.executable).parent / "data")
+        if _usable_dir(exe_data):
+            return exe_data
     return "data"
 
 
@@ -193,9 +209,12 @@ def _recipe_dir() -> str:
     """현재 교량 프로젝트의 레시피 폴더 = <데이터 루트>/insar_recipe (상단에서 설정).
 
     교량마다 분리해 여러 개를 관리하려면 recipe_dir 세션값으로 개별 지정 가능.
+    세션값이 만들 수 없는 경로(없는 드라이브)면 무시하고 데이터 루트 하위로 폴백한다.
     """
     ss = (st.session_state.get("recipe_dir") or "").strip()
-    return ss or str(Path(data_root()) / "insar_recipe")
+    if ss and _usable_dir(ss):
+        return ss
+    return str(Path(data_root()) / "insar_recipe")
 
 
 def project_times(path: str, start: date):
