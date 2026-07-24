@@ -147,7 +147,7 @@ def test_insar_only_project_graceful(tmp_path):
     with ProjectStore(out, mode="a") as s:
         import_track_h5(s, track)
 
-    r = export_vlm_package(out, tmp_path / "pkg", bridge_id="IO", with_figures=True)
+    export_vlm_package(out, tmp_path / "pkg", bridge_id="IO", with_figures=True)
     summ = json.loads((tmp_path / "pkg" / "summary.json").read_text(encoding="utf-8"))
     assert summ["pinn"] is None and summ["risk_reference"] is None
     assert summ["channels_present"] == {"vertical_fused": False, "pinn": False,

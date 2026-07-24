@@ -16,7 +16,7 @@ import pytest
 
 ifcopenshell = pytest.importorskip("ifcopenshell", reason="ifcopenshell 없음 — 실 IFC 경로 skip")
 
-import ifcopenshell.api.context  # noqa: E402
+import ifcopenshell.api.context  # noqa: E402, F811
 import ifcopenshell.api.georeference  # noqa: E402
 import ifcopenshell.api.root  # noqa: E402
 import ifcopenshell.api.unit  # noqa: E402

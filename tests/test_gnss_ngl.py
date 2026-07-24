@@ -18,7 +18,6 @@ FARW -12.4666   238.2064  104.85  -4073662.0  4712064.0 -1367874.0  2008-03-27 2
 
 # tenv3: site YYMMMDD decyr MJD week day reflon _e0 east _n0 north u0 up ...
 def _tenv3(rows):
-    hdr = "SUWN 00XXX00 x x x x 127.1 " + "x " * 14
     lines = []
     for yr, e, n, u in rows:  # e/n/u = 절대 위치[m] (정수부는 0 로 둠)
         lines.append(f"SUWN 00XXX00 {yr} 50000 900 0 127.1 0 {e} 0 {n} 0 {u} "

@@ -6,6 +6,19 @@ on:
   pull_request:
 
 jobs:
+  # 린트는 가볍고 빠르므로 별도 잡으로 분리 — 무거운 test 설치를 기다리지 않고 즉시 실패한다.
+  # ruff 버전을 고정해 로컬과 CI 가 같은 규칙으로 판정한다(버전이 다르면 기본 규칙이 갈린다).
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "ruff==0.15.15"
+      - name: Lint (ruff)
+        run: ruff check src tests
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +32,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[dev]" scipy scikit-image imageio pillow rasterio asf_search
-      - name: Lint (ruff)
-        run: ruff check src tests
       - name: Test (pytest)
         run: pytest -q

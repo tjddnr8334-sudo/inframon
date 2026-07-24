@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from inframon.insar import roi_selection as rs
 from inframon.insar.roi_selection import RoiResult, fetch_builtup, select_roi
 
 BLAT, BLON = 37.3219, 127.1083

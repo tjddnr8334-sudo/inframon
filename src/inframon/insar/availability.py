@@ -48,7 +48,7 @@ def assess_availability(groups, min_scenes: int = 15) -> dict:
         reason = f"양 궤도 충분(asc {an}·desc {dn}) + 시간겹침 {overlap}일 → 연직/EW 분해 가능"
     elif an and dn and overlap <= 0:
         mode = "union"
-        reason = f"양 궤도 있으나 취득시기 안 겹침 → UNION(점 증가)만, 연직분해 불가"
+        reason = "양 궤도 있으나 취득시기 안 겹침 → UNION(점 증가)만, 연직분해 불가"
     elif max(an, dn) >= min_scenes:
         who = "asc" if an >= dn else "desc"
         mode = "single"

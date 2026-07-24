@@ -7,7 +7,6 @@ import pytest
 from inframon.insar import snap_acquire as sa
 from inframon.insar.snap_acquire import (
     AcquireError,
-    FrameCandidate,
     _centrality_km,
     search_frames,
 )

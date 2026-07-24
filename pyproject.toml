@@ -59,3 +59,14 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# E702(세미콜론으로 문장 결합)는 이 저장소에서 의도적으로 쓴다 — `import x; x.use("Agg")`
+# 처럼 붙여 두는 게 읽기 낫고, 시각화 스크립트에 흔하다. 진짜 문제(미사용·재정의·모호한
+# 이름 등)는 계속 잡는다.
+ignore = ["E702"]
+
+[tool.ruff.lint.per-file-ignores]
+# 도메인 관례: I = 단면 2차 모멘트(second moment of area). 구조공학 표기 그대로 둔다.
+"src/inframon/structure.py" = ["E741"]
+"tests/test_section_refinement.py" = ["E741"]

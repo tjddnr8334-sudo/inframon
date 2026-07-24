@@ -1,6 +1,6 @@
 """형식→재료·단면·경계 추론(PINN 보충) — 강재 고정 가정 해소."""
 from __future__ import annotations
-from inframon.structure import infer_structural_defaults, resolve_profile, BridgeProfile
+from inframon.structure import infer_structural_defaults, resolve_profile
 from inframon.bridge_info import profile_from_osm
 
 

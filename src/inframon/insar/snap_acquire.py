@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .snap_backend import (
-    SnapError,
     _edge_margin_km,
     _point_in_poly,
     find_bridge_burst,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 
 from inframon.insar.bridge_conditions import (
     LOOK_AZ,

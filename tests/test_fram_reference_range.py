@@ -96,7 +96,6 @@ def _run(tmp_path, seed, ref_dict, **kw):
 def test_reference_range_integration_severity_escalates(tmp_path):
     """정상범위 통합: 붕괴 침하가 클수록 등급·정상범위밖 점수가 단조 증가."""
     from inframon.fram.reference_range import build_default_reference_range
-    values, regime = None, None
     # 실 규모(노이즈 10mm) 건강 코호트로 기준치 적합
     ref = build_default_reference_range(n_bridges=12, seed=0)
 

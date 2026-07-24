@@ -19,7 +19,6 @@ import csv
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 
 from .api import transform
 from .api.transform import WGS84

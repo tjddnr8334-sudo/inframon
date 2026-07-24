@@ -1,7 +1,7 @@
 """② 단면 정밀화 — 폭·높이·형식 → 단면적 A·단면2차 I·기하 EI·ρA(밀도×A)."""
 from __future__ import annotations
 import pytest
-from inframon.structure import (BridgeProfile, MATERIAL_DENSITY, MATERIAL_RHO_A,
+from inframon.structure import (BridgeProfile, MATERIAL_RHO_A,
                                 _TYPE_AREA_FACTOR, _TYPE_I_FACTOR)
 
 

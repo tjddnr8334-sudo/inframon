@@ -1973,7 +1973,6 @@ def tab_psi(start: date) -> None:
     st.markdown("**SBAS 누적 변위 시계열 (DS/QPS 점)**")
     sel = qps > 0
     if sel.any():
-        base = datetime(start.year, start.month, start.day)
         dts = [datetime.strptime(e, "%Y%m%d") for e in epochs]
         df = pd.DataFrame({"중앙값": np.median(ts[sel], axis=0),
                            "평균": ts[sel].mean(axis=0)}, index=dts)

@@ -1,7 +1,6 @@
 """PINN/FEM 구조 검증(benchmark) — 해석해 대비 FEM·EI 복원 오차."""
 from __future__ import annotations
 
-import numpy as np
 
 from inframon.pinn.benchmark import analytic_ss_frequencies, ei_recovery_benchmark, run_fem_benchmark
 

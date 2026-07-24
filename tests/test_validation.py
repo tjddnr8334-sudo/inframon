@@ -54,9 +54,9 @@ def test_validate_los_projection():
 
 def test_validate_project(tmp_path):
     h5py = pytest.importorskip("h5py")
-    N, M = 5, 4
+    N = 5
     ll = np.column_stack([np.linspace(127.10, 127.11, N), np.full(N, 37.32)])
-    # 선형 속도 2mm/yr 인 LOS(365일 간격 4시점)
+    # 선형 속도 2mm/yr 인 LOS(365일 간격 4시점 → [N,4])
     days = np.array([0, 365, 730, 1095])
     los = np.outer(np.full(N, 2.0), days / 365.25)     # [N,M] mm
     proj = tmp_path / "p.h5"
