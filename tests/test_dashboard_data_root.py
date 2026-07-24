@@ -26,13 +26,24 @@ def app(monkeypatch):
     return app
 
 
-def test_missing_drive_falls_back_to_data(app, monkeypatch, tmp_path):
-    """config 에 없는 드라이브가 남아 있어도 크래시 대신 작업폴더 data/ 로 폴백."""
+def test_missing_drive_falls_back_to_repo_data(app, monkeypatch):
+    """config 에 없는 드라이브가 남아 있어도 크래시 대신 기본 위치로 폴백.
+
+    기본 위치는 **절대경로**(리포의 data/)여서 어떤 드라이브에도 묶이지 않고,
+    실행 위치가 달라져도 같은 곳을 가리킨다.
+    """
     monkeypatch.setattr(app, "_config_load", lambda: {"data_root": "F:\\inframon"})
     monkeypatch.delenv("INFRAMON_DATA_ROOT", raising=False)
-    # F:\ 가 실제로 없어야 이 테스트가 의미 있다(CI·개발기 모두 없음).
-    assert not Path("F:\\inframon").exists()
-    assert app.data_root() == "data"
+    assert not Path("F:\\inframon").exists()      # CI·개발기 모두 F:\ 없음
+    root = app.data_root()
+    assert root == app._default_root()
+    assert Path(root).is_absolute()               # 상대경로 "data" 가 아니다
+    assert Path(root).name == "data"
+
+
+def test_default_root_is_absolute_and_makeable(app):
+    d = app._default_root()
+    assert Path(d).is_absolute() and Path(d).exists()
 
 
 def test_usable_config_dir_is_honoured(app, monkeypatch, tmp_path):

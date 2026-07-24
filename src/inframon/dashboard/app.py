@@ -77,11 +77,25 @@ def data_root() -> str:
               os.environ.get("INFRAMON_DATA_ROOT")):
         if v and str(v).strip() and _usable_dir(str(v).strip()):
             return str(v).strip()
+    return _default_root()
+
+
+def _default_root() -> str:
+    """어떤 저장공간에도 묶이지 않는 기본 위치.
+
+    frozen(.exe)이면 exe 옆 data/, 아니면 **프로젝트 폴더의 data/**(절대경로).
+    상대경로 "data" 를 쓰면 실행한 위치에 따라 달라지므로, 항상 리포 기준 절대경로로
+    고정한다 — 특정 드라이브(F:\\ 등)를 요구하지 않는다.
+    """
     if getattr(sys, "frozen", False):
-        exe_data = str(Path(sys.executable).parent / "data")
-        if _usable_dir(exe_data):
-            return exe_data
-    return "data"
+        exe_data = Path(sys.executable).parent / "data"
+        if _usable_dir(str(exe_data)):
+            return str(exe_data)
+    # dashboard/app.py → src/inframon/dashboard → 리포 루트(부모 3단계)
+    repo_data = Path(__file__).resolve().parents[3] / "data"
+    if _usable_dir(str(repo_data)):
+        return str(repo_data)
+    return str((Path.cwd() / "data").resolve())
 
 
 def default_project_path() -> str:
@@ -2073,21 +2087,33 @@ def main() -> None:
     st.title("🌉 inframon — 통합 인프라 모니터링")
     st.caption("InSAR(변위) → PINN(구조해석) → FRAM(공명 위험 CRI)  ·  위성 SAR 기반 교량 안전 모니터링")
 
-    # 📁 저장 폴더(데이터 루트) — project·레시피·SLC·결과가 모두 여기에 저장된다.
+    # 📁 저장 폴더 — 기본은 프로젝트 폴더의 data/. 바꿀 필요 없으면 그대로 두면 된다.
+    # (대용량 SLC 를 외장 드라이브에 두고 싶을 때만 경로를 바꾼다.)
     st.sidebar.markdown("### 📁 저장 폴더")
     _cur_root = data_root()
+    _def_root = _default_root()
     _root_in = st.sidebar.text_input(
-        "데이터 루트", _cur_root, key="data_root_input",
-        help="위성 SLC·레시피·project.h5·결과가 저장되는 위치. 예: F:\\inframon "
-             "(대용량 SLC는 외장드라이브 권장).")
+        "저장 위치 (기본값 그대로 두면 됨)", _cur_root, key="data_root_input",
+        help="project.h5·레시피·결과가 저장되는 곳. 기본은 프로젝트 폴더의 data/ 라 "
+             "어떤 드라이브에도 묶이지 않는다. 대용량 SLC 를 다른 디스크에 두고 싶을 때만 바꾼다.")
     if _root_in.strip() and _root_in.strip() != _cur_root:
-        st.session_state["data_root"] = _root_in.strip()
-        _config_save(data_root=_root_in.strip())        # 재시작 후에도 유지
-        try:
-            Path(_root_in.strip()).mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            st.sidebar.error(f"폴더 생성 실패: {exc}")
-        st.rerun()
+        if _usable_dir(_root_in.strip()):
+            st.session_state["data_root"] = _root_in.strip()
+            _config_save(data_root=_root_in.strip())    # 재시작 후에도 유지
+            st.rerun()
+        else:
+            st.sidebar.error(f"이 경로에 폴더를 만들 수 없습니다: {_root_in.strip()} "
+                             "(없는 드라이브?). 기본값을 그대로 쓰세요.")
+    # 기본값이 아닐 때만 되돌리기 버튼을 보여준다.
+    if str(Path(_cur_root)) != str(Path(_def_root)):
+        if st.sidebar.button("↩ 기본 위치로 되돌리기", use_container_width=True,
+                             help=f"프로젝트 폴더의 data/ 로 되돌립니다: {_def_root}"):
+            st.session_state.pop("data_root", None)
+            try:
+                _CONFIG_FILE.unlink(missing_ok=True)    # 저장된 값 제거(F:\ 잔재 포함)
+            except OSError:
+                pass
+            st.rerun()
     try:
         _free_gb = shutil.disk_usage(data_root()).free / 1e9
         st.sidebar.caption(f"저장 위치: `{data_root()}` · 여유 {_free_gb:.0f} GB")
