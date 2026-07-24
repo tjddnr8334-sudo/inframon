@@ -192,8 +192,16 @@ def estimate_remaining_life(
     alpha: float = 0.05,
     as_of: str | None = None,
     default_incidence_deg: float = DEFAULT_INCIDENCE_DEG,
+    write: bool = True,
 ) -> RemainingLifeOutput:
-    """`/life` 를 계산해 project.h5 에 기록하고 계약 객체를 돌려준다."""
+    """`/life` 를 계산해 project.h5 에 기록하고 계약 객체를 돌려준다.
+
+    `write=False` 면 파일을 건드리지 않고 계산만 한다 — 대시보드에서 한계값을
+    바꿔 가며 결과가 어떻게 달라지는지 미리보기할 때 쓴다(project.h5 를 슬라이더마다
+    덮어쓰지 않게). 이때 `store` 는 읽기 모드('r')로 열어도 된다.
+    미저장 시 배열 `_ds` 경로는 계산된 값을 담은 in-memory 키로 채워지고,
+    반환 객체의 `assumptions["_arrays"]` 에 실제 배열이 들어간다(계약 검증은 생략).
+    """
     ins = store.read_meta("insar", InSAROutput)
     xyz = np.asarray(store.read_array(ins.xyz_ds), dtype=np.float64)
     member = np.asarray(store.read_array(ins.member_ds)).ravel()
@@ -279,15 +287,17 @@ def estimate_remaining_life(
     age = max(0, ref_year - by) if by else None
     horizon = max(MIN_HORIZON_YEARS, float(lim_vals["design_life_years"]) - (age or 0))
 
+    arrays = {
+        "rsl_point": np.asarray(res["rsl"], dtype=np.float64),
+        "rsl_lower": np.asarray(res["rsl_lower"], dtype=np.float64),
+        "rate": np.asarray(res["rate"], dtype=np.float64),
+        "rate_sigma": np.asarray(res["sigma"], dtype=np.float64),
+        "sublimit": np.asarray(res["sublimit"], dtype=np.int16),
+    }
     paths = {}
-    for key, arr, dt in (
-        ("rsl_point", res["rsl"], np.float64),
-        ("rsl_lower", res["rsl_lower"], np.float64),
-        ("rate", res["rate"], np.float64),
-        ("rate_sigma", res["sigma"], np.float64),
-        ("sublimit", res["sublimit"], np.int16),
-    ):
-        paths[key] = store.write_array(f"/{LIFE_GROUP}/{key}", np.asarray(arr, dtype=dt))
+    for key, arr in arrays.items():
+        paths[key] = (store.write_array(f"/{LIFE_GROUP}/{key}", arr) if write
+                      else f"/{LIFE_GROUP}/{key}")
 
     assumptions = limits_mod.describe(lim_vals, lim_srcs, span_m=span_m,
                                       span_known=span_known, extra={
@@ -345,8 +355,12 @@ def estimate_remaining_life(
         confidence=conf, confidence_reason=conf_why,
         assumptions=assumptions,
     )
-    store.write_meta(LIFE_GROUP, out)
-    store.validate(LIFE_GROUP, out)
+    if write:
+        store.write_meta(LIFE_GROUP, out)
+        store.validate(LIFE_GROUP, out)
+    else:
+        # 미저장 미리보기 — 계산된 배열을 객체에 실어 대시보드가 파일 없이 그린다.
+        out.assumptions["_arrays"] = {k: v.tolist() for k, v in arrays.items()}
     return out
 
 

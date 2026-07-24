@@ -146,3 +146,40 @@ def test_meta_roundtrip(project):
         back = s.read_meta(LIFE_GROUP, RemainingLifeOutput)
     assert back.n_points > 0 and back.confidence in {"high", "medium", "low"}
     assert back.confidence_reason
+
+
+def test_preview_mode_does_not_touch_file(project):
+    """write=False 는 파일을 건드리지 않고 계산만 한다(대시보드 what-if 용)."""
+    import hashlib
+    md5_before = hashlib.md5(open(project, "rb").read()).hexdigest()
+    with ProjectStore(project, mode="r") as s:      # 읽기 모드로도 되어야 한다
+        out = estimate_remaining_life(s, user_limits={"settlement_mm": 15.0}, write=False)
+    md5_after = hashlib.md5(open(project, "rb").read()).hexdigest()
+    assert md5_before == md5_after                  # 파일 불변
+    assert "_arrays" in out.assumptions             # 배열은 객체에 실린다
+    assert len(out.assumptions["_arrays"]["rsl_point"]) == out.n_points
+    assert "life" not in __import__("h5py").File(project, "r").keys()  # /life 안 생김
+
+
+def test_preview_reflects_parameter_change(project):
+    """한계값을 바꾸면 미리보기 결과가 달라진다 — 이게 what-if 의 핵심."""
+    def _inject(path):
+        with ProjectStore(path) as s:
+            ins = s.read_meta("insar", InSAROutput)
+            days = s.read_array(ins.dates_ds); t = (days - days[0]) / 365.25
+            n = int(ins.n_points)
+            los = (-2.0 * t)[None, :] * np.ones((n, 1))
+            s.write_array(ins.los_ds, los)
+            from inframon.contracts.schema import PINNOutput
+            pn = s.read_meta("pinn", PINNOutput)
+            s.write_array(pn.comp_thermal_ds, np.zeros_like(los))
+    _inject(project)
+    outs = {}
+    for settle in (10.0, 50.0):
+        with ProjectStore(project, mode="r") as s:
+            outs[settle] = estimate_remaining_life(
+                s, user_limits={"settlement_mm": settle,
+                                "angular_distortion": 1.0},  # 부등침하 무력화 → 절대변위 지배
+                write=False).rsl_lower_years
+    assert outs[10.0] is not None and outs[50.0] is not None
+    assert outs[10.0] < outs[50.0]                  # 한계 낮추면 잔존수명 짧아진다

@@ -1836,6 +1836,33 @@ def status_header(path: str) -> None:
     c3.metric("취득 시점 수 M", n_dates)
     c4.metric("프로젝트", Path(path).name)
 
+    _pipeline_progress(path)
+
+
+def _pipeline_progress(path: str) -> None:
+    """파이프라인 단계별 진행 — 어느 엔진까지 돌았는지 한눈에.
+
+    각 그룹의 존재로 완료를 판정한다(계약상 그 그룹이 있으면 그 단계가 끝난 것).
+    '데이터가 중간중간 잘 진행됐는지'를 사용자가 확인하는 용도.
+    """
+    stages = [
+        ("insar", "① InSAR", "변위 시계열"),
+        ("pinn", "② PINN", "구조 성분분해"),
+        ("fram", "③ FRAM", "공명 위험 CRI"),
+        ("life", "④ 잔존수명", "사용성 한계"),
+    ]
+    cols = st.columns(len(stages))
+    for col, (grp, name, desc) in zip(cols, stages):
+        done = has_group(path, grp)
+        mark = "✅" if done else "⬜"
+        col.markdown(f"{mark} **{name}**  \n<small>{desc}"
+                     f"{'' if done else ' · 미완'}</small>", unsafe_allow_html=True)
+    # 다음 할 일 안내 — 안 끝난 첫 단계를 짚어 준다.
+    pending = [name for grp, name, _ in stages if not has_group(path, grp)]
+    if pending:
+        st.caption(f"다음 단계: **{pending[0]}** — 사이드바 **데모 데이터 생성**(전체) 또는 "
+                   "CLI `--engine {pinn,fram}=real` / `--remaining-life` 로 이어서 돌린다.")
+
 
 # ───────────────────────────────── main ───────────────────────────────
 # ─────────────────────────── ④ 잔존수명 탭 ────────────────────────────
@@ -1965,6 +1992,92 @@ def tab_life(path: str, start: date) -> None:
     st.info("**측정할 수 없는 것**: 프리스트레스 손실 · 부식률 · 균열폭 · 실제 활하중 응력범위. "
             "위성 InSAR+PINN 은 운동학(변위·속도·곡률)만 관측한다. "
             "피로·내구성 채널은 설계코드·점검자료 기반 추정이며 위성 관측이 기여하지 않는다.")
+
+    _life_whatif(path, a)
+
+
+def _life_whatif(path: str, saved_assumptions: dict) -> None:
+    """한계값을 바꾸면 잔존수명이 어떻게 달라지는지 — 파일을 건드리지 않고 미리보기.
+
+    사용자가 '이 값을 이만큼 바꾸면 결과가 얼마나 달라지나'를 눈으로 보고 판단하게 한다.
+    project.h5 는 그대로 두고(write=False), 저장된 결과와 나란히 비교한다.
+    """
+    st.markdown("---")
+    st.markdown("### 🔬 파라미터 바꿔 보기 (What-if) — 저장 안 함, 미리보기")
+    st.caption("한계값을 바꾸면 잔존수명이 어떻게 달라지는지 즉시 계산한다. "
+               "project.h5 는 바뀌지 않는다. 확정하려면 아래 CLI 명령을 쓴다.")
+
+    v = (saved_assumptions.get("values") or {})
+    c1, c2, c3 = st.columns(3)
+    settle = c1.slider("교각·교대 침하 한계 (mm)", 5.0, 100.0,
+                       float(v.get("settlement_mm", 25.0)), 1.0, key="wi_settle",
+                       help="지반조건에 따라 다르다. 낮출수록 잔존수명이 짧아진다.")
+    ratio = c2.slider("상판 처짐 한계 span/R", 400.0, 1500.0,
+                      float(v.get("deck_deflection_ratio", 800.0)), 50.0, key="wi_ratio",
+                      help="L/800 이 도로교 사용성 기준. 클수록(엄격) 잔존수명이 짧아진다.")
+    ang = c3.slider("부등침하 각변위 1/n", 200, 1000,
+                    int(round(1.0 / float(v.get("angular_distortion", 0.002)))), 50,
+                    key="wi_ang", help="1/500 이 흔한 기준. n 이 클수록(엄격) 짧아진다.")
+    consumed = c1.slider("관측 이전 이미 발생한 변위 (mm)", 0.0, 40.0, 0.0, 1.0,
+                         key="wi_consumed",
+                         help="수준측량 등 실측 누적치가 있으면 넣는다. 넣을수록 남은 여유가 줄어 짧아진다.")
+
+    from inframon.contracts.io import ProjectStore
+    from inframon.life import estimate_remaining_life
+
+    try:
+        with ProjectStore(path, mode="r") as s:
+            prev = estimate_remaining_life(
+                s, user_limits={"settlement_mm": settle, "deck_deflection_ratio": ratio,
+                                "angular_distortion": 1.0 / float(ang)},
+                consumed_mm=consumed, write=False)
+    except (KeyError, ValueError, OSError) as exc:
+        st.warning(f"미리보기 계산 실패: {exc}")
+        return
+
+    saved_lo = None
+    # 저장된 값과 비교(현재 탭이 이미 읽은 meta 에서)
+    _saved = read_meta(path, "life")
+    saved_lo = _saved.get("rsl_lower_years")
+    new_lo = prev.rsl_lower_years
+
+    m1, m2, m3 = st.columns(3)
+    if new_lo is None:
+        m1.metric("미리보기 잔존수명 하한", f"> {prev.horizon_years:.0f} 년",
+                  help="유의한 열화 군집 없음(검열)")
+    else:
+        delta = None if saved_lo is None else round(new_lo - saved_lo, 2)
+        m1.metric("미리보기 잔존수명 하한", f"{new_lo:.1f} 년",
+                  delta=(None if delta is None else f"{delta:+.1f} vs 저장값"))
+    m2.metric("지배 채널", prev.governing or "—")
+    m3.metric("검열 비율", f"{prev.censored_fraction * 100:.0f} %")
+
+    # 어느 하위한계가 결과를 지배하는지 — 이게 있어야 "왜 이 슬라이더는 반응하고
+    # 저 슬라이더는 안 하나"를 사용자가 안다(예: 부등침하 지배면 침하 한계는 무반응).
+    _arr = prev.assumptions.get("_arrays", {})
+    if _arr.get("sublimit"):
+        import numpy as _np
+        _sub = _np.asarray(_arr["sublimit"])
+        _names = {0: "검열(열화신호 없음)", 1: "절대 변위", 2: "부등침하(각변위)"}
+        _u, _c = _np.unique(_sub, return_counts=True)
+        _dist = " · ".join(f"{_names.get(int(k), k)} {int(v)}점"
+                           for k, v in sorted(zip(_u, _c), key=lambda x: -x[1]))
+        st.caption(f"**점별 지배 한계**: {_dist} — 가장 많은 쪽이 교량 대표값을 좌우한다. "
+                   "그 슬라이더를 움직여야 결과가 바뀐다(예: 부등침하 지배면 침하 한계는 무반응).")
+
+    if saved_lo is not None and new_lo is not None:
+        st.caption(f"저장된 결과({saved_lo:.1f}년)와 비교한 미리보기다. "
+                   "슬라이더를 움직이며 어느 한계값이 결과를 지배하는지 확인하라.")
+
+    # 이 미리보기를 project.h5 에 확정하는 CLI (대시보드는 파일을 쓰지 않는다)
+    with st.expander("이 설정으로 확정하려면 (CLI)"):
+        st.code(
+            f"python -m inframon --import-track-h5 <track.h5> --out {path} \\\n"
+            f"  --remaining-life --life-settlement-mm {settle:g} "
+            f"--life-deflection-ratio {ratio:g} \\\n"
+            f"  --life-angular {1.0 / float(ang):.4f} --life-consumed-mm {consumed:g}",
+            language="bash")
+        st.caption("데모 데이터면 `--import-track-h5 <track.h5>` 대신 `--demo` 를 쓴다.")
 
 
 def tab_psi(start: date) -> None:
