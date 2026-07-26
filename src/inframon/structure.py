@@ -155,14 +155,34 @@ def resolve_profile(cfg: Any, xyz: np.ndarray | None = None) -> BridgeProfile:
     """cfg.bridge_profile(dict 또는 BridgeProfile)에서 프로파일을 만든다.
 
     미지정이면 강재 거더교 기본값. length_m 가 비면 xyz 에서 스팬을 채운다.
+
+    **형식별 자동 추론**: `bridge_type`(과 지간)만 주면 명시되지 않은 단면높이·경계·재료·
+    자중을 형식에서 채운다(`infer_structural_defaults`). 예전엔 이 추론이 CSV/OSM 인제스트
+    경로에만 있어, `cfg.bridge_profile={"bridge_type":"arch"}` 처럼 형식만 줘도 아치 특성이
+    반영되지 않고 전부 거더 기본값(단면 1.0m·단순지지)으로 돌았다. 사용자가 명시한 값은
+    덮지 않는다(명시 > 형식 추론 > 전역 기본).
     """
     spec = getattr(cfg, "bridge_profile", None)
+    given: set[str] = set()
     if isinstance(spec, BridgeProfile):
         prof = spec.model_copy()
+        given = {f for f in BridgeProfile.model_fields
+                 if getattr(spec, f) != BridgeProfile.model_fields[f].default}
     elif isinstance(spec, dict):
+        given = set(spec)
         prof = BridgeProfile.model_validate(spec)
     else:
         prof = BridgeProfile()
+
     if prof.length_m is None and xyz is not None:
         prof = prof.model_copy(update={"length_m": _span_from_xyz(xyz)})
+
+    # 형식에서 유도한 기본을 **명시되지 않은 필드에만** 채운다.
+    if "bridge_type" in given or isinstance(spec, BridgeProfile):
+        inferred = infer_structural_defaults(
+            prof.bridge_type, has_material_tag=("material" in given),
+            length_m=prof.length_m, max_span_m=prof.extra.get("max_span_m") or prof.length_m)
+        update = {k: v for k, v in inferred.items() if k not in given}
+        if update:
+            prof = prof.model_copy(update=update)
     return prof
