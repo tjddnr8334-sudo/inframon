@@ -36,6 +36,8 @@ class TrackData:
     height: np.ndarray | None = None  # [N] float32 (m) — 점별 고도, 없으면 None
     incidence: np.ndarray | None = None  # [N] float32 (deg) — LOS 입사각, 종축 분해용. 없으면 None
     heading: float | None = None         # 위성 heading(deg) — 기록용. 없으면 None
+    dem_error: np.ndarray | None = None  # [N] float32 (m) — SARvey DEM 오차 δh(양수=DEM보다 높음).
+    #                                      지오로케이션 쉬프트 보정(geolocation.py)에 쓴다.
     attrs: dict = field(default_factory=dict)
 
 
@@ -72,6 +74,8 @@ _INC_ATTRS = ("incidence_angle", "incidenceAngle", "INCIDENCE_ANGLE", "CENTER_IN
               "inc_angle", "centerIncidenceAngle")
 _HEAD_DATASETS = ("headingAngle", "heading", "sat_heading", "los_az_angle", "azimuthAngle")
 _HEAD_ATTRS = ("heading", "HEADING", "headingAngle", "sat_heading", "ORBIT_HEADING")
+# SARvey/MiaplPy DEM 오차(잔차 지형) — 지오로케이션 쉬프트 보정용.
+_DEMERR_DATASETS = ("dem_error", "demErr", "residual_height", "dem_err", "hgt_error")
 
 
 def _decode_epochs(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -99,6 +103,7 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
         inc_attr = _scalar_from_attrs(f.attrs, _INC_ATTRS)
         head_raw = _read_optional_dataset(f, _HEAD_DATASETS)
         head_attr = _scalar_from_attrs(f.attrs, _HEAD_ATTRS)
+        demerr_raw = _read_optional_dataset(f, _DEMERR_DATASETS)
         attrs = {str(k): str(v) for k, v in f.attrs.items()}
 
     if lonlat.ndim != 2 or lonlat.shape[1] != 2:
@@ -149,9 +154,15 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
     elif head_attr is not None:
         heading = float(head_attr)
 
+    dem_error = None
+    if demerr_raw is not None:
+        dem_error = np.ravel(np.asarray(demerr_raw, dtype=np.float32))
+        if dem_error.shape[0] != n_points:
+            raise ValueError(f"dem_error count {dem_error.shape[0]} != point count {n_points}")
+
     return TrackData(lonlat=lonlat, los=los, dates=dates, date_labels=date_labels,
                      coherence=coherence, height=height, incidence=incidence,
-                     heading=heading, attrs=attrs)
+                     heading=heading, dem_error=dem_error, attrs=attrs)
 
 
 def write_insar_contract(
@@ -235,6 +246,7 @@ def import_track_h5(
     thermal_correction: bool = False,
     temperature_csv: str | None = None,
     fetch_temperature: bool = False,
+    geoloc_correct: bool = False,
 ) -> InSAROutput:
     """Track A/B/C/D export HDF5를 /insar 데이터셋으로 적재한다(CLI 단독 변환용).
 
@@ -289,6 +301,22 @@ def import_track_h5(
         if temp_meta is not None:
             corr_meta["temperature"] = temp_meta
     xyz = np.column_stack([td.lonlat[:, 0], td.lonlat[:, 1], z])
+    # 지오로케이션 쉬프트 보정 — 상부구조(DEM 보다 높음)가 밀린 위치를 되돌린다.
+    # 필요: dem_error·입사각·heading. 셋 다 있어야 하고, 하나라도 없으면 사유를 남긴다.
+    geoloc_meta = None
+    if geoloc_correct:
+        from .geolocation import apply_correction
+        _miss = [n for n, v in (("dem_error", td.dem_error), ("입사각", td.incidence),
+                                ("heading", td.heading)) if v is None]
+        if _miss:
+            geoloc_meta = {"applied": False,
+                           "reason": f"필요 데이터 없음: {', '.join(_miss)} — 보정 생략"}
+        else:
+            gc = apply_correction(xyz, td.dem_error, td.incidence, td.heading,
+                                  crs_is_lonlat=True, base_height=z)
+            xyz = gc["xyz"]
+            z = xyz[:, 2]
+            geoloc_meta = {"applied": True, **gc["meta"]}
     longitudinal = los * np.cos(np.deg2rad(azimuth_angle_deg))
     # 곡선 교량: 호길이 station(데크를 따라 잰 거리). 폴리라인 있으면 투영, 없으면 주곡선.
     station = _deck_station(td.lonlat, geometry_latlon).astype(np.float32)
@@ -316,6 +344,7 @@ def import_track_h5(
             "date_labels_ds": "/insar/date_labels",
             "velocity_ds": "/insar/velocity_mm_yr",
             "corrections": corr_meta,
+            "geolocation": geoloc_meta,
         },
     )
     return out

@@ -291,6 +291,9 @@ def main() -> None:
                    help="열팽창 보정 온도원: date,temp_C CSV(결정론적). 취득일별 기온[°C]")
     p.add_argument("--insar-fetch-temp", action="store_true",
                    help="온도 CSV 없을 때 ERA5(Open-Meteo, 키불필요·네트워크)로 취득일 온도 조회")
+    p.add_argument("--insar-geoloc-correct", action="store_true",
+                   help="PS/DS 지오로케이션 쉬프트 보정 — 상부구조(DEM 보다 높음)가 밀린 지도 위치를 "
+                        "되돌린다(Δ=δh/tanθ). 필요: dem_error·입사각·heading(없으면 사유 남기고 생략).")
     # ── 잔존수명(RSL) — FRAM 뒤 opt-in 후처리. 설계: docs/잔존수명_설계.md ──
     p.add_argument("--remaining-life", action="store_true",
                    help="잔존수명(사용성 한계) 추정 후 /life 에 기록. --demo 와 --import-track-h5 양쪽 적용")
@@ -1182,7 +1185,10 @@ def main() -> None:
                                     dem_geotiff=args.insar_dem,
                                     thermal_correction=args.insar_thermal,
                                     temperature_csv=args.insar_temp_csv,
-                                    fetch_temperature=args.insar_fetch_temp)
+                                    fetch_temperature=args.insar_fetch_temp,
+                                    geoloc_correct=args.insar_geoloc_correct)
+            _geo = (store.read_json_attr("insar", "track_source").get("geolocation")
+                    if args.insar_geoloc_correct else None)
         print("=" * 56)
         print("  Track HDF5 → /insar 변환 완료")
         print("=" * 56)
@@ -1194,6 +1200,12 @@ def main() -> None:
         print(f"  정확도 보정     : {'적용(기준점+고도상관) → /insar/velocity_mm_yr' if args.insar_corrections else '없음'}")
         if args.insar_thermal:
             print(f"  열팽창 보정     : {'CSV ' + args.insar_temp_csv if args.insar_temp_csv else ('ERA5 fetch' if args.insar_fetch_temp else '온도원 없음')}")
+        if _geo is not None:
+            if _geo.get("applied"):
+                print(f"  지오로케이션    : 보정됨 · 평균 {_geo['shift_mean_abs_m']}m "
+                      f"· p95 {_geo['shift_p95_abs_m']}m · 최대 {_geo['shift_max_abs_m']}m 되돌림")
+            else:
+                print(f"  지오로케이션    : 생략 — {_geo.get('reason')}")
         print("=" * 56)
         if args.remaining_life:
             _run_remaining_life(args, cfg)

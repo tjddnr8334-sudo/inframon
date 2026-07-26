@@ -80,20 +80,25 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         print("geometryRadar 입사각/고도 읽기 경고:", e)
 
-    # SARvey 가 점별 DEM error(잔차 지형, 상부구조 반영)를 추정하면 절대고도 = 기준고도 + dem_error.
-    # ts 파일에 있으면 더해 정밀화한다(없으면 기준 고도만).
-    if height is not None:
-        try:
-            with h5py.File(os.path.join(O, a.ts), "r") as f:
-                for key in ("dem_error", "demErr", "residual_height"):
-                    if key in f:
-                        de = np.asarray(f[key][()], dtype=np.float32).ravel()
-                        if de.shape[0] == height.shape[0]:
+    # SARvey 점별 DEM error(잔차 지형, 상부구조 반영). 두 곳에 쓴다:
+    #   ① 절대고도 = 기준고도 + dem_error (z 정밀화)
+    #   ② dem_error 자체를 별도 저장 → inframon 의 지오로케이션 쉬프트 보정
+    #      (--insar-geoloc-correct)이 쓴다. 상부구조가 밀린 위치를 δh/tanθ 로 되돌린다.
+    dem_error_out = None
+    try:
+        with h5py.File(os.path.join(O, a.ts), "r") as f:
+            for key in ("dem_error", "demErr", "residual_height"):
+                if key in f:
+                    de = np.asarray(f[key][()], dtype=np.float32).ravel()
+                    n_expect = (height.shape[0] if height is not None else lon.shape[0])
+                    if de.shape[0] == n_expect:
+                        dem_error_out = de
+                        if height is not None:
                             height = (height + de).astype(np.float32)
-                            print(f"  dem_error({key}) 반영 → 절대고도 정밀화")
-                        break
-        except Exception as e:  # noqa: BLE001
-            print("dem_error 읽기 경고(무시):", e)
+                        print(f"  dem_error({key}) 반영 → 절대고도 정밀화 + 별도 저장(지오로케이션 보정용)")
+                    break
+    except Exception as e:  # noqa: BLE001
+        print("dem_error 읽기 경고(무시):", e)
 
     # heading 은 MintPy/ISCE 에서 라디안으로 오는 경우가 많다(예: asc -0.23, desc -2.91).
     # fuse_asc_desc 는 도(°)를 기대하므로 여기서 통일해 저장한다.
@@ -116,6 +121,8 @@ def main() -> None:
             f.create_dataset("incidenceAngle", data=incidence)   # read_track_h5 가 인식
         if height is not None:
             f.create_dataset("height", data=height)              # read_track_h5 가 z 로 사용
+        if dem_error_out is not None:
+            f.create_dataset("dem_error", data=dem_error_out)    # 지오로케이션 쉬프트 보정용
         if math.isfinite(heading):
             f.attrs["HEADING"] = heading                          # asc/desc 분해용
         f.attrs["source"] = "SARvey p2 (incidence/height/heading 포함)"
