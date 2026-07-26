@@ -2296,6 +2296,46 @@ def main() -> None:
         else:
             st.session_state.pop("search_hits", None)
 
+    # 📐 좌표로 지정 — 이름 없는 중소형 교량용. 한국 측량 원점계(중부·서부·동부·동해) 지원.
+    with st.sidebar.expander("📐 좌표로 지정 (측량 원점계)", expanded=False):
+        from inframon.korea_crs import KOREA_ORIGINS, locate
+        st.caption("이름 없는 교량은 설계도서·대장의 **측량 좌표**로 지정한다. "
+                   "한국 원점계를 고르고 X(동거리)·Y(북거리)를 넣으면 위치가 나온다.")
+        _org = st.selectbox("원점계", list(KOREA_ORIGINS),
+                            format_func=lambda k: f"{k} ({KOREA_ORIGINS[k][0]})", key="crs_origin")
+        st.caption(f"관할: {KOREA_ORIGINS[_org][2]}")
+        cc1, cc2 = st.columns(2)
+        _cx = cc1.number_input("X 동거리(Easting, m)", value=0.0, step=100.0, format="%.2f", key="crs_x")
+        _cy = cc2.number_input("Y 북거리(Northing, m)", value=0.0, step=100.0, format="%.2f", key="crs_y")
+        if _cx or _cy:
+            try:
+                info = locate(_cx, _cy, _org)
+                w = info["wgs84"]
+                if info["in_korea"] and not info["note"]:
+                    st.success(f"📍 {w['lat']}, {w['lon']}")
+                elif info["in_korea"]:
+                    st.warning(f"📍 {w['lat']}, {w['lon']}\n\n{info['note']}")
+                else:
+                    st.error(f"{info['note']}")
+                st.caption(f"[🗺️ 지도에서 확인]({info['map_url']})")
+                if info["in_korea"] and st.button("📍 이 좌표로 교량 설정", use_container_width=True,
+                                                  key="btn_set_crs"):
+                    tgt = {"name": f"좌표지정({_org})", "name_ko": None,
+                           "selected_lat": w["lat"], "selected_lon": w["lon"],
+                           "osm_type": "manual", "osm_id": 0,
+                           "bbox": [w["lon"] - 0.003, w["lat"] - 0.003,
+                                    w["lon"] + 0.003, w["lat"] + 0.003],
+                           "confirmed": True,
+                           "source": f"측량좌표 {info['input']['epsg']} X={_cx:.1f} Y={_cy:.1f}"}
+                    out = Path(_recipe_dir()); out.mkdir(parents=True, exist_ok=True)
+                    (out / "bridge_target.json").write_text(
+                        json.dumps(tgt, ensure_ascii=False, indent=2), encoding="utf-8")
+                    st.session_state["recipe_dir"] = _recipe_dir()
+                    st.success(f"설정됨 → {w['lat']}, {w['lon']}")
+                    st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
     path = st.sidebar.text_input("project.h5 경로", picked or default_project_path())

@@ -131,6 +131,12 @@ def main() -> None:
                    help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
+    p.add_argument("--locate", default=None, metavar="X,Y",
+                   help="한국 측량 좌표 → WGS84 경위도·지도 링크. 이름 없는 교량을 좌표로 지정. "
+                        "원점계는 --origin(기본 중부원점). 예: --locate 209655,529915")
+    p.add_argument("--origin", default="중부원점", metavar="원점계",
+                   help="--locate 원점계: 중부원점(EPSG:5186·기본)·서부원점(5185)·동부원점(5187)·"
+                        "동해원점(5188). EPSG 코드나 '동부' 같은 약칭도 됨.")
     p.add_argument("--bridge-csv", default=None, metavar="CSV",
                    help="전국교량표준데이터 CSV(data.go.kr/15081953). --custom-pinn 이 "
                         "최근접 교량의 실 제원·공식 종별등급을 사용.")
@@ -801,6 +807,31 @@ def main() -> None:
         rep = run_doctor(args.doctor or None)
         print(format_report(rep))
         sys.exit(0 if rep.core_ok else 1)
+
+    if args.locate:
+        from .korea_crs import KOREA_ORIGINS, locate, resolve_origin
+        try:
+            _xy = [float(v) for v in args.locate.replace(" ", "").split(",")]
+            if len(_xy) != 2:
+                raise ValueError
+            _disp = resolve_origin(args.origin)
+        except ValueError as exc:
+            p.error(f"--locate/--origin: {exc if str(exc) else 'X,Y 두 값이 필요합니다'}")
+        info = locate(_xy[0], _xy[1], _disp)
+        print("=" * 56)
+        print("  좌표 → 위치 (한국 측량 원점계)")
+        print("=" * 56)
+        print(f"  입력 좌표      : X={info['input']['x']:.2f}, Y={info['input']['y']:.2f}")
+        print(f"  원점계         : {info['input']['origin']} ({info['input']['epsg']})")
+        print(f"                   {KOREA_ORIGINS[info['input']['origin']][2]}")
+        print(f"  WGS84 경위도   : {info['wgs84']['lat']}, {info['wgs84']['lon']}")
+        print(f"  한국 범위 내   : {'예' if info['in_korea'] else '아니오 ⚠️'}")
+        if info["note"]:
+            print(f"  진단           : {info['note']}")
+        print(f"  지도 확인      : {info['map_url']}")
+        print("=" * 56)
+        print("  다음: 이 경위도로 --custom-pinn 또는 대시보드 지도에서 교량 확인")
+        return
 
     if args.inspect_data or args.ingest_data:
         inv = inspect_insar_data(args.inspect_data or args.ingest_data)
