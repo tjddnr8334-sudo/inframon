@@ -2153,9 +2153,12 @@ def tab_psi(start: date) -> None:
     valmap = {"LOS 속도(mm/yr)": ("los_velocity_mm_yr", vel),
               "연직 속도(mm/yr)": ("vertical_velocity_mm_yr", vert),
               "누적 변위(mm)": ("cumulative_mm", cum)}
-    # CRI(FRAM 위험도) 색 옵션 — FRAM project.h5(/fram/CRI) 주면 점별 최근접 매핑
-    fram_h5 = st.text_input("FRAM project.h5 (CRI 색, 선택)", "data/jeongjagyo_fram.h5",
-                            key="bim_fram", help="/fram/CRI 를 InSAR 점에 최근접 매핑해 위험도로 색칠.")
+    # CRI(FRAM 위험도) 색 옵션 — 여기는 PSI 비교 탭이라 별도 FRAM project.h5 를 얹을 수 있다.
+    # 특정 교량 파일명을 기본값으로 하드코딩하면 다른 교량 PSI 를 볼 때 정자교 위험도가
+    # 엉뚱하게 섞이므로, 기본은 비워 두고 사용자가 원할 때만 경로를 준다.
+    fram_h5 = st.text_input("FRAM project.h5 (CRI 색, 선택 — 경로 입력 시)", "",
+                            key="bim_fram", help="/fram/CRI 를 이 PSI 점에 최근접 매핑해 위험도로 색칠. "
+                            "비워 두면 CRI 색을 쓰지 않는다.")
     if fram_h5 and Path(fram_h5).exists():
         try:
             from inframon.insar.bim_export import map_cri_to_points
