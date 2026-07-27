@@ -62,6 +62,24 @@ def _run_remaining_life(args, cfg=None) -> None:
     print("-" * 56)
 
 
+def _print_validation(title, ref, r, tol) -> None:
+    """검증 결과 표준 출력 — --validate / --validate-leveling 공용."""
+    d = r.as_dict()
+    print("=" * 56)
+    print(f"  {title}")
+    print("=" * 56)
+    print(f"  기준점         : {ref.source}")
+    print(f"  정합           : {r.n_matched}/{r.n_reference}"
+          f"{f' (미정합 {r.n_reference_unmatched})' if r.n_reference_unmatched else ''}"
+          f" · 중앙거리 {d['match_dist_median_m']}m")
+    if r.n_matched:
+        print(f"  RMSE(bias제거) : {d['rmse_detrended']} mm  ← 판정 지표(허용 {tol}mm)")
+        print(f"  프레임 오프셋  : bias {d['bias']:+} mm (InSAR 상대 vs 실측 절대 — 오차 아님)")
+        print(f"  상관 r         : {d['pearson_r']}")
+    print(f"  판정           : {'✅ 통과' if r.passed else '❌ 초과'} — {r.verdict}")
+    print("=" * 56)
+
+
 def main() -> None:
     # Windows 콘솔(cp949)에서도 한글/특수문자 출력이 깨지지 않도록 UTF-8 강제
     for stream in (sys.stdout, sys.stderr):
@@ -232,6 +250,13 @@ def main() -> None:
                    help="--validate 정합 최대거리[m] (기본 50).")
     p.add_argument("--validate-tol", type=float, default=5.0, metavar="MM",
                    help="--validate 통과 허용 RMSE[mm] (기본 5).")
+    p.add_argument("--validate-leveling", default=None, metavar="PROJECT_H5,LEVELING_CSV",
+                   help="수준측량 성과표(회차별 표고 m)로 InSAR 검증. 표고→연직침하속도"
+                        "[mm/yr] 회귀 + 측량좌표→WGS84 + 입사각 LOS 투영 + 프레임오프셋 제거.")
+    p.add_argument("--leveling-origin", default="중부원점", metavar="원점계",
+                   help="--validate-leveling 측점 X,Y 의 원점계(기본 중부원점).")
+    p.add_argument("--leveling-dates", default=None, metavar="D1,D2,...",
+                   help="표고 열 헤더가 날짜가 아닐 때 각 회차 날짜(예: 2020-05-01,2021-05-01).")
     p.add_argument("--snap-insar", default=None, metavar="SLC_DIR",
                    help="SNAP(Windows 네이티브) 백엔드로 SLC_DIR 의 S1 SLC 처리 → Track H5 "
                         "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
@@ -756,20 +781,25 @@ def main() -> None:
         r = validate_project(_proj.strip(), ref, max_dist_m=args.validate_dist,
                              tolerance_mm=args.validate_tol,
                              project_to_los=args.validate_vertical)
-        d = r.as_dict()
-        print("=" * 56)
-        print("  현장 검증 — InSAR 변위 vs 지상 실측/FEM 기준")
-        print("=" * 56)
-        print(f"  기준점         : {ref.source}")
-        print(f"  정합           : {r.n_matched}/{r.n_reference}"
-              f"{f' (미정합 {r.n_reference_unmatched})' if r.n_reference_unmatched else ''}"
-              f" · 중앙거리 {d['match_dist_median_m']}m")
-        if r.n_matched:
-            print(f"  RMSE(bias제거) : {d['rmse_detrended']} mm  ← 판정 지표(허용 {args.validate_tol}mm)")
-            print(f"  프레임 오프셋  : bias {d['bias']:+} mm (InSAR 상대 vs 실측 절대 — 오차 아님)")
-            print(f"  상관 r         : {d['pearson_r']}")
-        print(f"  판정           : {'✅ 통과' if r.passed else '❌ 초과'} — {r.verdict}")
-        print("=" * 56)
+        _print_validation("현장 검증 — InSAR 변위 vs 지상 실측/FEM 기준", ref, r, args.validate_tol)
+        return
+
+    if args.validate_leveling:
+        from .leveling import load_leveling_csv
+        from .validation import validate_project
+        try:
+            _proj, _lev = args.validate_leveling.split(",")
+        except ValueError:
+            p.error("--validate-leveling 형식은 PROJECT_H5,LEVELING_CSV 입니다")
+        _dates = [s.strip() for s in args.leveling_dates.split(",")] if args.leveling_dates else None
+        try:
+            ref = load_leveling_csv(_lev.strip(), origin=args.leveling_origin, dates=_dates)
+        except ValueError as exc:
+            p.error(str(exc))
+        # 수준측량은 연직·절대 → LOS 투영(입사각 필요) + 프레임 오프셋 제거로 판정
+        r = validate_project(_proj.strip(), ref, max_dist_m=args.validate_dist,
+                             tolerance_mm=args.validate_tol, project_to_los=True)
+        _print_validation("현장 검증 — InSAR LOS vs 수준측량(연직 침하속도)", ref, r, args.validate_tol)
         return
 
     if args.pipeline:
