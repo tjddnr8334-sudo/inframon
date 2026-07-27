@@ -221,6 +221,9 @@ def main() -> None:
                         "제외하고 건강 점만으로 적합(오염 방어).")
     p.add_argument("--validate", default=None, metavar="PROJECT_H5,REFERENCE_CSV",
                    help="현장 검증: project.h5 의 InSAR 결과를 기준 CSV(계측·FEM: lon,lat,value)와 대조(RMSE·bias·r).")
+    p.add_argument("--validate-origin", default=None, metavar="원점계",
+                   help="기준 CSV 처음 두 열이 한국 측량 좌표(X,Y)면 이 원점계로 WGS84 변환"
+                        "(중부원점 등). 생략하면 lon,lat 그대로. 지상 실측은 흔히 측량좌표.")
     p.add_argument("--validate-kind", default="velocity", choices=["velocity", "displacement"],
                    help="--validate 기준값 종류(기본 velocity[mm/yr]).")
     p.add_argument("--validate-vertical", action="store_true",
@@ -749,14 +752,23 @@ def main() -> None:
         except ValueError:
             p.error("--validate 형식은 PROJECT_H5,REFERENCE_CSV 입니다")
         ref = load_reference_csv(_ref.strip(), kind=args.validate_kind,
-                                 vertical=args.validate_vertical)
+                                 vertical=args.validate_vertical, origin=args.validate_origin)
         r = validate_project(_proj.strip(), ref, max_dist_m=args.validate_dist,
                              tolerance_mm=args.validate_tol,
                              project_to_los=args.validate_vertical)
+        d = r.as_dict()
         print("=" * 56)
-        print("  현장 검증 (InSAR/PINN vs 계측·FEM 기준)")
+        print("  현장 검증 — InSAR 변위 vs 지상 실측/FEM 기준")
         print("=" * 56)
-        print("  " + r.summary())
+        print(f"  기준점         : {ref.source}")
+        print(f"  정합           : {r.n_matched}/{r.n_reference}"
+              f"{f' (미정합 {r.n_reference_unmatched})' if r.n_reference_unmatched else ''}"
+              f" · 중앙거리 {d['match_dist_median_m']}m")
+        if r.n_matched:
+            print(f"  RMSE(bias제거) : {d['rmse_detrended']} mm  ← 판정 지표(허용 {args.validate_tol}mm)")
+            print(f"  프레임 오프셋  : bias {d['bias']:+} mm (InSAR 상대 vs 실측 절대 — 오차 아님)")
+            print(f"  상관 r         : {d['pearson_r']}")
+        print(f"  판정           : {'✅ 통과' if r.passed else '❌ 초과'} — {r.verdict}")
         print("=" * 56)
         return
 

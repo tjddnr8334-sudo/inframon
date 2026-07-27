@@ -32,43 +32,67 @@ class Reference:
 class ValidationResult:
     n_reference: int
     n_matched: int
-    rmse: float
+    rmse: float                 # 원 잔차 RMSE(공통 오프셋 포함 — 절대 정합)
     mae: float
-    bias: float                 # 평균(InSAR − 기준)
+    bias: float                 # 평균(InSAR − 기준) = 공통 레퍼런스 프레임 오프셋
     pearson_r: float
     max_dist_m: float
     tolerance_mm: float
-    passed: bool                # RMSE ≤ tolerance
+    passed: bool                # 판정 근거(아래 rmse_detrended 기준)
     per_point: list = field(default_factory=list)   # [{lon,lat,ref,insar,resid,dist_m}]
+    # InSAR 는 **상대** 변위(기준점 대비), 지상 실측은 절대값이라 공통 오프셋(bias)이 섞인다.
+    # bias 를 뺀 잔차가 InSAR 의 실제 상대 정확도다 — GNSS 검증에서 배운 것과 같은 원리.
+    rmse_detrended: float = float("nan")   # bias 제거 후 RMSE ← **판정·정확도 지표**
+    match_dist_median_m: float = float("nan")
+    n_reference_unmatched: int = 0
+    verdict: str = ""
 
     def summary(self) -> str:
         s = "✅ 통과" if self.passed else "❌ 초과"
-        return (f"검증: 정합 {self.n_matched}/{self.n_reference} · RMSE {self.rmse:.2f} · "
-                f"MAE {self.mae:.2f} · bias {self.bias:+.2f} · r {self.pearson_r:.3f} "
-                f"(허용 {self.tolerance_mm:.1f}) {s}")
+        return (f"검증: 정합 {self.n_matched}/{self.n_reference} · "
+                f"RMSE(bias제거) {self.rmse_detrended:.2f} · bias(프레임오프셋) {self.bias:+.2f} · "
+                f"r {self.pearson_r:.3f} (허용 {self.tolerance_mm:.1f}mm) {s}")
 
     def as_dict(self) -> dict:
         return {"n_reference": self.n_reference, "n_matched": self.n_matched,
-                "rmse": round(self.rmse, 3), "mae": round(self.mae, 3),
-                "bias": round(self.bias, 3), "pearson_r": round(self.pearson_r, 3),
-                "tolerance_mm": self.tolerance_mm, "passed": self.passed}
+                "n_reference_unmatched": self.n_reference_unmatched,
+                "rmse": round(self.rmse, 3), "rmse_detrended": round(self.rmse_detrended, 3),
+                "mae": round(self.mae, 3), "bias": round(self.bias, 3),
+                "pearson_r": round(self.pearson_r, 3),
+                "match_dist_median_m": round(self.match_dist_median_m, 2),
+                "tolerance_mm": self.tolerance_mm, "passed": self.passed,
+                "verdict": self.verdict}
 
 
 def load_reference_csv(path: str | Path, *, kind: str = "velocity",
-                       vertical: bool = False) -> Reference:
-    """기준 CSV(lon,lat,value[,...]) → Reference. 헤더 lon/lat/value 자동 인식."""
+                       vertical: bool = False, origin: str | None = None) -> Reference:
+    """기준 CSV(lon,lat,value[,...]) → Reference. 헤더 lon/lat/value 자동 인식.
+
+    `origin` 을 주면 처음 두 열을 **한국 측량 좌표(X,Y)** 로 보고 그 원점계로 WGS84 변환한다
+    (중부원점 등). 지상 실측(수준측량·GNSS·코너리플렉터)은 흔히 측량 좌표로 나오므로,
+    변환 없이 InSAR(WGS84)와 정합하려다 다 실패하는 걸 막는다. None 이면 lon/lat 그대로.
+    """
     lonlat, values = [], []
     with open(path, newline="", encoding="utf-8") as f:
         rows = list(csv.reader(f))
     if not rows:
         raise ValueError(f"빈 기준 CSV: {path}")
     hdr = [h.strip().lower() for h in rows[0]]
-    has_header = any(h in ("lon", "longitude", "lat", "latitude", "value") for h in hdr)
+    _lon_keys = ("lon", "longitude", "x", "easting", "e")
+    _lat_keys = ("lat", "latitude", "y", "northing", "n")
+    _val_keys = ("value", "velocity", "vel", "disp", "displacement", "v", "z")
+    has_header = any(h in _lon_keys + _lat_keys + ("value", "velocity") for h in hdr)
     ix = {}
     if has_header:
-        for name, keys in (("lon", ("lon", "longitude")), ("lat", ("lat", "latitude")),
-                           ("val", ("value", "velocity", "disp", "displacement"))):
+        for name, keys in (("lon", _lon_keys), ("lat", _lat_keys), ("val", _val_keys)):
             ix[name] = next((i for i, h in enumerate(hdr) if h in keys), None)
+        # 위치 열을 못 찾았으면(예: 헤더가 값 이름만) 처음 두 열을 위치로 가정
+        if ix["lon"] is None:
+            ix["lon"] = 0
+        if ix["lat"] is None:
+            ix["lat"] = 1
+        if ix["val"] is None:
+            ix["val"] = 2
         body = rows[1:]
     else:
         ix = {"lon": 0, "lat": 1, "val": 2}
@@ -81,7 +105,17 @@ def load_reference_csv(path: str | Path, *, kind: str = "velocity",
             values.append(float(r[ix["val"]]))
         except (ValueError, TypeError):
             continue
-    return Reference(lonlat=lonlat, values=values, kind=kind, vertical=vertical, source=str(path))
+    src = str(path)
+    if origin is not None:
+        # 처음 두 열 = 측량 좌표(X=Easting, Y=Northing) → WGS84 (lon,lat)
+        from .korea_crs import to_wgs84
+        conv = []
+        for x, y in lonlat:
+            w = to_wgs84(x, y, origin)
+            conv.append((w.lon, w.lat))
+        lonlat = conv
+        src += f" (원점계 {origin} → WGS84)"
+    return Reference(lonlat=lonlat, values=values, kind=kind, vertical=vertical, source=src)
 
 
 def _dist_m(a, b, lat0):
@@ -90,11 +124,16 @@ def _dist_m(a, b, lat0):
 
 def validate(insar_lonlat, insar_values, reference: Reference, *,
              insar_incidence=None, max_dist_m: float = 50.0,
-             tolerance_mm: float = 5.0, project_to_los: bool = False) -> ValidationResult:
+             tolerance_mm: float = 5.0, project_to_los: bool = False,
+             align_frame: bool = True) -> ValidationResult:
     """InSAR 값(점별) 을 기준점에 최근접 정합해 검증 지표 산출.
 
     project_to_los=True 이고 reference.vertical 이면 기준 연직값을 cos(입사각)로 LOS 투영해
     비교(입사각 필요). 정합 거리 > max_dist_m 인 기준점은 제외.
+
+    align_frame=True(기본): InSAR 는 국소 기준점 대비 **상대** 변위라 지상 실측(절대)과
+    공통 오프셋(bias)이 있다. 판정은 그 bias 를 뺀 잔차(rmse_detrended)로 한다 —
+    프레임 오프셋을 InSAR 오차로 오인하지 않기 위함. bias 자체는 따로 보고한다.
     """
     import numpy as np
 
@@ -103,7 +142,7 @@ def validate(insar_lonlat, insar_values, reference: Reference, *,
     inc = None if insar_incidence is None else np.asarray(insar_incidence, dtype=float)
     lat0 = float(np.mean([p[1] for p in il])) if il else 0.0
 
-    refs, ins, per = [], [], []
+    refs, ins, per, dists = [], [], [], []
     for k, (rp, rv) in enumerate(zip(reference.lonlat, reference.values)):
         # 최근접 InSAR 점
         best_i, best_d = -1, float("inf")
@@ -117,22 +156,42 @@ def validate(insar_lonlat, insar_values, reference: Reference, *,
         rval = float(rv)
         if project_to_los and reference.vertical and inc is not None:
             rval = rval * math.cos(math.radians(float(inc[best_i])))   # 연직 → LOS
-        refs.append(rval); ins.append(ival)
+        refs.append(rval); ins.append(ival); dists.append(best_d)
         per.append({"lon": rp[0], "lat": rp[1], "ref": round(rval, 3),
                     "insar": round(ival, 3), "resid": round(ival - rval, 3),
                     "dist_m": round(best_d, 1)})
 
     n = len(refs)
+    n_ref = len(reference.values)
     if n == 0:
-        return ValidationResult(len(reference.values), 0, float("nan"), float("nan"),
-                                float("nan"), float("nan"), max_dist_m, tolerance_mm, False, per)
+        r = ValidationResult(n_ref, 0, float("nan"), float("nan"), float("nan"),
+                             float("nan"), max_dist_m, tolerance_mm, False, per)
+        r.n_reference_unmatched = n_ref
+        r.verdict = (f"정합된 기준점 0/{n_ref} — 모두 {max_dist_m:.0f}m 밖. 좌표계가 맞는지"
+                     "(측량좌표면 WGS84 변환 필요), max_dist 가 적절한지 확인하세요.")
+        return r
     refs = np.asarray(refs); ins = np.asarray(ins); resid = ins - refs
     rmse = float(np.sqrt(np.mean(resid ** 2)))
     mae = float(np.mean(np.abs(resid)))
     bias = float(np.mean(resid))
-    r = float(np.corrcoef(refs, ins)[0, 1]) if n >= 2 and refs.std() > 0 and ins.std() > 0 else float("nan")
-    return ValidationResult(len(reference.values), n, rmse, mae, bias, r,
-                            max_dist_m, tolerance_mm, rmse <= tolerance_mm, per)
+    # 공통 프레임 오프셋(bias) 제거 후 잔차 — InSAR 의 실제 상대 정확도.
+    resid_dt = resid - bias if align_frame else resid
+    rmse_dt = float(np.sqrt(np.mean(resid_dt ** 2)))
+    r_p = float(np.corrcoef(refs, ins)[0, 1]) if n >= 2 and refs.std() > 0 and ins.std() > 0 else float("nan")
+    judge = rmse_dt if align_frame else rmse
+    out = ValidationResult(n_ref, n, rmse, mae, bias, r_p, max_dist_m, tolerance_mm,
+                           judge <= tolerance_mm, per)
+    out.rmse_detrended = rmse_dt
+    out.match_dist_median_m = float(np.median(dists))
+    out.n_reference_unmatched = n_ref - n
+    # 판정 근거를 말로
+    if judge <= tolerance_mm:
+        out.verdict = (f"프레임 오프셋 {bias:+.2f}mm 제거 후 잔차 {rmse_dt:.2f}mm ≤ 허용 "
+                       f"{tolerance_mm:.1f}mm — InSAR 상대 정확도 지상실측과 정합")
+    else:
+        out.verdict = (f"잔차 {rmse_dt:.2f}mm > 허용 {tolerance_mm:.1f}mm — 정합 부족"
+                       f"(bias {bias:+.2f}mm 는 프레임 오프셋이라 별개). 좌표·기준점·보정 점검")
+    return out
 
 
 def validate_project(project_h5: str | Path, reference: Reference, *,

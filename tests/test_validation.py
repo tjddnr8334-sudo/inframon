@@ -52,6 +52,57 @@ def test_validate_los_projection():
     assert r.n_matched == 1 and abs(r.bias) < 0.1     # 투영 후 거의 일치
 
 
+def test_detrended_rmse_removes_frame_offset():
+    # InSAR 는 상대 변위 → 지상실측과 공통 오프셋(프레임차)만큼 어긋난다.
+    # 공통 오프셋 +5mm + 소량 잔차 → 원 RMSE 는 크지만 detrended 는 작아 통과해야.
+    ll = [(127.100, 37.320), (127.101, 37.321), (127.102, 37.322), (127.103, 37.323)]
+    ref = Reference(lonlat=ll, values=[0.0, 1.0, 2.0, 3.0])
+    insar_vals = [5.1, 5.9, 7.1, 7.9]          # 공통 +5, 잔차 ±0.1
+    r = validate(ll, insar_vals, ref, max_dist_m=10.0, tolerance_mm=0.5)
+    assert r.bias == pytest.approx(5.0, abs=0.05)
+    assert r.rmse > 4.5                         # 오프셋 때문에 원 RMSE 큼
+    assert r.rmse_detrended < 0.2               # 프레임차 제거하면 작음
+    assert r.passed is True                     # detrended 기준 판정
+    assert "프레임 오프셋" in r.verdict
+
+
+def test_align_frame_off_uses_raw_rmse():
+    ll = [(127.100, 37.320), (127.101, 37.321)]
+    ref = Reference(lonlat=ll, values=[0.0, 1.0])
+    r = validate(ll, [5.0, 6.0], ref, max_dist_m=10.0, tolerance_mm=0.5, align_frame=False)
+    assert r.passed is False                    # 오프셋 제거 안 하면 초과
+
+
+def test_load_reference_csv_xy_header(tmp_path):
+    # 헤더가 x,y,value 여도(측량 CSV 관행) 위치 열로 인식돼야 — value 만 보고 skip 하면 안 됨
+    p = tmp_path / "ref.csv"
+    p.write_text("x,y,value\n127.10,37.32,-3.5\n127.11,37.33,2.0\n", encoding="utf-8")
+    ref = load_reference_csv(p)
+    assert len(ref.lonlat) == 2
+    assert ref.lonlat[0] == (127.10, 37.32)
+
+
+def test_load_reference_csv_survey_origin(tmp_path):
+    # 중부원점 측량좌표 → WGS84 변환. 정자교 부근 왕복.
+    pyproj = pytest.importorskip("pyproj")
+    f = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:5186", always_xy=True)
+    lon0, lat0 = 127.109, 37.3685
+    x, y = f.transform(lon0, lat0)
+    p = tmp_path / "ref_tm.csv"
+    p.write_text(f"x,y,value\n{x:.3f},{y:.3f},-2.0\n", encoding="utf-8")
+    ref = load_reference_csv(p, origin="중부원점")
+    assert ref.lonlat[0][0] == pytest.approx(lon0, abs=1e-4)
+    assert ref.lonlat[0][1] == pytest.approx(lat0, abs=1e-4)
+    assert "원점계" in ref.source
+
+
+def test_no_match_verdict_is_actionable():
+    ref = Reference(lonlat=[(120.0, 35.0)], values=[1.0])
+    r = validate([(127.1, 37.3)], [1.0], ref, max_dist_m=50.0)
+    assert r.n_reference_unmatched == 1
+    assert "좌표계" in r.verdict and "0/1" in r.verdict
+
+
 def test_validate_project(tmp_path):
     h5py = pytest.importorskip("h5py")
     N = 5
