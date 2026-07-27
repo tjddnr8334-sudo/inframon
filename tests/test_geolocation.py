@@ -176,3 +176,20 @@ def test_import_geoloc_off_by_default(tmp_path):
     with ProjectStore(out, mode="a") as s:
         import_track_h5(s, src)
         assert s.read_json_attr("insar", "track_source")["geolocation"] is None
+
+
+def test_bad_incidence_does_not_produce_nan():
+    """비물리 입사각(0·NaN·>90)은 쉬프트 0 으로 안전 처리 — 좌표에 NaN 을 심지 않는다.
+
+    회귀: 100 케이스 벤치에서 입사각 0° 가 δh/tan0=inf → NaN 좌표를 만들던 걸 잡았다.
+    """
+    n = 20
+    dh = np.full(n, 10.0)
+    inc = np.array([39.0] * 15 + [0.0, 95.0, -5.0, np.nan, 200.0])   # 5개 비물리
+    xyz = np.column_stack([np.full(n, 127.1), np.full(n, 37.5), np.zeros(n)])
+    out = apply_correction(xyz, dh, inc, -13.0, crs_is_lonlat=True)
+    assert np.isfinite(out["xyz"]).all()          # NaN/inf 없음
+    assert out["meta"]["n_bad_incidence"] == 5
+    # 정상 입사각 점은 여전히 보정됨
+    shift = height_shift(dh, inc, -13.0)
+    assert shift["magnitude_m"][0] > 0 and shift["magnitude_m"][-1] == 0.0

@@ -55,16 +55,23 @@ def height_shift(dem_error: np.ndarray, incidence_deg: np.ndarray | float,
     inc = np.asarray(incidence_deg, dtype=np.float64).ravel()
     if inc.size == 1:
         inc = np.full_like(dh, float(inc[0]))
-    tan_t = np.tan(np.radians(inc))
-    mag = dh / np.where(np.abs(tan_t) < 1e-6, np.nan, tan_t)   # δh/tanθ, [N]
+    # 비물리 입사각(≤0·≥90·NaN)은 δh/tanθ 를 폭발시킨다. Sentinel-1 IW 유효 범위(10~75°)
+    # 밖은 쉬프트를 0 으로 두고 개수를 센다 — 조용히 NaN 을 좌표에 심지 않는다.
+    n_bad = int(np.sum(~np.isfinite(inc) | (inc < 10.0) | (inc > 75.0)))
+    inc_safe = np.where(np.isfinite(inc) & (inc >= 10.0) & (inc <= 75.0), inc, np.nan)
+    tan_t = np.tan(np.radians(inc_safe))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mag = dh / tan_t                                      # δh/tanθ, [N]
+    mag = np.where(np.isfinite(mag), mag, 0.0)                # 비물리 입사각 → 쉬프트 0
     ue, un = los_ground_unit(heading_deg, look_side)
     # 높은 점은 위성쪽(near-range = +지상LOS수평)으로 밀린다 → geocoded = true + mag·(ue,un)
     shift = np.stack([mag * ue, mag * un], axis=1)             # [N,2] (E,N)
-    return {"shift_en_m": shift, "magnitude_m": np.abs(mag),
-            "los_ground_unit": (ue, un),
-            "mean_abs_m": float(np.nanmean(np.abs(mag))),
-            "p95_abs_m": float(np.nanpercentile(np.abs(mag), 95)),
-            "max_abs_m": float(np.nanmax(np.abs(mag)))}
+    absmag = np.abs(mag)
+    return {"shift_en_m": shift, "magnitude_m": absmag,
+            "los_ground_unit": (ue, un), "n_bad_incidence": n_bad,
+            "mean_abs_m": float(np.mean(absmag)) if absmag.size else 0.0,
+            "p95_abs_m": float(np.percentile(absmag, 95)) if absmag.size else 0.0,
+            "max_abs_m": float(np.max(absmag)) if absmag.size else 0.0}
 
 
 def _meters_per_degree(lat_deg: float) -> tuple[float, float]:
@@ -130,6 +137,7 @@ def apply_correction(
             "crs": "lonlat" if crs_is_lonlat else "projected_m",
             "heading_deg": float(heading_deg),
             "look_side": look_side,
+            "n_bad_incidence": hs["n_bad_incidence"],
             "shift_mean_abs_m": round(hs["mean_abs_m"], 3),
             "shift_p95_abs_m": round(hs["p95_abs_m"], 3),
             "shift_max_abs_m": round(hs["max_abs_m"], 3),

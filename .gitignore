@@ -31,3 +31,6 @@ docs/img/demo.gif
 # 언제든 재생성되고, 커밋해 두면 입력과 어긋난 채 남아 오해를 부른다.
 configs/*/processing_manifest.json
 configs/*/sarvey_config.json
+
+# 벤치 산출물(스크립트는 scripts/bench, 결과는 재생성)
+data/bench/
