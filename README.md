@@ -81,7 +81,7 @@ inframon/
 │   ├── dashboard/         # Streamlit app (FRAM / PINN / InSAR tabs)
 │   ├── __main__.py        # CLI entry — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 43 test files (304 tests) — golden regression, contract validation, per-engine *_real
+├── tests/                 # 80 test files (723 tests) — golden regression, contract validation, per-engine *_real
 ├── configs/               # 공유·수정 가능한 교량 입력 (레시피·BIM 부재표·좌표정합·한계값) — git 추적
 ├── docs/                  # design & context docs (KR) + GitHub Pages landing (index.html)
 ├── scripts/               # SLC download, WSL2 SARvey runners, dashboard / media capture
@@ -361,7 +361,7 @@ inframon/
 │   ├── dashboard/         # Streamlit 앱 (FRAM / PINN / InSAR 탭)
 │   ├── __main__.py        # CLI 진입점 — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 테스트 파일 43개 (테스트 304개) — 골든 회귀, 계약 검증, 엔진별 *_real
+├── tests/                 # 테스트 파일 80개 (테스트 723개) — 골든 회귀, 계약 검증, 엔진별 *_real
 ├── configs/               # 공유·수정 가능한 교량 입력 — 협업자가 여기를 고친다 (configs/README.md)
 ├── docs/                  # 설계·맥락 문서(한글) + GitHub Pages 랜딩(index.html)
 ├── scripts/               # SLC 다운로드, WSL2 SARvey 러너, 대시보드/미디어 캡처
