@@ -103,22 +103,56 @@ def test_no_match_verdict_is_actionable():
     assert "좌표계" in r.verdict and "0/1" in r.verdict
 
 
-def test_validate_project(tmp_path):
-    h5py = pytest.importorskip("h5py")
+def _write_proj(path, *, inc_name="incidenceAngle", with_coords="pixel_lonlat"):
+    import h5py
     N = 5
     ll = np.column_stack([np.linspace(127.10, 127.11, N), np.full(N, 37.32)])
-    # 선형 속도 2mm/yr 인 LOS(365일 간격 4시점 → [N,4])
     days = np.array([0, 365, 730, 1095])
-    los = np.outer(np.full(N, 2.0), days / 365.25)     # [N,M] mm
-    proj = tmp_path / "p.h5"
-    with h5py.File(proj, "w") as f:
+    los = np.outer(np.full(N, 2.0), days / 365.25)
+    with h5py.File(path, "w") as f:
         g = f.create_group("insar")
-        g.create_dataset("pixel_lonlat", data=ll)
+        if with_coords == "pixel_lonlat":
+            g.create_dataset("pixel_lonlat", data=ll)
+        else:  # xyz 폴백
+            g.create_dataset("xyz", data=np.column_stack([ll, np.zeros(N)]))
         g.create_dataset("los", data=los.astype("float32"))
         g.create_dataset("date_labels", data=np.array(
             [b"20240101", b"20241231", b"20251231", b"20261231"]))
-        g.create_dataset("incidenceAngle", data=np.full(N, 39.0, "float32"))
-    ref = Reference(lonlat=[(p[0], p[1]) for p in ll], values=[2.0] * N, kind="velocity")
+        if inc_name:
+            g.create_dataset(inc_name, data=np.full(N, 39.0, "float32"))
+    return ll
+
+
+def test_validate_project(tmp_path):
+    pytest.importorskip("h5py")
+    proj = tmp_path / "p.h5"
+    ll = _write_proj(proj)
+    ref = Reference(lonlat=[(p[0], p[1]) for p in ll], values=[2.0] * 5, kind="velocity")
     r = v.validate_project(proj, ref, max_dist_m=10.0, tolerance_mm=0.5)
-    assert r.n_matched == N
+    assert r.n_matched == 5
     assert r.rmse < 0.1 and r.passed is True           # 속도 복원 ≈ 2mm/yr
+
+
+def test_validate_project_incidence_deg_alias(tmp_path):
+    # 실 파이프라인은 입사각을 incidence_deg 로 저장 — validate 가 이 이름도 읽어야
+    # 연직 투영이 조용히 생략되지 않는다.
+    pytest.importorskip("h5py")
+    proj = tmp_path / "p.h5"
+    ll = _write_proj(proj, inc_name="incidence_deg", with_coords="xyz")
+    # 연직 기준 = LOS/cos39 이면 투영 후 정합해야
+    vert = [2.0 / np.cos(np.radians(39.0))] * 5
+    ref = Reference(lonlat=[(p[0], p[1]) for p in ll], values=vert,
+                    kind="velocity", vertical=True)
+    r = v.validate_project(proj, ref, max_dist_m=10.0, tolerance_mm=0.3,
+                           project_to_los=True)
+    assert r.n_matched == 5 and r.passed is True       # incidence_deg 읽혀 투영됨
+
+
+def test_validate_project_vertical_without_incidence_raises(tmp_path):
+    # 연직 투영을 요청했는데 입사각이 없으면 조용히 직접비교하지 말고 막아야
+    pytest.importorskip("h5py")
+    proj = tmp_path / "p.h5"
+    ll = _write_proj(proj, inc_name=None)
+    ref = Reference(lonlat=[(p[0], p[1]) for p in ll], values=[2.0] * 5, vertical=True)
+    with pytest.raises(ValueError, match="입사각"):
+        v.validate_project(proj, ref, project_to_los=True)

@@ -209,11 +209,25 @@ def validate_project(project_h5: str | Path, reference: Reference, *,
             lonlat = ins["pixel_lonlat"][()]
         los = ins["los"][()].astype(float)      # [N,M] mm
         dates = [d.decode() if isinstance(d, bytes) else str(d) for d in ins["date_labels"][()]]
-        inc = ins["incidenceAngle"][()] if "incidenceAngle" in ins else None
+        # 입사각 데이터셋 이름은 파이프라인마다 다르다(incidenceAngle / incidence_deg / incidence).
+        # 못 찾으면 연직 투영이 조용히 생략돼 수준측량 연직값을 LOS 와 직접 비교(~29% 오차)하므로
+        # 여러 이름을 모두 시도한다.
+        inc = None
+        for _name in ("incidenceAngle", "incidence_deg", "incidence", "inc_angle"):
+            if _name in ins:
+                inc = ins[_name][()]
+                break
     if lonlat is None and xyz is not None:
         lonlat = xyz[:, :2]                     # 폴백(투영좌표일 수 있음)
     if lonlat is None:
         raise ValueError("project.h5 /insar 에 좌표(pixel_lonlat/xyz)가 없습니다.")
+    # 연직(수준측량) 기준을 LOS 투영해 비교하려는데 입사각이 없으면, 조용히 투영을 건너뛰어
+    # 연직값을 LOS 와 직접 비교(~29% 낙관)하지 말고 명확히 막는다.
+    if project_to_los and reference.vertical and inc is None:
+        raise ValueError(
+            "연직 기준을 LOS 투영하려면 입사각이 필요합니다. project.h5 /insar 에 "
+            "incidenceAngle/incidence_deg 가 없습니다 — 트랙 인제스트 시 입사각을 보존했는지 "
+            "확인하거나, 기준을 LOS 로 미리 투영해 vertical=False 로 주세요.")
 
     if reference.kind == "velocity":
         from datetime import datetime
