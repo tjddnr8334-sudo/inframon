@@ -1,0 +1,87 @@
+"""OpenSees 독립 FE 교차검증 — PINN 구조 역산 검증.
+
+openseespy 는 선택 의존이고 Windows 에서 DLL 로드가 RuntimeError 로 실패할 수 있어
+(ImportError 아님) importorskip 대신 예외를 잡아 skip 한다. 실제 실행은 Linux/WSL CI.
+모듈 자체는 lazy import 라 openseespy 없이도 임포트된다(아래 no-op 테스트로 확인).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from inframon import fem_opensees as fo
+
+
+def _openseespy_or_skip():
+    try:
+        import openseespy.opensees  # noqa: F401
+    except Exception as exc:  # noqa: BLE001 — ImportError(Linux 미설치)+RuntimeError(Win DLL)
+        pytest.skip(f"openseespy 사용 불가: {exc}")
+
+
+def test_module_imports_without_openseespy():
+    # lazy import 라 openseespy 없이도 모듈·순수함수는 동작해야
+    A, Iz = fo.rect_section(1.0, 2.0)
+    assert A == pytest.approx(2.0)
+    assert Iz == pytest.approx(1.0 * 2.0 ** 3 / 12.0)
+
+
+def test_require_openseespy_message_when_absent():
+    # 없을 때 친절한 안내 메시지(설치·WSL 언급)
+    try:
+        import openseespy.opensees  # noqa: F401
+    except Exception:  # noqa: BLE001
+        with pytest.raises(RuntimeError, match="openseespy"):
+            fo._require_openseespy()
+
+
+def test_opensees_matches_closed_form_deflection():
+    _openseespy_or_skip()
+    # 단순지지 등분포 E-B 처짐 = 5qL⁴/384EI
+    L, E, b, h, rho, q = 40.0, 3.0e10, 1.0, 1.0, 2400.0, 1.0e4
+    A, Iz = fo.rect_section(b, h)
+    resp = fo.opensees_beam(L=L, E=E, Iz=Iz, A=A, rho=rho, shear=False,
+                            q_N_m=q, n_elem=24)
+    w_mid = 5 * q * L ** 4 / (384 * E * Iz)
+    assert abs(resp.w_m).max() == pytest.approx(w_mid, rel=1e-3)
+
+
+def test_clean_ei_recovery_exact():
+    _openseespy_or_skip()
+    # 깨끗한 형상 → PINN 식별 공식이 EI 를 정확히 회수(전단은 4차도함수 0 기여)
+    for h in (1.0, 2.0, 4.0):
+        r = fo.crosscheck(L=40.0, b=1.0, h=h, shear=True)
+        assert r.ei_err_pct < 1.0
+
+
+def test_eb_control_group_agrees():
+    _openseespy_or_skip()
+    # 순환논리 방지 sanity: OpenSees도 E-B면 PINN E-B 진동수와 자명히 일치
+    r = fo.crosscheck(L=40.0, b=1.0, h=3.0, shear=False)
+    assert r.f1_err_pct < 0.5
+    assert r.ei_err_pct < 0.5
+
+
+def test_shear_model_error_grows_with_depth():
+    _openseespy_or_skip()
+    # 전단 모델오차(진동수)는 깊은 보에서 커진다 — E-B 가정의 한계
+    slim = fo.crosscheck(L=40.0, b=1.0, h=0.5, shear=True)     # L/h=80
+    deep = fo.crosscheck(L=40.0, b=1.0, h=5.0, shear=True)     # L/h=8
+    assert deep.f1_err_pct > slim.f1_err_pct
+    assert slim.f1_err_pct < 0.2                                # 슬렌더는 거의 일치
+
+
+def test_full_pinn_noise_robust_but_ei_biased():
+    _openseespy_or_skip()
+    pytest.importorskip("torch")
+    # 실제 PINN: 잡음에 강건(NN 스무딩)하되 절대 EI 는 spectral bias 로 부풀려짐
+    clean = fo.crosscheck_via_pinn(L=40.0, b=1.0, h=2.0, noise_mm=0.0,
+                                   epochs=500, seed=1)
+    noisy = fo.crosscheck_via_pinn(L=40.0, b=1.0, h=2.0, noise_mm=1.0,
+                                   epochs=500, seed=1)
+    s_clean = clean.EI_recovered / clean.EI_true
+    s_noisy = noisy.EI_recovered / noisy.EI_true
+    # 잡음 강건: 배율이 잡음에 30% 이내로 안정
+    assert abs(s_noisy - s_clean) / s_clean < 0.3
+    # 절대 EI 는 1보다 크게(부풀려짐) — 이 검증이 정량화하려는 바로 그 성질
+    assert s_clean > 1.2
