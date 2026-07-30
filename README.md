@@ -272,7 +272,7 @@ bounding boxes back, and injects Psets. Details: [`docs/BIM_정합.md`](docs/BIM
 | Deterministic demo | `python -m inframon --demo` → `data/project.h5` + CRI, no network/GPU, fixed seeds; numerics locked by golden-regression tests |
 | Real case study | Jeongja Bridge, Sentinel-1 — **1,072 points × 201 epochs** |
 | Analytic validation | PINN/FEM vs closed-form Euler-Bernoulli: **error < 0.1%** (`tests/test_pinn_real.py`, `tests/test_benchmark.py`) |
-| Independent FE cross-check | PINN inverse vs **OpenSees (Timoshenko)** ground truth — extends validation past closed-form into shear / continuity (`scripts/bench/pinn_opensees_*.py`, `[fem]` extra, run on WSL/Linux). Clean EI recovery exact; found the NN identification inflates *absolute* EI ~2.5× at convergence (spectral bias) but is noise-robust — see [`docs/OpenSees_검증.md`](docs/OpenSees_검증.md) |
+| Independent FE cross-check | PINN inverse vs **OpenSees (Timoshenko)** ground truth — extends validation past closed-form into shear / continuity (`scripts/bench/pinn_opensees_*.py`, `[fem]` extra, run on WSL/Linux). Surfaced that the NN 4th-derivative inflated absolute EI ~2.5×; **fixed** by identifying EI from the deflection shape's degree-4 polynomial x⁴-coefficient (no differentiation) → EI scale ~1.0×, noise-robust, epoch-insensitive, per-span for continuity — see [`docs/OpenSees_검증.md`](docs/OpenSees_검증.md) |
 | Environment capture | `python -m inframon --doctor` reports versions/readiness; `environment.yml` pins the conda env |
 
 Reproduce the demo end-to-end:

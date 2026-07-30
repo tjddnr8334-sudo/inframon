@@ -13,12 +13,65 @@ from inframon.contracts.schema import FRAM_FUNCTIONS, FRAMOutput
 from inframon.cv.engine import run_cv
 from inframon.insar.engine import run_insar
 from inframon.pinn.real_engine import (
+    _ei_from_shape,
     _fem_beam_frequencies,
     _identify_EI_from_pde,
     _structural_span,
     run_pinn_real,
 )
 from inframon.structure import BridgeProfile
+
+
+# ── 형상기반 EI 식별(_ei_from_shape) — 4차 다항 x⁴계수법. numpy 만 필요 ──
+_EI, _Q, _L = 5.0e10, 1.0e4, 40.0
+
+
+def _w_ss(xhat):     # 단순지지 등분포: w=(qL⁴/24EI)(x̂⁴-2x̂³+x̂)
+    return -(_Q * _L ** 4 / (24 * _EI)) * (xhat ** 4 - 2 * xhat ** 3 + xhat)
+
+
+def _w_fixed(xhat):  # 고정단 등분포: w=(qL⁴/24EI)·x̂²(1-x̂)²
+    return -(_Q * _L ** 4 / (24 * _EI)) * (xhat ** 2 * (1 - xhat) ** 2)
+
+
+def _w_cant(xhat):   # 캔틸레버 등분포: w=(qL⁴/24EI)(x̂⁴-4x̂³+6x̂²)
+    return -(_Q * _L ** 4 / (24 * _EI)) * (xhat ** 4 - 4 * xhat ** 3 + 6 * xhat ** 2)
+
+
+def test_ei_from_shape_boundary_independent():
+    # x⁴ 계수 = qL⁴/(24EI) 는 경계조건 무관 → 세 형상 모두 EI 정확 회수
+    x = np.linspace(0, 1, 41)
+    for wf in (_w_ss, _w_fixed, _w_cant):
+        ei = _ei_from_shape(x, wf(x), _L, _Q, n_spans=1)
+        assert abs(ei - _EI) / _EI < 0.02
+
+
+def test_ei_from_shape_noise_robust():
+    # 미분 없는 x⁴계수법 → 처짐 잡음에 강건(잡음 형상 진폭 대비 작으면 EI 오차 제한적)
+    x = np.linspace(0, 1, 61)
+    w = _w_ss(x)
+    rng = np.random.default_rng(0)
+    w_noisy = w + rng.normal(0, 0.05 * np.abs(w).max(), w.shape)   # 5% 잡음
+    ei = _ei_from_shape(x, w_noisy, _L, _Q, n_spans=1)
+    assert 0.7 < ei / _EI < 1.3
+
+
+def test_ei_from_shape_multispan_per_span_recovers():
+    # 2경간(각 경간이 단순보형 quartic) → 경간별(n=2) 피팅이 EI 를 정확히 회수한다.
+    # (단일경간 가정 n=1 의 편향은 실제 연속보 형상에서 OpenSees 검증으로 확인 —
+    #  test_fem_opensees; 합성 형상은 부모멘트가 없어 편향을 재현하지 못한다.)
+    xs = np.linspace(0, 1, 81)
+    w = np.empty_like(xs)
+    for i, xh in enumerate(xs):
+        u = (xh % 0.5) / 0.5                       # 각 경간 로컬 [0,1]
+        w[i] = -(_Q * (_L / 2) ** 4 / (24 * _EI)) * (u ** 4 - 2 * u ** 3 + u)
+    ei2 = _ei_from_shape(xs, w, _L, _Q, n_spans=2)
+    assert abs(ei2 - _EI) / _EI < 0.1               # 경간별은 정확
+
+
+def test_ei_from_shape_too_few_points():
+    assert _ei_from_shape(np.array([0.0, 0.5, 1.0]), np.array([0.0, -1.0, 0.0]),
+                          _L, _Q) is None
 
 
 def test_identify_EI_from_pde_formula():

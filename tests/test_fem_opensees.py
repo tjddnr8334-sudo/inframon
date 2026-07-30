@@ -71,17 +71,15 @@ def test_shear_model_error_grows_with_depth():
     assert slim.f1_err_pct < 0.2                                # 슬렌더는 거의 일치
 
 
-def test_full_pinn_noise_robust_but_ei_biased():
+def test_full_pinn_recovers_ei_accurately():
     _openseespy_or_skip()
     pytest.importorskip("torch")
-    # 실제 PINN: 잡음에 강건(NN 스무딩)하되 절대 EI 는 spectral bias 로 부풀려짐
-    clean = fo.crosscheck_via_pinn(L=40.0, b=1.0, h=2.0, noise_mm=0.0,
+    pytest.importorskip("scipy")
+    # 형상기반(x⁴계수) 식별 후: 절대 EI 를 정확히 회수하고 잡음에도 강건해야
+    # (수정 전에는 NN autograd spectral bias 로 ~2.5× 과대였다).
+    for nz in (0.0, 1.0):
+        r = fo.crosscheck_via_pinn(L=40.0, b=1.0, h=2.0, noise_mm=nz,
                                    epochs=500, seed=1)
-    noisy = fo.crosscheck_via_pinn(L=40.0, b=1.0, h=2.0, noise_mm=1.0,
-                                   epochs=500, seed=1)
-    s_clean = clean.EI_recovered / clean.EI_true
-    s_noisy = noisy.EI_recovered / noisy.EI_true
-    # 잡음 강건: 배율이 잡음에 30% 이내로 안정
-    assert abs(s_noisy - s_clean) / s_clean < 0.3
-    # 절대 EI 는 1보다 크게(부풀려짐) — 이 검증이 정량화하려는 바로 그 성질
-    assert s_clean > 1.2
+        s = r.EI_recovered / r.EI_true
+        assert 0.7 < s < 1.3, f"잡음 {nz}mm 에서 EI 배율 {s:.2f} (0.7~1.3 밖)"
+        assert r.f1_err_pct < 5.0                  # 진동수도 정확
