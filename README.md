@@ -12,6 +12,60 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
+## 🔄 전체 흐름 · Workflow
+
+위성 InSAR 관측 → 구조 역산 → 공진 지표 → 잔존수명, 그리고 각 단계를 **독립 데이터로 검증**하는
+것이 이 플랫폼의 뼈대다. (SARvey 실처리는 WSL2/Linux, 나머지는 오프라인 데모/대시보드로 동작.)
+
+```mermaid
+flowchart TB
+  subgraph IN[" 입력 · Inputs "]
+    S1["🛰️ Sentinel-1 SLC<br/>ASF·Copernicus"]
+    DEM["⛰️ GLO-30 DEM"]
+    ERA["🌡️ ERA5 기온<br/>Open-Meteo"]
+    OSM["🗺️ OpenStreetMap<br/>교량 형상"]
+  end
+
+  subgraph PROC[" 처리 파이프라인 · Pipeline → project.h5 "]
+    CV["① CV<br/>부재분할·격자밀도"]
+    INS["② InSAR<br/>LOS 변위·속도<br/>(SARvey/MintPy)"]
+    PINN["③ PINN<br/>EI·고유진동수<br/>열팽창·하중·침하 분리"]
+    FRAM["④ FRAM<br/>공진 CRI·경보등급"]
+    CV --> INS --> PINN --> FRAM
+  end
+
+  RSL["⏳ 잔존수명 RSL<br/>사용성·강성 채널<br/>(LOS→연직 투영)"]
+
+  subgraph VAL[" 독립 검증 · Validation "]
+    GNSS["📡 GNSS 대조<br/>NGL 상시관측"]
+    LVL["📏 수준측량<br/>--validate-leveling"]
+    OS["🔬 OpenSees FE<br/>PINN 역산 교차검증"]
+  end
+
+  subgraph OUT[" 산출 · Outputs "]
+    DASH["📊 대시보드<br/>Streamlit"]
+    BIM["🏗️ BIM·IFC<br/>디지털트윈"]
+    REP["📄 리포트·VLM"]
+  end
+
+  S1 --> INS
+  DEM --> INS
+  OSM --> CV
+  ERA --> PINN
+  PINN --> RSL
+  INS -. 속도 검증 .-> GNSS
+  INS -. 연직 침하 검증 .-> LVL
+  PINN -. EI·진동수 검증 .-> OS
+  FRAM --> DASH
+  RSL --> DASH
+  PINN --> BIM
+  FRAM --> REP
+```
+
+**한 줄 요약**: 데이터(🛰️⛰️🌡️🗺️) → `project.h5` 파이프라인(①②③④) → 잔존수명, 그리고
+GNSS·수준측량·OpenSees 로 **각 단계를 독립 검증**한다. 실행은 `python -m inframon --demo`
+(오프라인 데모) 또는 `streamlit run` 대시보드로 시작한다(§ 아래).
+
 **Concept — points ON a bridge deck (synthetic demo) / 개념 — 교량 데크 위 점 (합성 데모):**
 
 ![Bridge-deck monitoring points, CRI over time (synthetic)](docs/img/demo_bridge.gif)
