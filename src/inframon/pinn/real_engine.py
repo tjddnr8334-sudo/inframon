@@ -87,6 +87,34 @@ def _fem_beam_frequencies(EI: float, m_per_len: float, L: float,
     return freqs[:n_modes].astype(float)
 
 
+def _timoshenko_factors(prof, L: float, n_modes: int) -> np.ndarray:
+    """Euler-Bernoulli 진동수 → Timoshenko 보정계수(모드별 곱).
+
+    E-B 는 전단변형·회전관성을 무시해 깊은(짧은) 보에서 고유진동수를 과대예측한다
+    (OpenSees 검증: L/h=8 서 ~2%). 단순지지 Timoshenko 해의 표준 1차 보정:
+        (ω_T/ω_EB)² = 1 / (1 + (nπ r/L)²·(1 + E/(κG)))
+    r²=I/A(회전반경²), κ=전단계수(직사각 5/6), G=E/(2(1+ν)). 경계·모드 전반의 1차 근사로
+    쓴다(보정이 작아 근사로 충분; 슬렌더 보에선 ≈1 로 무해). 단면(폭·높이) 미상이면 보정
+    없이 1.0(안전). 반환 [n_modes] (0<factor≤1).
+    """
+    depth = float(getattr(prof, "section_depth_m", 0.0) or 0.0)
+    I_sec = prof.second_moment_I_m4() if hasattr(prof, "second_moment_I_m4") else None
+    A = prof.section_area_m2() if hasattr(prof, "section_area_m2") else None
+    if I_sec and A and A > 0:
+        r2 = I_sec / A
+    elif depth > 0:
+        r2 = depth ** 2 / 12.0                     # 직사각 근사 폴백
+    else:
+        return np.ones(n_modes)
+    L = max(float(L), 1e-6)
+    nu = 0.2
+    kappa = 5.0 / 6.0
+    E_over_kG = 2.0 * (1.0 + nu) / kappa           # E/(κG), G=E/(2(1+ν))
+    n = np.arange(1, n_modes + 1, dtype=float)
+    bracket = 1.0 + (n * np.pi) ** 2 * r2 / L ** 2 * (1.0 + E_over_kG)
+    return 1.0 / np.sqrt(bracket)
+
+
 def _span_meters(xyz: np.ndarray) -> float:
     """xyz 에서 교량 길이[m] 추정 (lon/lat 로 보이면 degree→m)."""
     xy = xyz[:, :2]
@@ -402,8 +430,10 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         alpha = np.full(N, max(amp / (20.0 * (Lf.max() + 1e-9)), 1e-7))
 
     # 고유진동수: FEM 모달 (식별 EI_global, 프로파일 ρA, 단일경간·경계) — 다경간 연속교는
-    # 연장이 아니라 단일 경간·고정단 근사로 물리적 진동수를 얻는다.
+    # 연장이 아니라 단일 경간·고정단 근사로 물리적 진동수를 얻는다. 깊은(짧은) 보는 E-B 가
+    # 전단·회전관성을 무시해 과대예측하므로 Timoshenko 보정계수를 곱한다(슬렌더 보엔 ≈1).
     natural_freq = _fem_beam_frequencies(EI_global, prof.rho_a(), span_m, prof.boundary)
+    natural_freq = natural_freq * _timoshenko_factors(prof, span_m, len(natural_freq))
 
     # ───────── 가상센싱(virtual sensing): 상부거더 전체 변위장 ─────────
     # InSAR 관측점(N개·희소·불규칙)에서 학습한 PINN 연속장 w(x,t)/anomaly(x,t) 와

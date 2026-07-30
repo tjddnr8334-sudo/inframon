@@ -17,6 +17,7 @@ from inframon.pinn.real_engine import (
     _fem_beam_frequencies,
     _identify_EI_from_pde,
     _structural_span,
+    _timoshenko_factors,
     run_pinn_real,
 )
 from inframon.structure import BridgeProfile
@@ -72,6 +73,31 @@ def test_ei_from_shape_multispan_per_span_recovers():
 def test_ei_from_shape_too_few_points():
     assert _ei_from_shape(np.array([0.0, 0.5, 1.0]), np.array([0.0, -1.0, 0.0]),
                           _L, _Q) is None
+
+
+# ── Timoshenko 진동수 보정(_timoshenko_factors) — 깊은 보 전단·회전관성 ──
+def test_timoshenko_slender_beam_no_effect():
+    # 슬렌더 보(L/h=80): 보정 ≈ 1 (E-B 가 이미 정확 → 무해)
+    prof = BridgeProfile(bridge_type="girder", youngs_modulus=3e10,
+                         section_depth_m=0.5, width_m=1.0, mass_per_len=1200.0)
+    f = _timoshenko_factors(prof, L=40.0, n_modes=3)
+    assert f[0] > 0.999
+
+
+def test_timoshenko_deep_beam_reduces_frequency():
+    # 깊은 보(L/h=8): 보정 < 1 (전단·회전관성으로 진동수 하향)
+    prof = BridgeProfile(bridge_type="girder", youngs_modulus=3e10,
+                         section_depth_m=5.0, width_m=1.0, mass_per_len=12000.0)
+    f = _timoshenko_factors(prof, L=40.0, n_modes=3)
+    assert 0.9 < f[0] < 0.995                       # 1차 ~1~2% 하향
+    assert f[2] < f[0]                              # 고차 모드일수록 더 크게 하향
+
+
+def test_timoshenko_no_section_is_identity():
+    # 단면(폭·높이) 미상이면 보정 없이 1.0 (안전)
+    prof = BridgeProfile(bridge_type="girder", section_depth_m=0.0)
+    f = _timoshenko_factors(prof, L=40.0, n_modes=3)
+    assert np.allclose(f, 1.0)
 
 
 def test_identify_EI_from_pde_formula():

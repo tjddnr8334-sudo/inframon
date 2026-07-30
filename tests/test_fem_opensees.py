@@ -71,6 +71,25 @@ def test_shear_model_error_grows_with_depth():
     assert slim.f1_err_pct < 0.2                                # 슬렌더는 거의 일치
 
 
+def test_timoshenko_correction_reduces_deep_beam_error():
+    _openseespy_or_skip()
+    # 깊은 보(L/h=8): E-B×Timoshenko보정이 완전 Timoshenko(전단+회전관성) 정해에
+    # E-B 단독보다 더 가까워야 한다.
+    from inframon.pinn.real_engine import _fem_beam_frequencies, _timoshenko_factors
+    from inframon.structure import BridgeProfile
+    L, E, rho, b, h = 40.0, 3.0e10, 2400.0, 1.0, 5.0
+    A, Iz = fo.rect_section(b, h)
+    resp = fo.opensees_beam(L=L, E=E, Iz=Iz, A=A, rho=rho, shear=True, rotary=True,
+                            n_elem=40)
+    f_os = resp.freqs_hz[0]
+    f_eb = _fem_beam_frequencies(E * Iz, rho * A, L, "simply_supported")[0]
+    prof = BridgeProfile(bridge_type="girder", youngs_modulus=E,
+                         section_depth_m=h, width_m=b, mass_per_len=rho * A)
+    f_corr = f_eb * _timoshenko_factors(prof, L, 1)[0]
+    assert abs(f_corr - f_os) < abs(f_eb - f_os)           # 보정이 더 정확
+    assert abs(f_corr - f_os) / f_os < 0.01                # 1% 이내
+
+
 def test_full_pinn_recovers_ei_accurately():
     _openseespy_or_skip()
     pytest.importorskip("torch")

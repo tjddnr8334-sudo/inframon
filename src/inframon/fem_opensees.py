@@ -62,11 +62,13 @@ class BeamResponse:
 def opensees_beam(*, L: float, E: float, Iz: float, A: float, rho: float,
                   boundary: str = "simply_supported", n_elem: int = 24,
                   shear: bool = True, nu: float = 0.2, kappa: float = 5.0 / 6.0,
-                  q_N_m: float = 1.0e4, n_spans: int = 1,
+                  q_N_m: float = 1.0e4, n_spans: int = 1, rotary: bool = False,
                   n_modes: int = 3) -> BeamResponse:
     """OpenSees 2D 보: 등분포하중 정적 처짐 + 고유치해석.
 
     shear=True → ElasticTimoshenkoBeam(전단 포함), False → elasticBeamColumn(E-B).
+    rotary=True → 절점에 회전관성(ρ·I·dx)도 부여 → 전단+회전관성 = 완전 Timoshenko
+    (진동수 추가 감소). 기본 False(병진질량만; 기존 검증치 유지).
     n_spans>1 → 등간격 중간 지점(연직구속)으로 연속보. 하중 q 는 왕복에서 상쇄되므로
     절대값은 무의미(형상만 중요).
     """
@@ -103,11 +105,12 @@ def opensees_beam(*, L: float, E: float, Iz: float, A: float, rho: float,
         else:
             ops.element("elasticBeamColumn", e + 1, e + 1, e + 2, A, E, Iz, 1)
 
-    # 집중질량(병진) — 고유치해석용
+    # 집중질량(병진 + 선택적 회전관성) — 고유치해석용
     m_node = rho * A * dx
+    j_node = rho * Iz * dx if rotary else 0.0        # 회전관성(단위길이 ρI × dx)
     for i in range(nn):
-        mi = m_node * (0.5 if i in (0, nn - 1) else 1.0)
-        ops.mass(i + 1, mi, mi, 0.0)
+        f = 0.5 if i in (0, nn - 1) else 1.0
+        ops.mass(i + 1, m_node * f, m_node * f, j_node * f)
 
     # 정적: 등분포하중(하방)
     ops.timeSeries("Linear", 1)

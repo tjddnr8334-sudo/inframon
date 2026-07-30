@@ -30,6 +30,7 @@
   .pipe { font-family:ui-monospace,monospace; color:var(--acc); background:#010409; border:1px solid var(--bd); border-radius:8px; padding:14px; text-align:center; overflow:auto; }
   footer { text-align:center; color:var(--mut); padding:32px 20px; font-size:.85rem; }
   .mut { color:var(--mut); }
+  .mermaid { background:#010409; border:1px solid var(--bd); border-radius:8px; padding:16px; margin-top:16px; overflow-x:auto; text-align:center; }
 </style>
 </head>
 <body>
@@ -90,7 +91,48 @@
   </section>
 
   <section>
-    <h2>파이프라인</h2>
+    <h2>전체 흐름 · Workflow</h2>
+    <p class="mut">입력(위성·DEM·기온·형상) → 파이프라인(CV→InSAR→PINN→FRAM) → 잔존수명,
+       그리고 각 단계를 <b>GNSS·수준측량·OpenSees</b> 로 독립 검증한다.</p>
+    <pre class="mermaid">
+flowchart TB
+  subgraph IN[" 입력 · Inputs "]
+    S1["🛰️ Sentinel-1 SLC"]
+    DEM["⛰️ GLO-30 DEM"]
+    ERA["🌡️ ERA5 기온"]
+    OSM["🗺️ OpenStreetMap"]
+  end
+  subgraph PROC[" 파이프라인 · project.h5 "]
+    CV["① CV<br/>부재분할"]
+    INS["② InSAR<br/>LOS 변위·속도"]
+    PINN["③ PINN<br/>EI·고유진동수"]
+    FRAM["④ FRAM<br/>공진 CRI·경보"]
+    CV --> INS --> PINN --> FRAM
+  end
+  RSL["⏳ 잔존수명 RSL"]
+  subgraph VAL[" 독립 검증 · Validation "]
+    GNSS["📡 GNSS"]
+    LVL["📏 수준측량"]
+    OS["🔬 OpenSees FE"]
+  end
+  subgraph OUT[" 산출 · Outputs "]
+    DASH["📊 대시보드"]
+    BIM["🏗️ BIM·IFC"]
+    REP["📄 리포트"]
+  end
+  S1 --> INS
+  DEM --> INS
+  OSM --> CV
+  ERA --> PINN
+  PINN --> RSL
+  INS -. 검증 .-> GNSS
+  INS -. 검증 .-> LVL
+  PINN -. 검증 .-> OS
+  FRAM --> DASH
+  RSL --> DASH
+  PINN --> BIM
+  FRAM --> REP
+    </pre>
     <div class="pipe">OSM·ASF·ERA5 선별 → (WSL2) ISCE2 코레지 → MiaplPy → <b>SARvey</b> → Track H5<br>→ InSAR 정합 → <b>PINN</b> 구조해석 → <b>FRAM</b> 공명위험 CRI → 대시보드</div>
   </section>
 
@@ -117,5 +159,11 @@ python -m streamlit run src/inframon/dashboard/app.py   # 대시보드</pre>
   inframon · GPLv3 · <a href="https://github.com/tjddnr8334-sudo/inframon">github.com/tjddnr8334-sudo/inframon</a><br>
   Powered by SARvey · ISCE2 · MiaplPy · MintPy
 </footer>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { fontSize: '13px', primaryColor: '#161b22',
+      primaryBorderColor: '#30363d', lineColor: '#58a6ff' } });
+</script>
 </body>
 </html>
