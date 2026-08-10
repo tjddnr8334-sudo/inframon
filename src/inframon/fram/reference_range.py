@@ -27,19 +27,27 @@ _MAD_TO_SIGMA = 1.4826        # MAD → 정규분포 표준편차 환산(로버�
 
 
 def _binom_sf_ge(k: int, n: int, p: float) -> float:
-    """P(X ≥ k), X~Binomial(n, p) — 정확 하위CDF 합(꼬리 k 는 작아 저렴). 의존성 없음.
+    """P(X ≥ k), X~Binomial(n, p) — 로그공간 하위CDF 합. 의존성 없음.
 
     분포이동 판정용: 관측 초과점 k 가 건강 기대(n·p)보다 유의하게 많은지의 상측 p-값.
+    comb(n,i) 정수는 N 수천(실 PS 점수)이면 float 변환에서 오버플로하므로
+    lgamma 로 로그공간에서 항을 만들고 exp 로 합산한다(항 자체는 ≤1이라 안전).
     """
     if k <= 0:
         return 1.0
     if k > n:
         return 0.0
-    from math import comb
-    q = 1.0 - p
+    if p <= 0.0:
+        return 0.0                        # 기대 0 인데 k>0 관측 — 상측 p 값 0
+    if p >= 1.0:
+        return 1.0
+    from math import exp, lgamma, log, log1p
+    logp, logq = log(p), log1p(-p)
+    lognf = lgamma(n + 1)
     cdf = 0.0
     for i in range(0, k):                 # P(X ≤ k-1)
-        cdf += comb(n, i) * (p ** i) * (q ** (n - i))
+        lg = lognf - lgamma(i + 1) - lgamma(n - i + 1) + i * logp + (n - i) * logq
+        cdf += exp(lg)
     return float(max(0.0, min(1.0, 1.0 - cdf)))
 
 

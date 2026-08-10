@@ -19,7 +19,9 @@ python3 - "$RECIPE_DIR/sarvey_config.json" "$CONFIG" "$SARVEY_DIR" <<'PY'
 import json, sys
 src, dst, work = sys.argv[1], sys.argv[2], sys.argv[3]
 c = json.load(open(src))
-c.pop("_README", None)                      # SARvey 는 모르는 키
+# SARvey Config(pydantic, extra 금지) 밖의 메타 섹션 제거
+for extra in ("_README", "temporal_model", "bridge_profile"):
+    c.pop(extra, None)
 c.setdefault("general", {})["input_path"]  = f"{work}/inputs/"
 c["general"]["output_path"] = f"{work}/outputs/"
 json.dump(c, open(dst, "w"), indent=2)

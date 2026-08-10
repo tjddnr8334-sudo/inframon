@@ -162,7 +162,12 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
             "output_path": "outputs/",
             "num_cores": 5,
             "num_patches": 1,              # 교량은 작은 AOI → 1 패치
+            "spatial_unwrapping_method": "puma",
             "logging_level": "INFO",
+        },
+        # SARvey(1.3) 필수 섹션 — 기본값 사용(phase linking 은 MiaplPy 쪽에서 안 씀)
+        "phase_linking": {
+            "use_phase_linking_results": False,
         },
         "preparation": {
             "start_date": _ymd_to_iso(trk.first_date),
@@ -170,27 +175,29 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
             "ifg_network_type": "sb",      # small baseline
             "num_ifgs": 3,
             "max_tbase": max_tbase,         # 시간 baseline 상한 [일]
-            "filter_wdw_size": 7,           # 작은 구조물 → 필터창 축소(과평활 방지)
+            "filter_window_size": 7,        # 작은 구조물 → 필터창 축소(과평활 방지)
         },
         "consistency_check": {
             "coherence_p1": prof.coherence_p1,
             "grid_size": prof.grid_size_m,            # 교량 길이 유도(도시용 200m 대체)
+            "mask_p1_file": None,   # 기본 ''(빈경로)면 SARvey 가 cwd 를 마스크로 읽다 죽는다
+            "max_arc_length": 2000,  # 기본 None 이면 removeLongArcs 가 None 비교로 죽는다(1.3.0)
             "num_nearest_neighbours": 30,
             "velocity_bound": prof.velocity_bound_m_yr,  # 열팽창/진동 고려 확대
             "dem_error_bound": prof.dem_error_bound_m,   # 형식별(트러스/케이블 상부구조 → 확대)
-            "arc_unwrapping_coherence_threshold": prof.arc_unwrap_coh,
+            "arc_unwrapping_coherence": prof.arc_unwrap_coh,
         },
         "unwrapping": {
             "use_arcs_from_temporal_unwrapping": True,
-            "spatial_unwrapping_method": "puma",
         },
         "filtering": {
             "coherence_p2": prof.coherence_p2,
             "apply_aps_filtering": True,
             "interpolation_method": "kriging",
+            "mask_p2_file": None,   # mask_p1_file 과 같은 빈경로 함정
         },
         "densification": {
-            "coherence_threshold": prof.densification_coherence,  # 강반사체 → 하향 조밀화
+            "arc_unwrapping_coherence": prof.densification_coherence,  # 강반사체 → 하향 조밀화
             "num_connections_to_p1": prof.num_connections_to_p1,
             "max_distance_to_p1": float(prof.max_distance_to_p1_m),  # 교량 안에서만 연결
         },
