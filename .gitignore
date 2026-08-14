@@ -34,3 +34,8 @@ configs/*/sarvey_config.json
 
 # 벤치 산출물(스크립트는 scripts/bench, 결과는 재생성)
 data/bench/
+
+# 실 처리 부산물 — ISCE2 로그·SLC 경로 목록(WSL 실경로, 재생성됨)
+isce.log
+*.isce.log
+SAFE_files.txt
