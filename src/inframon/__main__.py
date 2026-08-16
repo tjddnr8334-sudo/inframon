@@ -180,6 +180,16 @@ def main() -> None:
                    help="--export-bim LOS→연직 투영 입사각(H5에 없을 때, 기본 39°).")
     p.add_argument("--bim-fram", default=None, metavar="PROJECT_H5",
                    help="--export-bim CRI 색: /fram/CRI 있는 project.h5 를 InSAR 점에 최근접 매핑.")
+    # ── 웹 트윈 glTF(.glb) 내보내기 (Bmaps/Cesium 런타임 뷰) ──
+    p.add_argument("--export-gltf", default=None, metavar="H5,OUT",
+                   help="InSAR/PSI H5 → 웹 트윈용 .glb(정점색=값) + .meta.json(GlobalId 결합·georef). "
+                        "예: data/psi.h5,data/twin")
+    p.add_argument("--gltf-value", default="velocity", choices=("velocity", "cri", "cumulative"),
+                   help="--export-gltf 색 채널(기본 velocity). cri 는 --gltf-fram 필요.")
+    p.add_argument("--gltf-fram", default=None, metavar="PROJECT_H5",
+                   help="--gltf-value cri 일 때 /fram/CRI project.h5.")
+    p.add_argument("--gltf-z-exaggerate", type=float, default=0.0, metavar="X",
+                   help="값(또는 누적변위)을 Z로 과장(mm→m×X). 0=평면(기본).")
     # ── BIM/디지털 트윈 정합 (좌표 정합 + 부재 연결 + Pset) ──
     p.add_argument("--bim-align", default=None, metavar="PROJECT_H5,ELEMENTS,OUT_PREFIX",
                    help="project.h5 를 BIM 부재에 정합·연결해 부재별 상태와 IFC Pset 페이로드를 낸다. "
@@ -604,6 +614,26 @@ def main() -> None:
         print(f"  값(UI 토글): {', '.join(r['values'])}")
         print(f"  GeoJSON: {r['geojson']}")
         print(f"  CSV    : {r['csv']}")
+        print("=" * 56)
+        return
+
+    if args.export_gltf:
+        from .insar.gltf_export import export_insar_gltf
+        try:
+            _h5, _out = args.export_gltf.split(",")
+        except ValueError:
+            p.error("--export-gltf 형식은 H5,OUT 입니다")
+        r = export_insar_gltf(_h5.strip(), _out.strip(), value=args.gltf_value,
+                              fram_project=args.gltf_fram, ifc_crs=args.bim_crs,
+                              z_exaggerate=args.gltf_z_exaggerate)
+        print("=" * 56)
+        print("  InSAR → 웹 트윈 glTF(.glb) 내보내기")
+        print("=" * 56)
+        print(f"  점 {r['n_points']}개 · 채널 {r['value_channel']} · {r['legend']['units']}")
+        print(f"  georef {r['georef']['projection']} @ ({r['georef']['origin_lat']:.4f},"
+              f"{r['georef']['origin_lon']:.4f}) · GlobalId 결합 {r['bound']}/{r['n_points']}")
+        print(f"  glb : {r['glb']}")
+        print(f"  meta: {r['meta']}")
         print("=" * 56)
         return
 
