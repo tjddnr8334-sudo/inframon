@@ -190,6 +190,15 @@ def main() -> None:
                    help="--gltf-value cri 일 때 /fram/CRI project.h5.")
     p.add_argument("--gltf-z-exaggerate", type=float, default=0.0, metavar="X",
                    help="값(또는 누적변위)을 Z로 과장(mm→m×X). 0=평면(기본).")
+    p.add_argument("--gltf-viewer", action="store_true",
+                   help="--export-gltf 후 자립형 웹 뷰어 HTML 생성(glb 인라인, three.js). 파일만 열면 렌더.")
+    p.add_argument("--gltf-tileset", action="store_true",
+                   help="--export-gltf 후 3D Tiles 1.1 tileset.json 도 생성(Cesium/Bmaps 스트리밍·글로브 배치). "
+                        "정밀 georef 필요(pyproj).")
+    p.add_argument("--gltf-elements", default=None, metavar="ELEMENTS",
+                   help="--export-gltf GlobalId 결합: IFC 4.3 부재를 점에 정합해 사이드카 element_globalid "
+                        "를 채운다. .ifc(ifcopenshell) 또는 부재 테이블(JSON/CSV). "
+                        "정합 근거로 --bim-map-conversion 또는 --bim-control-points 필요.")
     # ── BIM/디지털 트윈 정합 (좌표 정합 + 부재 연결 + Pset) ──
     p.add_argument("--bim-align", default=None, metavar="PROJECT_H5,ELEMENTS,OUT_PREFIX",
                    help="project.h5 를 BIM 부재에 정합·연결해 부재별 상태와 IFC Pset 페이로드를 낸다. "
@@ -623,9 +632,22 @@ def main() -> None:
             _h5, _out = args.export_gltf.split(",")
         except ValueError:
             p.error("--export-gltf 형식은 H5,OUT 입니다")
+        _guids = None
+        if args.gltf_elements:                    # IFC 4.3 부재 정합 → GlobalId 결합
+            import json as _json
+            from .insar.gltf_export import guid_map_from_alignment
+            _mc = (_json.loads(Path(args.bim_map_conversion).read_text(encoding="utf-8"))
+                   if args.bim_map_conversion else None)
+            _els = args.gltf_elements.strip()
+            _guids, _bsum = guid_map_from_alignment(
+                _h5.strip(), _els, map_conversion=_mc,
+                control_points=args.bim_control_points, ifc_crs=args.bim_crs,
+                source_crs=args.bim_source_crs)
+            for _w in _bsum.get("warnings", []):
+                print(f"  ⚠️  {_w}")
         r = export_insar_gltf(_h5.strip(), _out.strip(), value=args.gltf_value,
                               fram_project=args.gltf_fram, ifc_crs=args.bim_crs,
-                              z_exaggerate=args.gltf_z_exaggerate)
+                              z_exaggerate=args.gltf_z_exaggerate, element_guids=_guids)
         print("=" * 56)
         print("  InSAR → 웹 트윈 glTF(.glb) 내보내기")
         print("=" * 56)
@@ -634,6 +656,14 @@ def main() -> None:
               f"{r['georef']['origin_lon']:.4f}) · GlobalId 결합 {r['bound']}/{r['n_points']}")
         print(f"  glb : {r['glb']}")
         print(f"  meta: {r['meta']}")
+        if args.gltf_tileset:
+            from .insar.gltf_export import write_3dtiles_tileset
+            t = write_3dtiles_tileset(r["glb"])
+            print(f"  3D Tiles: {t['tileset']} (Cesium/Bmaps 스트리밍)")
+        if args.gltf_viewer:
+            from .insar.gltf_export import write_web_viewer
+            v = write_web_viewer(r["glb"])
+            print(f"  웹 뷰어: {v['viewer']} (glb 인라인 {v['inlined_kb']}KB · 파일만 열면 렌더)")
         print("=" * 56)
         return
 

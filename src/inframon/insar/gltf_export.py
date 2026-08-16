@@ -128,14 +128,175 @@ def _write_glb(positions: np.ndarray, colors_rgb: np.ndarray, out_path: Path) ->
         f.write(bin_blob)
 
 
+def guid_map_from_alignment(project_h5: str | Path, elements, *, map_conversion=None,
+                            control_points=None, ifc_crs: str = "EPSG:5186",
+                            source_crs: str | None = None,
+                            max_dist_m: float = 5.0) -> tuple[np.ndarray, dict]:
+    """IFC 4.3 부재 정합 → 점별 GlobalId 배열(인덱스 정렬) + 요약.
+
+    기존 bim.align 을 재사용한다: project.h5 를 IFC 로컬로 정합(map_conversion 또는 control_points)
+    후 각 점을 최근접 부재(AABB)에 연결. elements 는 .ifc(ifcopenshell) 또는 부재 테이블(JSON/CSV).
+    반환 guid[N] 의 미연결 점은 "" — export_insar_gltf(element_guids=...) 로 그대로 넘긴다.
+    """
+    from ..bim.align import align_project_to_bim
+    r = align_project_to_bim(str(project_h5), elements, map_conversion=map_conversion,
+                             control_points=control_points, target_crs=ifc_crs,
+                             source_crs=source_crs, max_dist_m=max_dist_m)
+    guids = np.asarray(r["point_guid"], dtype=object)
+    summary = {"associated": int(sum(1 for g in guids if g)),
+               "n_points": int(guids.size), "association": r.get("association"),
+               "warnings": r.get("warnings", [])}
+    return guids, summary
+
+
+def _enu_gltf_to_ecef(lon: float, lat: float, h: float) -> list[float]:
+    """glTF 로컬(x=east,y=up,z=-north) → ECEF 4x4(column-major, 3D Tiles/Cesium 규약).
+
+    Cesium eastNorthUpToFixedFrame 과 동일 원점에, glTF Y-up 축 배치를 반영한 열들:
+    col0=east, col1=up, col2=-north, col3=원점 ECEF.
+    """
+    import math
+    a, f = 6378137.0, 1.0 / 298.257223563
+    e2 = f * (2 - f)
+    lam, phi = math.radians(lon), math.radians(lat)
+    sl, cl, sp, cp = math.sin(lam), math.cos(lam), math.sin(phi), math.cos(phi)
+    N = a / math.sqrt(1 - e2 * sp * sp)
+    X = (N + h) * cp * cl
+    Y = (N + h) * cp * sl
+    Z = (N * (1 - e2) + h) * sp
+    east = [-sl, cl, 0.0]
+    north = [-sp * cl, -sp * sl, cp]
+    up = [cp * cl, cp * sl, sp]
+    neg_north = [-north[0], -north[1], -north[2]]
+    return [east[0], east[1], east[2], 0.0,      # col0 (glTF x=east)
+            up[0], up[1], up[2], 0.0,            # col1 (glTF y=up)
+            neg_north[0], neg_north[1], neg_north[2], 0.0,  # col2 (glTF z=-north)
+            X, Y, Z, 1.0]                        # col3 (origin ECEF)
+
+
+def write_3dtiles_tileset(glb_path: str | Path, out_path: str | Path | None = None) -> dict:
+    """`.glb` + `.glb.meta.json` → 3D Tiles 1.1 tileset.json (Cesium/Bmaps 스트리밍).
+
+    사이드카 georef 로 ECEF 루트 변환을 만들고, glb POSITION min/max 로 box 경계를 잡는다.
+    단일 타일 프로토타입 — 대규모는 공간 타일링으로 확장.
+    """
+    glb_path = Path(glb_path)
+    meta = json.loads(glb_path.with_suffix(".glb.meta.json").read_text(encoding="utf-8"))
+    g = meta["georef"]
+    if g["projection"] == "equirectangular_approx":
+        raise ValueError("3D Tiles 는 정밀 georef 필요 — pyproj 설치 후 EPSG 투영으로 재생성하세요.")
+    transform = _enu_gltf_to_ecef(g["origin_lon"], g["origin_lat"], g.get("origin_height_m", 0.0))
+    # glb POSITION min/max → 로컬 box (center + 3 half-axes)
+    b = glb_path.read_bytes()
+    jlen = struct.unpack("<II", b[12:20])[0]
+    gltf = json.loads(b[20:20 + jlen])
+    lo = np.array(gltf["accessors"][0]["min"], float)
+    hi = np.array(gltf["accessors"][0]["max"], float)
+    c = (lo + hi) / 2
+    hx, hy, hz = np.maximum((hi - lo) / 2, 1.0)
+    box = [c[0], c[1], c[2], hx, 0, 0, 0, hy, 0, 0, 0, hz]
+    geo_err = float(np.linalg.norm(hi - lo)) or 50.0
+    tileset = {
+        "asset": {"version": "1.1", "generator": "inframon.gltf_export"},
+        "geometricError": geo_err,
+        "root": {
+            "transform": transform,
+            "boundingVolume": {"box": box},
+            "geometricError": 0.0,
+            "refine": "ADD",
+            "content": {"uri": glb_path.name},
+        },
+        "extras": {"channel": meta.get("value_channel"), "legend": meta.get("legend"),
+                   "binding_key": meta.get("binding", {}).get("key")},
+    }
+    out_path = Path(out_path) if out_path else glb_path.with_name("tileset.json")
+    out_path.write_text(json.dumps(tileset, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"tileset": str(out_path), "glb": glb_path.name, "geometricError": geo_err,
+            "origin": (g["origin_lat"], g["origin_lon"])}
+
+
+def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None) -> dict:
+    """`.glb`(+사이드카) → 자립형 웹 뷰어 HTML (Bmaps 통합 스텁).
+
+    glb 를 base64 data URI 로 **인라인**해 로컬에서 파일만 열면 렌더된다(서버·CORS 불필요).
+    three.js 는 CDN(ES 모듈). 정점색 점군 + 범례 + georef + GlobalId 결합수 오버레이.
+    Bmaps(Cesium)엔 tileset.json 을 addTileset 하면 되고, 이 HTML 은 단독 확인용.
+    """
+    import base64
+    glb_path = Path(glb_path)
+    meta = json.loads(glb_path.with_suffix(".glb.meta.json").read_text(encoding="utf-8"))
+    b64 = base64.b64encode(glb_path.read_bytes()).decode("ascii")
+    lg = meta.get("legend", {})
+    g = meta.get("georef", {})
+    bound = sum(1 for f in meta.get("features", []) if f.get("element_globalid"))
+    title = f"inframon 웹 트윈 — {meta.get('value_channel','')} ({lg.get('units','')})"
+    html = _VIEWER_HTML.replace("__TITLE__", title).replace("__B64__", b64).replace(
+        "__CHANNEL__", str(meta.get("value_channel", ""))).replace(
+        "__UNITS__", str(lg.get("units", ""))).replace(
+        "__VMIN__", f"{lg.get('vmin', 0):.2f}").replace("__VMAX__", f"{lg.get('vmax', 0):.2f}").replace(
+        "__KIND__", str(lg.get("kind", ""))).replace(
+        "__NPTS__", str(meta.get("n_points", 0))).replace("__BOUND__", str(bound)).replace(
+        "__ORIGIN__", f"{g.get('origin_lat', 0):.4f}, {g.get('origin_lon', 0):.4f}").replace(
+        "__PROJ__", str(g.get("projection", "")))
+    out_html = Path(out_html) if out_html else glb_path.with_suffix(".viewer.html")
+    out_html.write_text(html, encoding="utf-8")
+    return {"viewer": str(out_html), "inlined_kb": round(len(b64) / 1024, 1),
+            "n_points": meta.get("n_points", 0), "bound": bound}
+
+
+_VIEWER_HTML = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>__TITLE__</title>
+<style>body{margin:0;background:#0b0f14;color:#e6edf3;font:13px/1.5 system-ui,sans-serif;overflow:hidden}
+#hud{position:fixed;top:12px;left:12px;background:rgba(20,26,34,.82);border:1px solid #2b3947;
+border-radius:8px;padding:12px 14px;max-width:320px}#hud h1{font-size:14px;margin:0 0 6px}
+#hud .row{color:#9fb0c0;margin:2px 0}#bar{height:12px;border-radius:3px;margin:6px 0 2px}
+.lbl{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
+#tip{position:fixed;bottom:12px;left:12px;color:#6b7d8f;font-size:11px}</style></head>
+<body><div id="hud"><h1>__TITLE__</h1>
+<div class="row">점 <b>__NPTS__</b> · GlobalId 결합 <b>__BOUND__</b>/__NPTS__</div>
+<div class="row">georef __ORIGIN__ · __PROJ__</div>
+<div class="row">채널 __CHANNEL__ (__UNITS__)</div>
+<div id="bar"></div><div class="lbl"><span>__VMIN__</span><span>0</span><span>__VMAX__</span></div></div>
+<div id="tip">드래그 회전 · 휠 확대 · 정점색 = 값 · glb 인라인(자립형) · Bmaps 는 tileset.json 을 Cesium 에 addTileset</div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+"three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import*as THREE from'three';import{OrbitControls}from'three/addons/controls/OrbitControls.js';
+import{GLTFLoader}from'three/addons/loaders/GLTFLoader.js';
+const kind="__KIND__";
+document.getElementById('bar').style.background=kind==='cri'
+?'linear-gradient(90deg,#2a9d8f,#e9c46a,#f4a261,#c1121f)'
+:'linear-gradient(90deg,#214e89,#f5f5f5,#c1121f)';
+const rn=new THREE.WebGLRenderer({antialias:true});rn.setSize(innerWidth,innerHeight);
+rn.setPixelRatio(devicePixelRatio);document.body.appendChild(rn.domElement);
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x0b0f14);
+const cam=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,1e6);
+const ct=new OrbitControls(cam,rn.domElement);ct.enableDamping=true;
+sc.add(new THREE.GridHelper(4000,20,0x223,0x162));
+function b64toBuf(b){const s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer}
+new GLTFLoader().parse(b64toBuf("__B64__"),"",(gltf)=>{
+ let pts;gltf.scene.traverse(o=>{if(o.isPoints||o.isMesh)pts=o});
+ const geo=pts.geometry;const m=new THREE.PointsMaterial({size:6,sizeAttenuation:false,vertexColors:true});
+ const P=new THREE.Points(geo,m);sc.add(P);
+ geo.computeBoundingSphere();const bs=geo.boundingSphere;
+ ct.target.copy(bs.center);cam.position.set(bs.center.x,bs.center.y+bs.radius*.6,bs.center.z+bs.radius*1.6);
+ cam.updateProjectionMatrix();
+},(e)=>{document.getElementById('hud').innerHTML+='<div style="color:#f4a261">로드 실패: '+e+'</div>'});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();rn.setSize(innerWidth,innerHeight)});
+(function loop(){requestAnimationFrame(loop);ct.update();rn.render(sc,cam)})();
+</script></body></html>"""
+
+
 def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "velocity",
                       fram_project: str | Path | None = None, ifc_crs: str = "EPSG:5186",
-                      z_exaggerate: float = 0.0, element_map: dict | None = None) -> dict:
+                      z_exaggerate: float = 0.0, element_map: dict | None = None,
+                      element_guids=None) -> dict:
     """InSAR/PSI H5 → 웹 트윈용 .glb + .meta.json.
 
     value: 'velocity'(LOS 속도)·'cri'(FRAM CRI 최근접, fram_project 필요)·'cumulative'(누적 LOS).
-    z_exaggerate>0 이면 값(또는 누적변위)을 Z로 과장해 3D 기복 표현. element_map: point_id→GlobalId
-    (IFC 부재 결합; 없으면 슬롯 null 로 계약만 노출).
+    z_exaggerate>0 이면 값(또는 누적변위)을 Z로 과장해 3D 기복 표현.
+    결합(택1): element_guids([N] 점별 GlobalId, 인덱스 정렬 — guid_map_from_alignment 산출) 우선,
+    없으면 element_map(point_id→GlobalId). 둘 다 없으면 슬롯 null 로 계약만 노출.
     """
     out_path = Path(out_path)
     if out_path.suffix.lower() != ".glb":
@@ -174,11 +335,16 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
     ids = (np.asarray(P.get("point_id", None)) if P.get("point_id") is not None
            else np.arange(n))
     emap = element_map or {}
+    eg = np.asarray(element_guids, dtype=object) if element_guids is not None else None
     features = []
     for i in range(n):
         vi = float(vals[i]) if np.isfinite(vals[i]) else None
-        features.append({"index": i, "point_id": int(ids[i]) if i < len(ids) else i,
-                         "element_globalid": emap.get(int(ids[i]) if i < len(ids) else i),
+        pid = int(ids[i]) if i < len(ids) else i
+        if eg is not None and i < eg.size:                 # 인덱스 정렬 결합 우선
+            guid = str(eg[i]) if eg[i] else None
+        else:
+            guid = emap.get(pid)
+        features.append({"index": i, "point_id": pid, "element_globalid": guid,
                          "value": vi, "lon": float(lonlat[i, 0]), "lat": float(lonlat[i, 1])})
     meta = {"schema": "inframon.gltf.meta/1.0", "glb": out_path.name, "n_points": n,
             "value_channel": value, "legend": legend, "georef": georef,

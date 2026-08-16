@@ -83,3 +83,77 @@ def test_cri_channel_needs_fram(tmp_path):
     import pytest
     with pytest.raises(ValueError):
         export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="cri")
+
+
+def test_3dtiles_tileset_places_on_globe(tmp_path):
+    """glb → 3D Tiles 1.1 tileset.json: ECEF 루트변환(글로브 배치)·box·content 참조."""
+    import math
+
+    import pytest
+    pytest.importorskip("pyproj")                     # 정밀 georef 필요
+    from inframon.insar.gltf_export import write_3dtiles_tileset
+
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    t = write_3dtiles_tileset(tmp_path / "twin.glb")
+    ts = json.loads((tmp_path / "tileset.json").read_text(encoding="utf-8"))
+    assert ts["asset"]["version"] == "1.1"
+    assert ts["root"]["content"]["uri"] == "twin.glb"
+    assert ts["root"]["refine"] == "ADD"
+    tr = ts["root"]["transform"]
+    assert len(tr) == 16 and tr[15] == 1.0
+    X, Y, Z = tr[12], tr[13], tr[14]                  # ECEF 원점 = 지구 반지름 근처
+    assert 6.3e6 < math.sqrt(X * X + Y * Y + Z * Z) < 6.4e6
+    assert len(ts["root"]["boundingVolume"]["box"]) == 12
+
+
+def test_web_viewer_is_self_contained(tmp_path):
+    """glb → 자립형 뷰어 HTML: glb 인라인(base64)·three.js·HUD(범례·georef·결합수)."""
+    from inframon.insar.gltf_export import write_web_viewer
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity",
+                      element_map={0: "GUID-A"})
+    v = write_web_viewer(tmp_path / "twin.glb")
+    html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
+    assert "atob(" in html and "GLTFLoader" in html          # glb 인라인 디코드
+    assert "three.module.js" in html                         # three.js ES 모듈
+    assert "__B64__" not in html and "__NPTS__" not in html  # 플레이스홀더 치환 완료
+    assert "GlobalId 결합" in html and "georef" in html      # HUD
+    assert v["bound"] == 1 and v["inlined_kb"] > 0
+
+
+def test_globalid_binding_via_alignment(tmp_path):
+    """IFC 4.3 부재 정합 → glb 사이드카 element_globalid 자동 결합(설계 마지막 고리)."""
+    import math
+
+    import numpy as np
+
+    from inframon.bim import Element, align_project_to_bim  # noqa: F401
+    from inframon.bim.georef import MapConversion
+    from inframon.config import PipelineConfig
+    from inframon.contracts.io import ProjectStore
+    from inframon.contracts.schema import InSAROutput
+    from inframon.insar.gltf_export import guid_map_from_alignment
+    from inframon.orchestrator.pipeline import run_pipeline
+
+    project = str(tmp_path / "project.h5")
+    run_pipeline(project, PipelineConfig(n_points=60, n_dates=24))
+    els = [Element("DECK1", "상판", "IfcSlab", bbox_min=(0, -5, 8), bbox_max=(100, 5, 9))]
+    t = math.radians(20.0)
+    mc = MapConversion(eastings=200000.0, northings=550000.0, orthogonal_height=0.0,
+                       x_axis_abscissa=math.cos(t), x_axis_ordinate=math.sin(t),
+                       target_crs="EPSG:5186", source="ifc")
+    # 데모 점을 상판 위로 옮겨 지도 CRS 저장(정합 대상)
+    with ProjectStore(project) as s:
+        ins = s.read_meta("insar", InSAROutput)
+        n = s.read_array(ins.xyz_ds).shape[0]
+        local = np.column_stack([np.linspace(2.0, 98.0, n), np.zeros(n), np.full(n, 8.5)])
+        s.write_array(ins.xyz_ds, mc.to_map(local))
+
+    guids, summ = guid_map_from_alignment(project, els, map_conversion=mc.to_dict(), source_crs="EPSG:5186")
+    assert summ["associated"] == n and guids.size == n
+    assert all(g == "DECK1" for g in guids)                       # 전부 상판에 결합
+
+    r = export_insar_gltf(project, tmp_path / "twin.glb", value="velocity",
+                          element_guids=guids)
+    assert r["bound"] == n                                        # 사이드카 결합 수
+    meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
+    assert all(f["element_globalid"] == "DECK1" for f in meta["features"])
