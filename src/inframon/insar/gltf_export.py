@@ -128,6 +128,39 @@ def _write_glb(positions: np.ndarray, colors_rgb: np.ndarray, out_path: Path) ->
         f.write(bin_blob)
 
 
+def _srtm_tile(lon: float, lat: float) -> str:
+    ns = f"N{int(np.floor(lat)):02d}" if lat >= 0 else f"S{int(-np.floor(lat)):02d}"
+    ew = f"E{int(np.floor(lon)):03d}" if lon >= 0 else f"W{int(-np.floor(lon)):03d}"
+    return f"{ns}{ew}.SRTMGL1.hgt.zip"
+
+
+def _sample_dem(lonlat: np.ndarray, dem: str | Path) -> np.ndarray:
+    """각 점 lon/lat 의 표고(m). dem 은 단일 래스터(tif/hgt/vrt) 또는 SRTM 타일 디렉터리."""
+    import rasterio
+    n = len(lonlat)
+    z = np.full(n, np.nan)
+    dem = Path(dem)
+    if dem.is_dir():                                    # SRTM 타일 디렉터리 — 타일별 묶어 샘플
+        import zipfile
+        tiles: dict[str, list[int]] = {}
+        for i, (lo, la) in enumerate(lonlat):
+            tiles.setdefault(_srtm_tile(lo, la), []).append(i)
+        for tile, idx in tiles.items():
+            zp = dem / tile
+            if not zp.exists():
+                continue
+            inner = next(x for x in zipfile.ZipFile(zp).namelist() if x.lower().endswith(".hgt"))
+            with rasterio.open(f"/vsizip/{zp}/{inner}") as ds:
+                for i, v in zip(idx, ds.sample([(lonlat[i, 0], lonlat[i, 1]) for i in idx])):
+                    z[i] = float(v[0])
+    else:                                               # 단일 래스터
+        with rasterio.open(str(dem)) as ds:
+            for i, v in enumerate(ds.sample([(lo, la) for lo, la in lonlat])):
+                z[i] = float(v[0])
+    z[z <= -1000] = np.nan                              # SRTM void
+    return z
+
+
 def guid_map_from_alignment(project_h5: str | Path, elements, *, map_conversion=None,
                             control_points=None, ifc_crs: str = "EPSG:5186",
                             source_crs: str | None = None,
@@ -143,9 +176,14 @@ def guid_map_from_alignment(project_h5: str | Path, elements, *, map_conversion=
                              control_points=control_points, target_crs=ifc_crs,
                              source_crs=source_crs, max_dist_m=max_dist_m)
     guids = np.asarray(r["point_guid"], dtype=object)
+    # 점별 부재 상단 Z(데크 레벨) — IFC 로컬 orthogonal height. 결합점을 교량 위에 얹는 데 쓴다.
+    from ..bim.elements import load_elements
+    els = load_elements(elements) if isinstance(elements, (str, Path)) else list(elements)
+    top_z = {e.guid: float(e.bbox_max[2]) for e in els}
+    element_z = np.array([top_z.get(g, np.nan) for g in guids], float)
     summary = {"associated": int(sum(1 for g in guids if g)),
                "n_points": int(guids.size), "association": r.get("association"),
-               "warnings": r.get("warnings", [])}
+               "element_z": element_z, "warnings": r.get("warnings", [])}
     return guids, summary
 
 
@@ -237,7 +275,8 @@ def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None) -
         "__KIND__", str(lg.get("kind", ""))).replace(
         "__NPTS__", str(meta.get("n_points", 0))).replace("__BOUND__", str(bound)).replace(
         "__ORIGIN__", f"{g.get('origin_lat', 0):.4f}, {g.get('origin_lon', 0):.4f}").replace(
-        "__PROJ__", str(g.get("projection", "")))
+        "__PROJ__", str(g.get("projection", ""))).replace(
+        "__ZSRC__", str(g.get("z_source", "flat")))
     out_html = Path(out_html) if out_html else glb_path.with_suffix(".viewer.html")
     out_html.write_text(html, encoding="utf-8")
     return {"viewer": str(out_html), "inlined_kb": round(len(b64) / 1024, 1),
@@ -254,7 +293,7 @@ border-radius:8px;padding:12px 14px;max-width:320px}#hud h1{font-size:14px;margi
 #tip{position:fixed;bottom:12px;left:12px;color:#6b7d8f;font-size:11px}</style></head>
 <body><div id="hud"><h1>__TITLE__</h1>
 <div class="row">점 <b>__NPTS__</b> · GlobalId 결합 <b>__BOUND__</b>/__NPTS__</div>
-<div class="row">georef __ORIGIN__ · __PROJ__</div>
+<div class="row">georef __ORIGIN__ · __PROJ__ · 고도 __ZSRC__</div>
 <div class="row">채널 __CHANNEL__ (__UNITS__)</div>
 <div id="bar"></div><div class="lbl"><span>__VMIN__</span><span>0</span><span>__VMAX__</span></div></div>
 <div id="tip">드래그 회전 · 휠 확대 · 정점색 = 값 · glb 인라인(자립형) · Bmaps 는 tileset.json 을 Cesium 에 addTileset</div>
@@ -290,13 +329,15 @@ addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProje
 def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "velocity",
                       fram_project: str | Path | None = None, ifc_crs: str = "EPSG:5186",
                       z_exaggerate: float = 0.0, element_map: dict | None = None,
-                      element_guids=None) -> dict:
+                      element_guids=None, z_source: str = "flat", dem=None,
+                      element_z=None) -> dict:
     """InSAR/PSI H5 → 웹 트윈용 .glb + .meta.json.
 
     value: 'velocity'(LOS 속도)·'cri'(FRAM CRI 최근접, fram_project 필요)·'cumulative'(누적 LOS).
-    z_exaggerate>0 이면 값(또는 누적변위)을 Z로 과장해 3D 기복 표현.
-    결합(택1): element_guids([N] 점별 GlobalId, 인덱스 정렬 — guid_map_from_alignment 산출) 우선,
-    없으면 element_map(point_id→GlobalId). 둘 다 없으면 슬롯 null 로 계약만 노출.
+    z_source(3D 고도): 'flat'(평면)·'value'(값×z_exaggerate 과장)·'dem'(DEM 표고, dem= 래스터/SRTM
+    디렉터리)·'element'(IFC 부재 상단 Z=데크레벨, element_z= 점별 배열 — guid_map_from_alignment 산출).
+    dem·element 는 실 미터 고도라 교량/지형 위에 얹힌다.
+    결합(택1): element_guids([N] 점별 GlobalId) 우선, 없으면 element_map(point_id→GlobalId).
     """
     out_path = Path(out_path)
     if out_path.suffix.lower() != ".glb":
@@ -324,10 +365,23 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
     colors, legend = _colors_and_legend(vals, kind)
     east_north, georef = _to_local_meters(lonlat, ifc_crs)
     # glTF: Y-up. ENU(east,north,up) → glTF(x=east, y=up, z=-north)
-    z = np.zeros(n)
-    if z_exaggerate:
-        base = np.nan_to_num(vals, nan=0.0)
-        z = base * z_exaggerate / 1000.0                # mm→m×배율
+    if z_source == "dem":
+        if dem is None:
+            raise ValueError("z_source='dem' 은 dem=(래스터 또는 SRTM 디렉터리) 가 필요합니다.")
+        z = np.nan_to_num(_sample_dem(lonlat, dem), nan=0.0)          # 지형 표고(m)
+        georef["z_source"] = f"dem:{Path(dem).name}"
+    elif z_source == "element":
+        if element_z is None:
+            raise ValueError("z_source='element' 은 element_z(점별 부재 Z) 가 필요합니다 — "
+                             "guid_map_from_alignment 의 summary['element_z'] 를 넘기세요.")
+        z = np.nan_to_num(np.asarray(element_z, float), nan=0.0)      # 데크 레벨(m)
+        georef["z_source"] = "ifc_element_top"
+    elif z_source == "value" or z_exaggerate:
+        z = np.nan_to_num(vals, nan=0.0) * (z_exaggerate or 1.0) / 1000.0
+        georef["z_source"] = f"value×{z_exaggerate or 1.0}"
+    else:
+        z = np.zeros(n)
+        georef["z_source"] = "flat"
     positions = np.column_stack([east_north[:, 0], z, -east_north[:, 1]]).astype(float)
     _write_glb(positions, colors, out_path)
     # 사이드카: GlobalId 결합 계약 + georef + 점별 원시값

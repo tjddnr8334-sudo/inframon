@@ -189,7 +189,12 @@ def main() -> None:
     p.add_argument("--gltf-fram", default=None, metavar="PROJECT_H5",
                    help="--gltf-value cri 일 때 /fram/CRI project.h5.")
     p.add_argument("--gltf-z-exaggerate", type=float, default=0.0, metavar="X",
-                   help="값(또는 누적변위)을 Z로 과장(mm→m×X). 0=평면(기본).")
+                   help="z-source=value 일 때 값(또는 누적변위)을 Z로 과장(mm→m×X).")
+    p.add_argument("--gltf-z-source", default="flat", choices=("flat", "value", "dem", "element"),
+                   help="3D 고도: flat(평면)·value(값 과장)·dem(DEM 표고=지형 위)·element(IFC 부재 Z=데크 위). "
+                        "dem 은 --gltf-dem, element 는 --gltf-elements 필요.")
+    p.add_argument("--gltf-dem", default=None, metavar="PATH",
+                   help="--gltf-z-source dem 의 DEM: 단일 래스터(tif/hgt/vrt) 또는 SRTM 타일 디렉터리.")
     p.add_argument("--gltf-viewer", action="store_true",
                    help="--export-gltf 후 자립형 웹 뷰어 HTML 생성(glb 인라인, three.js). 파일만 열면 렌더.")
     p.add_argument("--gltf-tileset", action="store_true",
@@ -632,22 +637,23 @@ def main() -> None:
             _h5, _out = args.export_gltf.split(",")
         except ValueError:
             p.error("--export-gltf 형식은 H5,OUT 입니다")
-        _guids = None
-        if args.gltf_elements:                    # IFC 4.3 부재 정합 → GlobalId 결합
+        _guids = _elz = None
+        if args.gltf_elements:                    # IFC 4.3 부재 정합 → GlobalId 결합(+데크 Z)
             import json as _json
             from .insar.gltf_export import guid_map_from_alignment
             _mc = (_json.loads(Path(args.bim_map_conversion).read_text(encoding="utf-8"))
                    if args.bim_map_conversion else None)
-            _els = args.gltf_elements.strip()
             _guids, _bsum = guid_map_from_alignment(
-                _h5.strip(), _els, map_conversion=_mc,
+                _h5.strip(), args.gltf_elements.strip(), map_conversion=_mc,
                 control_points=args.bim_control_points, ifc_crs=args.bim_crs,
                 source_crs=args.bim_source_crs)
+            _elz = _bsum.get("element_z")
             for _w in _bsum.get("warnings", []):
                 print(f"  ⚠️  {_w}")
         r = export_insar_gltf(_h5.strip(), _out.strip(), value=args.gltf_value,
                               fram_project=args.gltf_fram, ifc_crs=args.bim_crs,
-                              z_exaggerate=args.gltf_z_exaggerate, element_guids=_guids)
+                              z_exaggerate=args.gltf_z_exaggerate, element_guids=_guids,
+                              z_source=args.gltf_z_source, dem=args.gltf_dem, element_z=_elz)
         print("=" * 56)
         print("  InSAR → 웹 트윈 glTF(.glb) 내보내기")
         print("=" * 56)

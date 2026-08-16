@@ -85,6 +85,30 @@ def test_cri_channel_needs_fram(tmp_path):
         export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="cri")
 
 
+def test_dem_z_source_puts_points_on_terrain(tmp_path):
+    """z_source='dem': 각 점이 DEM 표고(실 미터)로 올라간다 — 3D 지형 위."""
+    import pytest
+    rasterio = pytest.importorskip("rasterio")
+    from rasterio.transform import from_origin
+
+    # 합성 DEM(경사면 100~200m) — track 좌표 영역(126.80~126.81, 36.45~36.46) 커버
+    dem = tmp_path / "dem.tif"
+    W = H = 40
+    grid = np.linspace(100, 200, W)[None, :].repeat(H, 0).astype("float32")
+    with rasterio.open(dem, "w", driver="GTiff", height=H, width=W, count=1,
+                       dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(126.795, 36.465, 0.0005, 0.0005)) as ds:
+        ds.write(grid, 1)
+
+    r = export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity",
+                          z_source="dem", dem=str(dem))
+    assert r["georef"]["z_source"].startswith("dem")
+    gltf, _ = _parse_glb(tmp_path / "twin.glb")
+    ymin, ymax = gltf["accessors"][0]["min"][1], gltf["accessors"][0]["max"][1]
+    assert 95 < ymin and ymax < 205                         # DEM 표고 범위 반영
+    assert ymax - ymin > 5                                  # 경사(평면 아님)
+
+
 def test_3dtiles_tileset_places_on_globe(tmp_path):
     """glb → 3D Tiles 1.1 tileset.json: ECEF 루트변환(글로브 배치)·box·content 참조."""
     import math
@@ -151,9 +175,13 @@ def test_globalid_binding_via_alignment(tmp_path):
     guids, summ = guid_map_from_alignment(project, els, map_conversion=mc.to_dict(), source_crs="EPSG:5186")
     assert summ["associated"] == n and guids.size == n
     assert all(g == "DECK1" for g in guids)                       # 전부 상판에 결합
+    # 데크 상단 Z(bbox_max[2]=9) 가 점별로 채워진다 — 교량 위에 얹는 용도
+    assert np.allclose(summ["element_z"], 9.0)
 
     r = export_insar_gltf(project, tmp_path / "twin.glb", value="velocity",
-                          element_guids=guids)
-    assert r["bound"] == n                                        # 사이드카 결합 수
+                          element_guids=guids, z_source="element", element_z=summ["element_z"])
+    assert r["bound"] == n and r["georef"]["z_source"] == "ifc_element_top"
+    gltf, _ = _parse_glb(tmp_path / "twin.glb")
+    assert abs(gltf["accessors"][0]["min"][1] - 9.0) < 1e-3       # 전 점 데크 레벨(Y=9m)
     meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
     assert all(f["element_globalid"] == "DECK1" for f in meta["features"])
