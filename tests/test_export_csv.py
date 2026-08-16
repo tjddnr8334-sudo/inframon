@@ -86,6 +86,8 @@ def test_csv_insar_only_blank_optional_columns(tmp_path):
 
 
 def test_cli_export_csv_smoke(tmp_path):
+    import pytest
+    pytest.importorskip("pyproj")  # CLI 서브프로세스가 CRS 재투영(pyproj) 필요 — 미설치면 스킵
     out, N, M = _project(tmp_path)
     csv_path = tmp_path / "cli.csv"
     import subprocess

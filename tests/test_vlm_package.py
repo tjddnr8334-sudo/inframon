@@ -159,6 +159,8 @@ def test_insar_only_project_graceful(tmp_path):
 
 
 def test_cli_export_vlm_smoke(tmp_path):
+    import pytest
+    pytest.importorskip("pyproj")  # CLI 서브프로세스가 CRS 재투영(pyproj) 필요 — 미설치면 스킵
     import subprocess
     import sys
     out = _project(tmp_path)

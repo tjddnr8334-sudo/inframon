@@ -20,6 +20,7 @@ def app(monkeypatch):
     for name in ("cache_data", "cache_resource"):
         setattr(st, name, lambda *a, **k: (lambda f: f))
     monkeypatch.setitem(sys.modules, "streamlit", st)
+    pytest.importorskip("pandas")  # 대시보드(app.py)는 pandas 필요 — 미설치면 스킵
     sys.modules.pop("inframon.dashboard.app", None)
     import inframon.dashboard.app as app
     app.st.session_state = {}
