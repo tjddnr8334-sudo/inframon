@@ -190,11 +190,16 @@ def main() -> None:
                    help="--gltf-value cri 일 때 /fram/CRI project.h5.")
     p.add_argument("--gltf-z-exaggerate", type=float, default=0.0, metavar="X",
                    help="z-source=value 일 때 값(또는 누적변위)을 Z로 과장(mm→m×X).")
-    p.add_argument("--gltf-z-source", default="flat", choices=("flat", "value", "dem", "element"),
-                   help="3D 고도: flat(평면)·value(값 과장)·dem(DEM 표고=지형 위)·element(IFC 부재 Z=데크 위). "
-                        "dem 은 --gltf-dem, element 는 --gltf-elements 필요.")
+    p.add_argument("--gltf-z-source", default="flat",
+                   choices=("flat", "value", "dem", "element", "psi"),
+                   help="3D 고도: flat·value(값 과장)·dem(DEM 표고=지형 위)·element(IFC 부재 Z=데크 위)·"
+                        "psi(산란체 실고도=DEM+Δh, PSI 잔차높이 역산). dem→--gltf-dem, element→--gltf-elements, "
+                        "psi→--gltf-bperp+--gltf-dem.")
     p.add_argument("--gltf-dem", default=None, metavar="PATH",
-                   help="--gltf-z-source dem 의 DEM: 단일 래스터(tif/hgt/vrt) 또는 SRTM 타일 디렉터리.")
+                   help="--gltf-z-source dem/psi 의 DEM: 단일 래스터(tif/hgt/vrt) 또는 SRTM 타일 디렉터리.")
+    p.add_argument("--gltf-bperp", default=None, metavar="JSON",
+                   help="--gltf-z-source psi(산란체 실고도=DEM+Δh)용 에폭별 수직baseline JSON "
+                        "{YYYYMMDD: B⊥_m}. perpendicular_baselines() 산출. --gltf-dem 과 함께.")
     p.add_argument("--gltf-viewer", action="store_true",
                    help="--export-gltf 후 자립형 웹 뷰어 HTML 생성(glb 인라인, three.js). 파일만 열면 렌더.")
     p.add_argument("--gltf-tileset", action="store_true",
@@ -650,10 +655,24 @@ def main() -> None:
             _elz = _bsum.get("element_z")
             for _w in _bsum.get("warnings", []):
                 print(f"  ⚠️  {_w}")
+        _psi_elev = None
+        if args.gltf_z_source == "psi":           # PSI 잔차높이 Δh → 산란체 실고도
+            import json as _json
+
+            import numpy as np
+            from .insar.psi_height import estimate_residual_height
+            if not (args.gltf_bperp and args.gltf_dem):
+                p.error("--gltf-z-source psi 는 --gltf-bperp(B⊥ JSON) 와 --gltf-dem 이 필요합니다")
+            _bp = _json.loads(Path(args.gltf_bperp).read_text(encoding="utf-8"))
+            _hr = estimate_residual_height(_h5.strip(), _bp, ref_dem=args.gltf_dem)
+            _psi_elev = _hr["abs_elev_m"]
+            print(f"  PSI Δh 역산: 중앙 {float(np.nanmedian(_hr['dh_m'])):+.1f}m · "
+                  f"σ_Δh 중앙 {float(np.nanmedian(_hr['sigma_dh_m'])):.1f}m · B⊥스프레드 {_hr['bperp_spread_m']:.0f}m")
         r = export_insar_gltf(_h5.strip(), _out.strip(), value=args.gltf_value,
                               fram_project=args.gltf_fram, ifc_crs=args.bim_crs,
                               z_exaggerate=args.gltf_z_exaggerate, element_guids=_guids,
-                              z_source=args.gltf_z_source, dem=args.gltf_dem, element_z=_elz)
+                              z_source=args.gltf_z_source, dem=args.gltf_dem, element_z=_elz,
+                              psi_elev=_psi_elev)
         print("=" * 56)
         print("  InSAR → 웹 트윈 glTF(.glb) 내보내기")
         print("=" * 56)

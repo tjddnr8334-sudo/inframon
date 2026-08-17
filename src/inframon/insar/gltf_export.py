@@ -330,7 +330,7 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
                       fram_project: str | Path | None = None, ifc_crs: str = "EPSG:5186",
                       z_exaggerate: float = 0.0, element_map: dict | None = None,
                       element_guids=None, z_source: str = "flat", dem=None,
-                      element_z=None) -> dict:
+                      element_z=None, psi_elev=None) -> dict:
     """InSAR/PSI H5 → 웹 트윈용 .glb + .meta.json.
 
     value: 'velocity'(LOS 속도)·'cri'(FRAM CRI 최근접, fram_project 필요)·'cumulative'(누적 LOS).
@@ -376,6 +376,12 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
                              "guid_map_from_alignment 의 summary['element_z'] 를 넘기세요.")
         z = np.nan_to_num(np.asarray(element_z, float), nan=0.0)      # 데크 레벨(m)
         georef["z_source"] = "ifc_element_top"
+    elif z_source == "psi":
+        if psi_elev is None:
+            raise ValueError("z_source='psi' 은 psi_elev(점별 절대고도=DEM+Δh) 가 필요합니다 — "
+                             "psi_height.estimate_residual_height(ref_dem=)['abs_elev_m'] 를 넘기세요.")
+        z = np.nan_to_num(np.asarray(psi_elev, float), nan=0.0)      # 산란체 실고도(DEM+Δh)
+        georef["z_source"] = "psi_residual_height"
     elif z_source == "value" or z_exaggerate:
         z = np.nan_to_num(vals, nan=0.0) * (z_exaggerate or 1.0) / 1000.0
         georef["z_source"] = f"value×{z_exaggerate or 1.0}"
