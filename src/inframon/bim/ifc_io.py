@@ -103,6 +103,46 @@ def _placement_xyz(element, scale: float):
             return np.zeros(3, dtype=float)
 
 
+def _predefined_str(el) -> str:
+    """PredefinedType → 대문자 문자열('' 없음). USERDEFINED 면 ObjectType 을 본다."""
+    pd = str(getattr(el, "PredefinedType", "") or "").upper()
+    if pd in ("", "NOTDEFINED", "NONE"):
+        return ""
+    if pd == "USERDEFINED":
+        return str(getattr(el, "ObjectType", "") or "").upper()
+    return pd
+
+
+def _spatial_parent(el):
+    """공간 계층 부모 1단계 — 포함(IfcRelContainedInSpatialStructure) 우선, 집합(IfcRelAggregates) 폴백."""
+    for rel in getattr(el, "ContainedInStructure", None) or []:
+        return rel.RelatingStructure
+    for rel in getattr(el, "Decomposes", None) or []:
+        return rel.RelatingObject
+    return None
+
+
+def _container_member(el, max_up: int = 4) -> str | None:
+    """상위 공간구조(IfcBridgePart 등)에서 부재 라벨을 상속받는다.
+
+    IFC4.3 교량 모델은 부재를 PIER/DECK 등 PredefinedType 을 가진 IfcBridgePart 아래에
+    담는다 — 부재 자신이 Proxy 여도 담긴 파트를 보면 라벨이 나온다. 전체 구조물
+    컨테이너(IfcBridge/IfcFacility/IfcSite …)는 부재 정보가 아니므로 건너뛴다.
+    """
+    cur = _spatial_parent(el)
+    for _ in range(max_up):
+        if cur is None:
+            return None
+        t = cur.is_a().lower()
+        if t not in ("ifcbridge", "ifcfacility", "ifcsite", "ifcbuilding", "ifcproject"):
+            m = member_from_ifc_type(cur.is_a(), getattr(cur, "Name", "") or "",
+                                     predefined=_predefined_str(cur))
+            if m:
+                return m
+        cur = _spatial_parent(cur)
+    return None
+
+
 def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement",),
                   max_elements: int = 20000) -> list[Element]:
     """IFC 부재 → `Element` 테이블(로컬 좌표 AABB).
@@ -146,11 +186,16 @@ def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement
             if lo is None:
                 lo = hi = _placement_xyz(el, scale)
                 src = "placement"
+            pd = _predefined_str(el)
+            extra = {"bbox_source": src}
+            if pd:
+                extra["predefined"] = pd
             out.append(Element(guid=str(guid), name=str(name), ifc_type=ifc_type,
-                               member=member_from_ifc_type(ifc_type, name),
+                               member=member_from_ifc_type(ifc_type, name, predefined=pd,
+                                                           container=_container_member(el)),
                                bbox_min=tuple(float(x) for x in lo),
                                bbox_max=tuple(float(x) for x in hi),
-                               extra={"bbox_source": src}))
+                               extra=extra))
             if len(out) >= max_elements:
                 return out
     return out
@@ -317,3 +362,38 @@ def inspect(ifc_path: str | Path) -> dict:
         "advice": ("바로 정합할 수 있습니다 — --bim-align 에 이 IFC 를 그대로 주세요."
                    if not blockers else " ".join(blockers)),
     }
+
+
+def extract_elements_json(ifc_path: str | Path, out_json: str | Path) -> dict:
+    """외부(트윈 측) IFC → 결합 테이블 `bim_elements.json` 생성 (CLI `--bim-extract-elements`).
+
+    트윈 팀에게 IFC 를 받는 즉시 이 한 방으로 **실 GlobalId** 결합 테이블을 만든다 —
+    손으로 쓴 임시 테이블(SEG1… 같은 가짜 키)을 실키로 교체하는 표준 절차.
+    산출 JSON 은 `elements.load_elements`/`--bim-align`/`--gltf-elements` 가 그대로 읽고,
+    IfcMapConversion 이 있으면 `map_conversion` 으로 동봉해 정합 근거까지 한 파일에 담는다.
+    반환: 요약 dict(스키마·부재 수·라벨 추론 수·georef 유무).
+    """
+    import json
+
+    ios = _require()
+    f = ios.open(str(ifc_path))
+    mc = read_map_conversion(ifc_path)
+    els = read_elements(ifc_path)
+    payload = {
+        "_README": "inframon 부재 결합 테이블 — --bim-extract-elements 가 IFC 에서 자동 생성. "
+                   "guid 는 원본 IFC 의 GlobalId(트윈 결합 외래키)다. 손으로 고치지 말 것.",
+        "source_ifc": str(Path(ifc_path).name),
+        "schema": f.schema,
+        "map_conversion": (mc.to_dict() if mc else None),
+        "elements": [
+            {"guid": e.guid, "name": e.name, "ifc_type": e.ifc_type, "member": e.member,
+             "bbox_min": list(e.bbox_min), "bbox_max": list(e.bbox_max), "extra": e.extra}
+            for e in els
+        ],
+    }
+    out_json = Path(out_json)
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"schema": f.schema, "n_elements": len(els),
+            "n_member_mapped": sum(1 for e in els if e.member),
+            "has_map_conversion": mc is not None, "out": str(out_json)}

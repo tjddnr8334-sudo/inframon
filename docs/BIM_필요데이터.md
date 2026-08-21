@@ -61,7 +61,7 @@ python -m inframon --bim-inspect model.ifc
 | **표고 기준(수직기준면) 정보** | 2D 평면 연결만 — 상판 아래 교각이 안 갈림 | 3D 연결로 상판/교각/교대 정확히 분리 |
 | **부재 명명 규칙** | IFC 타입으로만 추론(`IfcSlab`→상판) | 한글 부재명("교각 P3")도 인식 |
 | **교량 지간(경간)** | 잔존수명이 상판에 L/800 을 적용 못 함 | 상판 사용성 한계 적용 가능 |
-| **IFC4.3 교량 확장** | `IfcSlab`/`IfcColumn` 등 일반 타입으로 처리 | `IfcBridge`/`IfcBridgePart` 매핑(미구현) |
+| **IFC4.3 교량 확장** | `IfcSlab`/`IfcColumn` 등 일반 타입으로 처리 | ✅ 구현됨 — `IfcBridgePart` 의 `PredefinedType`(PIER/ABUTMENT/DECK/…)을 최우선으로 보고, Proxy 부재는 담긴 파트의 라벨을 상속(공간 계층 추적) |
 
 **표고가 왜 중요한가**: IFC `OrthogonalHeight` 는 수직기준면(예 인천만 평균해면) 기준이고
 InSAR z 는 DEM(타원체고 또는 지오이드고)에서 옵니다. 한국의 지오이드고는 **약 25 m** 라

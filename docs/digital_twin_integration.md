@@ -35,7 +35,7 @@ IFC와 FBX는 **경쟁 포맷이 아니라 다른 목적**이다.
 
 ### (A) 의미 층 = **IFC 4.3** (권장 기록 포맷)
 - **IFC 4.3 = ISO 16739-1:2024** 에서 **인프라(IfcBridge·IfcBridgePart·IfcAlignment·선형참조)** 가 정식 추가됨. 이전 IFC 2x3/4.0 은 건물 전용이라 교량 클래스가 없었다 → **교량 트윈은 반드시 IFC 4.3**.
-- SHM 값은 **부재별 Pset**(`Pset_InSAR{변위·속도·CRI·밴드·색}`)로 GlobalId에 붙인다(현 `--bim-align` 이 이 페이로드를 이미 생성).
+- SHM 값은 **부재별 Pset**(`Inframon_Monitoring` — 변위·속도·CRI·밴드·색, `psets.py:PSET_NAME`)로 GlobalId에 붙인다(현 `--bim-align` 이 이 페이로드를 이미 생성, `--bim-write-ifc` 로 주입).
 - georef: **IfcMapConversion**(EPSG:5186 한국 중부원점) — 현 파이프라인이 이미 처리. IFC에 없으면 측량 기준점쌍(`--bim-control-points`)으로 주입.
 
 ### (B) 시간축 데이터 층 = 별도 (BIM의 근본 한계 대응)

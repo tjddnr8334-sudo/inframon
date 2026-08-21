@@ -229,6 +229,10 @@ def main() -> None:
                    help="--bim-align 결과를 원본 IFC 사본에 Pset 으로 주입(ifcopenshell 필요).")
     p.add_argument("--bim-inspect", default=None, metavar="IFC",
                    help="IFC 사전점검 — IfcMapConversion·좌표계·부재 타입 분포 출력 후 종료.")
+    p.add_argument("--bim-extract-elements", default=None, metavar="IFC[,OUT.json]",
+                   help="트윈 측 IFC → 결합 테이블(bim_elements.json) 자동 생성 후 종료. "
+                        "실 GlobalId·부재 라벨(IFC4.3 PredefinedType 인지)·AABB·MapConversion 동봉. "
+                        "OUT 생략 시 <IFC>_elements.json.")
     p.add_argument("--gnss-validate", default=None, metavar="PROJECT_H5",
                    help="InSAR LOS 속도를 인근 NGL 상시 GNSS 와 대조(광역 기준 신뢰도 검증).")
     p.add_argument("--gnss-anchor", default=None, metavar="LAT,LON",
@@ -310,6 +314,23 @@ def main() -> None:
                    help="⑦ 상승·하강 SNAP Track 연직분해(→--out). 하강 부족/기하특이 시 단일 폴백.")
     p.add_argument("--snap-gpt", default=None, metavar="PATH",
                    help="gpt 실행파일 경로(기본 자동탐지: C:\\Program Files\\esa-snap\\bin\\gpt.exe).")
+    p.add_argument("--hyp3-insar", default=None, metavar="LAT,LON",
+                   help="HyP3(ASF 클라우드) 백엔드: 교량 좌표로 burst 조회→INSAR_ISCE_BURST "
+                        "스타 잡 제출·수집→Track H5. 로컬 SAR 연산·SLC 다운로드 불필요. "
+                        "Earthdata 자격 필요(--earthdata-*/~/.netrc). 월간 크레딧 쿼터 소모.")
+    p.add_argument("--hyp3-import", default=None, metavar="DIR",
+                   help="이미 받아둔 HyP3 산출물 폴더(*_unw_phase.tif)를 오프라인 변환 → Track H5. "
+                        "--hyp3-target LAT,LON 필요(점 선별 중심).")
+    p.add_argument("--hyp3-target", default=None, metavar="LAT,LON",
+                   help="--hyp3-import 교량 좌표(변환 점 선별 중심).")
+    p.add_argument("--hyp3-count", type=int, default=8, metavar="N",
+                   help="--hyp3-insar 스타 네트워크 쌍 수(기본 8 — 잡 8개≈크레딧 소량).")
+    p.add_argument("--hyp3-start", default="2024-01-01", metavar="YYYY-MM-DD",
+                   help="--hyp3-insar 조회 시작일(기본 2024-01-01).")
+    p.add_argument("--hyp3-end", default="2025-07-01", metavar="YYYY-MM-DD",
+                   help="--hyp3-insar 조회 종료일(기본 2025-07-01).")
+    p.add_argument("--hyp3-dir", default=None, metavar="DIR",
+                   help="--hyp3-insar 산출물 다운로드 폴더(기본 <out>/hyp3_products).")
     p.add_argument("--app", action="store_true",
                    help="대시보드를 전용 데스크톱 창에 띄운다(더블클릭 실행용). pywebview 필요")
     p.add_argument("--serve", action="store_true",
@@ -617,6 +638,56 @@ def main() -> None:
         print("=" * 56)
         return
 
+    if args.hyp3_insar or args.hyp3_import:
+        from pathlib import Path as _Path
+
+        from .insar.hyp3_backend import Hyp3Error, find_product_dirs, products_to_track_h5
+        from .insar.hyp3_backend import run as hyp3_run
+
+        out_h5 = args.out if args.out.endswith(".h5") else str(_Path(args.out) / "track_hyp3.h5")
+        try:
+            if args.hyp3_import:                       # 오프라인: 받아둔 산출물 → Track H5
+                if not args.hyp3_target:
+                    p.error("--hyp3-import 는 --hyp3-target LAT,LON 이 필요합니다")
+                try:
+                    lat, lon = (float(v) for v in args.hyp3_target.split(","))
+                except ValueError:
+                    p.error("--hyp3-target 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
+                prods = find_product_dirs(args.hyp3_import)
+                n = products_to_track_h5(prods, out_h5, lat=lat, lon=lon)
+                print("=" * 56)
+                print("  HyP3 산출물 오프라인 변환 → Track H5 완료")
+                print("=" * 56)
+                print(f"  간섭도쌍   : {len(prods)}개 ({prods[0].date1} ~ {prods[-1].date2})")
+                print(f"  측정점     : N={n}")
+                print(f"  Track H5   : {out_h5}")
+            else:                                       # 클라우드: 조회→잡→수집→변환
+                try:
+                    lat, lon = (float(v) for v in args.hyp3_insar.split(","))
+                except ValueError:
+                    p.error("--hyp3-insar 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
+                prod_dir = args.hyp3_dir or str(_Path(out_h5).parent / "hyp3_products")
+                res = hyp3_run(lat, lon, prod_dir, out_h5,
+                               count=args.hyp3_count, start=args.hyp3_start, end=args.hyp3_end,
+                               username=args.earthdata_user, password=args.earthdata_pass,
+                               token=args.earthdata_token)
+                print("=" * 56)
+                print("  HyP3(클라우드) InSAR → Track H5 완료 — 로컬 SAR 연산 없음")
+                print("=" * 56)
+                print(f"  burst      : {res.burst_id or '-'}   기준일 {res.ref_date}")
+                print(f"  간섭도쌍   : {res.n_ok}/{res.n_ok + res.n_fail} 성공")
+                for msg in res.failures:
+                    print(f"    · 실패   : {msg}")
+                print(f"  측정점     : N={res.n_points}")
+                print(f"  Track H5   : {res.track_h5}")
+            print("-" * 56)
+            print(f"  다음: python -m inframon --check-track {out_h5}")
+            print(f"        python -m inframon --import-track-h5 {out_h5} --out data/project.h5")
+            print("=" * 56)
+        except Hyp3Error as exc:
+            p.error(str(exc))
+        return
+
     if args.export_bim:
         from .insar.bim_export import export_insar_for_bim
         try:
@@ -723,6 +794,32 @@ def main() -> None:
             print(f"    ⛔ {b}")
         for n in info["notes"]:
             print(f"    ⓘ {n}")
+        print("=" * 56)
+        return
+
+    if args.bim_extract_elements:
+        from pathlib import Path as _Path
+
+        from .bim import ifc_io
+        from .bim.georef import AlignmentError as _AE
+        parts = [s.strip() for s in args.bim_extract_elements.split(",")]
+        ifc_in = parts[0]
+        out_json = parts[1] if len(parts) > 1 else str(_Path(ifc_in).with_suffix("")) + "_elements.json"
+        try:
+            r = ifc_io.extract_elements_json(ifc_in, out_json)
+        except _AE as exc:
+            p.error(str(exc))
+        print("=" * 56)
+        print("  IFC → 결합 테이블(bim_elements.json) 추출")
+        print("=" * 56)
+        print(f"  스키마          : {r['schema']}")
+        print(f"  부재            : {r['n_elements']}개 (부재 라벨 추론 {r['n_member_mapped']}개)")
+        print(f"  IfcMapConversion: {'동봉' if r['has_map_conversion'] else '없음 — 기준점(--bim-control-points) 필요'}")
+        print(f"  결합 테이블     : {r['out']}")
+        print("-" * 56)
+        print(f"  다음: python -m inframon --bim-align data/project.h5,{ifc_in},out/twin "
+              f"[--bim-write-ifc out/twin.ifc]")
+        print(f"        python -m inframon --export-gltf ... --gltf-elements {r['out']}")
         print("=" * 56)
         return
 
