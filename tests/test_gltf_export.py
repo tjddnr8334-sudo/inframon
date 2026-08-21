@@ -40,7 +40,7 @@ def _parse_glb(path):
 
 
 def test_glb_is_valid_gltf2_points(tmp_path):
-    r = export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
     glb = tmp_path / "twin.glb"
     assert glb.exists()
     gltf, blen = _parse_glb(glb)
@@ -56,7 +56,7 @@ def test_glb_is_valid_gltf2_points(tmp_path):
 
 
 def test_meta_sidecar_binding_and_georef(tmp_path):
-    r = export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
     meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
     assert meta["schema"] == "inframon.gltf.meta/1.0"
     # GlobalId 결합 계약 슬롯(설계 노트) — 채워지기 전엔 null
@@ -118,7 +118,7 @@ def test_3dtiles_tileset_places_on_globe(tmp_path):
     from inframon.insar.gltf_export import write_3dtiles_tileset
 
     export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
-    t = write_3dtiles_tileset(tmp_path / "twin.glb")
+    write_3dtiles_tileset(tmp_path / "twin.glb")
     ts = json.loads((tmp_path / "tileset.json").read_text(encoding="utf-8"))
     assert ts["asset"]["version"] == "1.1"
     assert ts["root"]["content"]["uri"] == "twin.glb"
