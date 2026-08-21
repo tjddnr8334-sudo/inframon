@@ -40,9 +40,28 @@ _IFC_TO_MEMBER = [
     ("ifcfooting", "abutment"), ("ifcabutment", "abutment"), ("ifcwall", "abutment"),
 ]
 
+# IFC4.3 IfcBridgePart/IfcFacilityPart 의 PredefinedType → 부재 라벨.
+# 타입 문자열("IfcBridgePart"→deck)보다 훨씬 정확한 신호라 최우선으로 본다 —
+# PredefinedType=PIER 인 IfcBridgePart 를 deck 으로 뭉개면 교각 침하가 데크로 집계된다.
+_PREDEFINED_TO_MEMBER = {
+    "PIER": "pier", "PYLON": "pier", "SUBSTRUCTURE": "pier", "FOUNDATION": "pier",
+    "ABUTMENT": "abutment",
+    "DECK": "deck", "DECK_SEGMENT": "deck", "GIRDER": "deck", "SUPERSTRUCTURE": "deck",
+}
 
-def member_from_ifc_type(ifc_type: str | None, name: str | None = None) -> str | None:
-    """IFC 타입(+이름)에서 inframon 부재 라벨을 추론. 못 하면 None."""
+
+def member_from_ifc_type(ifc_type: str | None, name: str | None = None, *,
+                         predefined: str | None = None,
+                         container: str | None = None) -> str | None:
+    """IFC 타입(+이름)에서 inframon 부재 라벨을 추론. 못 하면 None.
+
+    우선순위: ① `predefined`(IFC4.3 PredefinedType — 가장 특정적) → ② 타입/이름
+    부분일치 → ③ 한/영 부재명 → ④ `container`(상위 IfcBridgePart 등에서 상속받은
+    라벨 — IfcBuildingElementProxy 처럼 타입이 무의미한 부재의 마지막 폴백).
+    """
+    pd = (predefined or "").strip().upper()
+    if pd in _PREDEFINED_TO_MEMBER:
+        return _PREDEFINED_TO_MEMBER[pd]
     hay = f"{ifc_type or ''} {name or ''}".lower()
     for key, member in _IFC_TO_MEMBER:
         if key in hay:
@@ -54,6 +73,8 @@ def member_from_ifc_type(ifc_type: str | None, name: str | None = None) -> str |
                        ("교각", "pier"), ("교대", "abutment"), ("받침", "bearing")):
         if ko in hay:
             return member
+    if container in MEMBER_TYPES:
+        return container
     return None
 
 

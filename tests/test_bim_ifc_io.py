@@ -39,6 +39,7 @@ def test_available_reports_true_when_present():
     ("read_elements", lambda: ifc_io.read_elements("x.ifc")),
     ("inspect", lambda: ifc_io.inspect("x.ifc")),
     ("write_psets", lambda: ifc_io.write_psets("a.ifc", {}, "b.ifc")),
+    ("extract_elements_json", lambda: ifc_io.extract_elements_json("x.ifc", "x.json")),
 ])
 def test_every_ifc_entry_point_fails_loudly_with_install_hint(no_ifcopenshell, name, call):
     with pytest.raises(AlignmentError) as exc:

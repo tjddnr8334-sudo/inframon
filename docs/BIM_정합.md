@@ -219,12 +219,27 @@ IFC 왕복은 `tests/test_bim_ifc_roundtrip.py` 가 **ifcopenshell 로 교량 IF
 실 IFC 투입 시 반드시 `--bim-inspect` 로 `IfcMapConversion` 유무·부재 수·타입 분포·
 **길이 단위**를 먼저 확인할 것.
 
+**트윈 팀 IFC 수령 즉시 절차** (외부 트윈이 IFC 기반일 때의 표준 3단):
+
+```bash
+python -m inframon --bim-inspect bridge.ifc                       # ① 준비도 점검
+python -m inframon --bim-extract-elements bridge.ifc              # ② 실 GlobalId 결합 테이블
+#    → bridge_elements.json (configs/<교량>/bim_elements.json 으로 복사 — SEG1… 임시키 대체)
+python -m inframon --bim-align data/project.h5,bridge.ifc,out/twin \
+  --bim-write-ifc out/twin.ifc                                    # ③ 정합 + Pset 주입본 회신
+```
+
+②의 테이블은 `--gltf-elements` 에도 그대로 들어가 웹 트윈(glTF/3D Tiles) 사이드카의
+`element_globalid` 가 **상대 IFC 의 실 GlobalId** 로 채워진다 — 트윈 측은 이 키 하나로
+자기 IFC 부재와 우리 점군·CRI 를 결합한다.
+
 ---
 
 ## 7. 남은 것
 
-- **실 교량 IFC 투입** — 합성 IFC 로는 못 만나는 것들: 대형 모델 성능, `IfcBridge`/
-  `IfcBridgePart`(IFC4.3) 타입 매핑, 복잡 형상의 AABB 품질, 좌표계가 여러 개인 모델.
+- **실 교량 IFC 투입** — 합성 IFC 로는 못 만나는 것들: 대형 모델 성능, 복잡 형상의
+  AABB 품질, 좌표계가 여러 개인 모델. (`IfcBridge`/`IfcBridgePart`(IFC4.3) 타입 매핑은
+  ✅ 구현됨 — `PredefinedType` 최우선 + 공간 계층 라벨 상속, `test_bim_ifc_roundtrip.py`)
 - **3D 연결 상시화** — 수직기준면 변환(지오이드 모델 KNGeoid) 연결.
 - **부재 단위 시계열 API** — IFC 에서 `SourceProject` 를 따라와 시계열을 조회하는 엔드포인트
   (현재는 project.h5 직접 접근).

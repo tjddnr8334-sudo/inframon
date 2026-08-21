@@ -36,6 +36,10 @@ def _reproject(xy: np.ndarray, src_crs, dst_crs) -> np.ndarray:
     """[N,2] world 좌표를 src_crs→dst_crs 로 재투영. 같거나 비면 그대로."""
     if src_crs is None or dst_crs is None:
         return xy
+    # 문자열이 같으면 재투영 자체가 no-op — pyproj 를 요구하지 않는다. (CRS 가 같은
+    # 흔한 경우에 pyproj 부재로 DemError→z=0 폴백이 나던 회귀의 원인이었다.)
+    if str(src_crs).strip().upper() == str(dst_crs).strip().upper():
+        return xy
     try:
         from pyproj import CRS, Transformer
     except ImportError as exc:  # pragma: no cover - 환경 의존

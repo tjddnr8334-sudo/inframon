@@ -21,7 +21,7 @@ _OPTIONAL_DEPS = frozenset({
     "ifcopenshell", "transformers", "timm", "scipy", "skimage",
     "mintpy", "streamlit", "plotly", "folium", "streamlit_folium",
     "openseespy", "openseespywin", "fastapi", "uvicorn", "networkx",
-    "prefect", "asf_search", "imageio", "PIL",
+    "prefect", "asf_search", "hyp3_sdk", "imageio", "PIL",
 })
 
 

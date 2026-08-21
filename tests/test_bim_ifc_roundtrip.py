@@ -336,3 +336,73 @@ def test_ifc43_bridge_types_map_to_members():
     # 프록시는 타입으로 못 정하고 이름에 기대야 한다
     assert member_from_ifc_type("IfcBuildingElementProxy") is None
     assert member_from_ifc_type("IfcBuildingElementProxy", "P3 교각") == "pier"
+
+
+def test_ifc43_predefined_type_beats_type_table():
+    """PredefinedType=PIER 인 IfcBridgePart 를 deck 으로 뭉개면 교각 침하가 데크로 집계된다."""
+    from inframon.bim.elements import member_from_ifc_type
+    assert member_from_ifc_type("IfcBridgePart", predefined="PIER") == "pier"
+    assert member_from_ifc_type("IfcBridgePart", predefined="ABUTMENT") == "abutment"
+    assert member_from_ifc_type("IfcBridgePart", predefined="DECK") == "deck"
+    assert member_from_ifc_type("IfcBridgePart", predefined="SUPERSTRUCTURE") == "deck"
+    assert member_from_ifc_type("IfcBridgePart", predefined="SUBSTRUCTURE") == "pier"
+    # 컨테이너 상속은 마지막 폴백 — 타입/이름이 더 우선
+    assert member_from_ifc_type("IfcBuildingElementProxy", container="pier") == "pier"
+    assert member_from_ifc_type("IfcColumn", container="deck") == "pier"
+
+
+# ── IFC4.3 공간 계층 (IfcBridge → IfcBridgePart[PredefinedType] → 부재) ──
+def _make_ifc43(path) -> str:
+    import ifcopenshell.api.aggregate
+    import ifcopenshell.api.spatial
+
+    f = ifcopenshell.file(schema="IFC4X3")
+    ifcopenshell.api.root.create_entity(f, ifc_class="IfcProject", name="Bridge43")
+    ifcopenshell.api.unit.assign_unit(f, length={"is_metric": True, "raw": "METERS"})
+    ctx = ifcopenshell.api.context.add_context(f, context_type="Model")
+    ifcopenshell.api.context.add_context(f, context_type="Model", context_identifier="Body",
+                                         target_view="MODEL_VIEW", parent=ctx)
+    bridge = ifcopenshell.api.root.create_entity(f, ifc_class="IfcBridge", name="교량")
+    pier_part = ifcopenshell.api.root.create_entity(
+        f, ifc_class="IfcBridgePart", name="하부구조", predefined_type="PIER")
+    deck_part = ifcopenshell.api.root.create_entity(
+        f, ifc_class="IfcBridgePart", name="상부구조", predefined_type="DECK")
+    ifcopenshell.api.aggregate.assign_object(f, products=[pier_part, deck_part],
+                                             relating_object=bridge)
+    # 부재 자신은 타입 정보가 무의미한 Proxy — 담긴 파트의 PredefinedType 으로만 판별 가능
+    proxy_pier = ifcopenshell.api.root.create_entity(
+        f, ifc_class="IfcBuildingElementProxy", name="P1")
+    proxy_deck = ifcopenshell.api.root.create_entity(
+        f, ifc_class="IfcBuildingElementProxy", name="S1")
+    ifcopenshell.api.spatial.assign_container(f, products=[proxy_pier],
+                                              relating_structure=pier_part)
+    ifcopenshell.api.spatial.assign_container(f, products=[proxy_deck],
+                                              relating_structure=deck_part)
+    f.write(str(path))
+    return str(path)
+
+
+def test_ifc43_container_hierarchy_labels_proxy_members(tmp_path):
+    els = {e.name: e for e in ifc_io.read_elements(_make_ifc43(tmp_path / "b43.ifc"))}
+    assert els["P1"].member == "pier"        # PIER 파트에 담긴 Proxy → pier 상속
+    assert els["S1"].member == "deck"        # DECK 파트에 담긴 Proxy → deck 상속
+
+
+# ── 결합 테이블 추출 (--bim-extract-elements) ──
+def test_extract_elements_json_roundtrip(tmp_path, ifc):
+    from inframon.bim.elements import load_elements
+
+    out = tmp_path / "bridge_elements.json"
+    r = ifc_io.extract_elements_json(ifc, out)
+    assert r["n_elements"] == len(BOXES) and r["n_member_mapped"] == len(BOXES)
+    assert r["has_map_conversion"] is True and out.exists()
+
+    els = load_elements(out)                  # 기존 로더가 그대로 읽어야 한다
+    by_name = {e.name: e for e in els}
+    assert by_name["상판"].member == "deck" and by_name["교각1"].member == "pier"
+    assert by_name["상판"].guid               # 실 GlobalId 가 외래키로 들어간다
+
+    import json
+    raw = json.loads(out.read_text(encoding="utf-8"))
+    assert raw["map_conversion"]["eastings"] == pytest.approx(EAST)   # 정합 근거 동봉
+    assert raw["schema"].startswith("IFC4")
