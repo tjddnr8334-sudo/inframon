@@ -163,8 +163,16 @@ pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   #
 
 ### Real data (real Sentinel-1 → CRI)
 
-Heavy SAR processing (ISCE2 / MiaplPy / SARvey) runs on **WSL2/Linux**; selection, ingest, analysis
-and visualization run on Windows. See `docs/실데이터_런북.md`.
+Three interchangeable upstream lanes produce the same Track H5 contract — pick by environment,
+everything downstream (ingest → PINN → FRAM → dashboard) is identical:
+
+| Lane | Command | Runs on | Notes |
+|---|---|---|---|
+| **A. SNAP (default)** | `--snap-auto LAT,LON` | **Windows native** — no WSL | ESA SNAP install only ([guide](docs/시작_Windows_SNAP.md)) |
+| **B. SARvey (research)** | WSL2 runbook | WSL2/Linux | full PSI, highest quality (`docs/F_SARvey_WSL2.md`) |
+| **C. HyP3 (cloud)** | `--hyp3-insar LAT,LON` | anywhere — processing in ASF cloud | no local SAR compute at all ([guide](docs/시작_클라우드_HyP3.md)) |
+
+Selection, ingest, analysis and visualization always run on Windows. See `docs/실데이터_런북.md`.
 
 ```bash
 python -m inframon --check-track track.h5      # pre-ingest validation (exit 0 = ready)
@@ -444,8 +452,17 @@ pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   #
 
 ### 실데이터 (실 Sentinel-1 → CRI)
 
-무거운 SAR 처리(ISCE2/MiaplPy/SARvey)는 **WSL2/Linux**, 선별·인제스트·해석·시각화는 Windows.
-절차는 [`docs/실데이터_런북.md`](docs/실데이터_런북.md).
+상류 처리 레인 3종이 **같은 Track H5 계약**을 만든다 — 환경에 맞게 고르면 하류
+(인제스트→PINN→FRAM→대시보드)는 전부 동일:
+
+| 레인 | 명령 | 실행 환경 | 비고 |
+|---|---|---|---|
+| **A. SNAP (기본)** | `--snap-auto LAT,LON` | **Windows 네이티브** — WSL 불필요 | ESA SNAP 설치만 ([가이드](docs/시작_Windows_SNAP.md)) |
+| **B. SARvey (연구·최고품질)** | WSL2 런북 | WSL2/Linux | full PSI (`docs/F_SARvey_WSL2.md`) |
+| **C. HyP3 (클라우드)** | `--hyp3-insar LAT,LON` | 어디서든 — 처리는 ASF 클라우드 | 로컬 SAR 연산 없음 ([가이드](docs/시작_클라우드_HyP3.md)) |
+
+선별·인제스트·해석·시각화는 항상 Windows 에서 돈다. 절차는
+[`docs/실데이터_런북.md`](docs/실데이터_런북.md).
 
 ```bash
 python -m inframon --check-track track.h5      # 투입 전 사전검증 (exit 0 = 가능)
