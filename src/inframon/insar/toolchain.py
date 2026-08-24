@@ -169,8 +169,10 @@ def provision_toolchain(runner=default_runner, *, stream=print) -> dict:
     """
     from pathlib import Path
     repo = Path(__file__).resolve().parents[3]
-    drive, tail = repo.drive[0].lower(), repo.as_posix()[2:]
-    wsl_repo = f"/mnt/{drive}{tail}"        # E:\프로그램 → /mnt/e/프로그램
+    if repo.drive:                          # Windows: E:\프로그램 → /mnt/e/프로그램
+        wsl_repo = f"/mnt/{repo.drive[0].lower()}{repo.as_posix()[2:]}"
+    else:                                   # 리눅스/컨테이너: 이미 POSIX 경로 그대로
+        wsl_repo = repo.as_posix()
     cmd = f"cd '{wsl_repo}' && bash scripts/wsl_sarvey/00_setup_env.sh"
 
     stream(f">> WSL 에서 툴체인 구축 시작 (리포: {wsl_repo})")
