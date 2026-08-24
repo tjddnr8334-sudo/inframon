@@ -146,7 +146,11 @@ def main() -> None:
     p.add_argument("--earthdata-pass", default=None, help="Earthdata 비밀번호.")
     p.add_argument("--earthdata-token", default=None, help="Earthdata 토큰(우선). 없으면 user/pass·~/.netrc.")
     p.add_argument("--insar-tools", action="store_true",
-                   help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료.")
+                   help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료. "
+                        "WSL 자체가 없으면 설치 명령부터 안내(exit 1 = 준비 안 됨).")
+    p.add_argument("--insar-tools-install", action="store_true",
+                   help="F코어 툴체인을 WSL 에 **실제 설치**(00_setup_env.sh 실행, 수 GB·수십 분). "
+                        "ISCE2 는 필수로 강제 — 실패 시 exit 1. WSL 미설치면 설치 명령 안내 후 종료.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--locate", default=None, metavar="X,Y",
@@ -1330,10 +1334,31 @@ def main() -> None:
         print("=" * 56)
         return
 
-    if args.insar_tools:
-        from .insar.toolchain import check_toolchain, format_report
+    if args.insar_tools or args.insar_tools_install:
+        import sys as _sys
 
-        print(format_report(check_toolchain()))
+        from .insar.toolchain import (check_toolchain, format_report, format_wsl_report,
+                                      provision_toolchain, wsl_status)
+
+        ws = wsl_status()                     # 0단계: WSL 자체 — 타 컴퓨터 첫 오류의 주범
+        print(format_wsl_report(ws))
+        if not ws["ready"]:
+            _sys.exit(1)
+
+        if args.insar_tools_install:
+            r = provision_toolchain()
+            print(format_report(r["status"]))
+            if not r["ok"]:
+                print(f"  ⛔ {r['error']}")
+                _sys.exit(1)
+            print("  ✅ 툴체인 구축 완료 — ISCE2 포함 전부 감지됨")
+            return
+
+        status = check_toolchain()
+        print(format_report(status))
+        if not status["ready"]:
+            print("  → 지금 설치하려면: python -m inframon --insar-tools-install")
+            _sys.exit(1)
         return
 
     if args.download_slc:

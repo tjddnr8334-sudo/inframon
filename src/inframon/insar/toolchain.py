@@ -104,6 +104,100 @@ def check_toolchain(runner=default_runner) -> dict:
     }
 
 
+WSL_INSTALL_CMD = "wsl --install -d Ubuntu-22.04"
+
+
+def _run_argv(argv: list[str], timeout: int = 60) -> tuple[int, str]:
+    """argv 실행 → (rc, 출력). wsl.exe 는 UTF-16 출력이라 NUL 을 걷어낸다."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        out = ((p.stdout or "") + (p.stderr or "")).replace("\x00", "")
+        return p.returncode, out.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return 127, str(exc)
+
+
+def wsl_status(run=_run_argv) -> dict:
+    """0단계 게이트 — 도구(ISCE2 등) 이전에 **WSL 자체**가 있는지부터 판정한다.
+
+    타 컴퓨터에서 가장 흔한 첫 오류가 "WSL 미설치"인데, 도구 감지만 돌리면 4종 전부
+    ❌ 로만 나와 원인을 알 수 없다. 여기서 원인(reason)과 정확한 설치 명령을 돌려준다.
+    reason: ok | not_windows(불필요) | wsl_exe_missing | no_distro
+    """
+    import sys
+    if not sys.platform.startswith("win"):
+        return {"required": False, "ready": True, "reason": "not_windows",
+                "detail": "리눅스/컨테이너 — WSL 불필요, 현재 셸에서 직접 실행"}
+    if not shutil.which("wsl"):
+        return {"required": True, "ready": False, "reason": "wsl_exe_missing",
+                "install_cmd": WSL_INSTALL_CMD,
+                "detail": "wsl.exe 없음 — Windows 기능 'Linux용 Windows 하위 시스템' 미설치"}
+    rc, out = run(["wsl", "-l", "-q"])
+    distros = [d.strip() for d in out.splitlines() if d.strip()]
+    if rc != 0 or not distros:
+        return {"required": True, "ready": False, "reason": "no_distro",
+                "install_cmd": WSL_INSTALL_CMD, "detail": out[:200]}
+    return {"required": True, "ready": True, "reason": "ok", "distros": distros}
+
+
+def format_wsl_report(st: dict) -> str:
+    """wsl_status 결과를 사람이 읽는 안내로 — 미설치면 설치 명령을 크게 보여준다."""
+    if st["ready"]:
+        tail = f" (배포판: {', '.join(st['distros'])})" if st.get("distros") else ""
+        return f"  ✅ WSL 준비됨{tail}" if st["required"] else f"  ✅ {st['detail']}"
+    lines = ["=" * 56,
+             "  ⛔ WSL 이 설치되어 있지 않습니다 — F코어(SARvey 레인)의 전제조건",
+             "=" * 56,
+             f"  원인: {st['detail']}",
+             "  설치(관리자 PowerShell 에서 1회, 이후 재부팅):",
+             f"    {st['install_cmd']}",
+             "  재부팅 후 Ubuntu 첫 실행에서 사용자 생성 → 아래로 도구 구축:",
+             "    python -m inframon --insar-tools-install",
+             "-" * 56,
+             "  ⓘ WSL 없이 쓰려면: --snap-auto(Windows 네이티브) 또는 --hyp3-insar(클라우드)",
+             "    같은 Track H5 가 나와 하류는 동일합니다. docs/시작_Windows_SNAP.md 참고.",
+             "=" * 56]
+    return "\n".join(lines)
+
+
+def provision_toolchain(runner=default_runner, *, stream=print) -> dict:
+    """WSL 안에 툴체인을 **실제로 구축**한다 — 00_setup_env.sh 실행 후 재감지.
+
+    ISCE2 는 필수로 강제한다: 설치 스크립트가 isce2 실패 시 중단하고(exit 1),
+    여기서도 재감지 결과에 isce2 가 없으면 ok=False 로 돌려준다. 수 GB 다운로드·
+    수십 분 소요 — 진행 출력은 stream 으로 흘린다.
+    """
+    from pathlib import Path
+    repo = Path(__file__).resolve().parents[3]
+    drive, tail = repo.drive[0].lower(), repo.as_posix()[2:]
+    wsl_repo = f"/mnt/{drive}{tail}"        # E:\프로그램 → /mnt/e/프로그램
+    cmd = f"cd '{wsl_repo}' && bash scripts/wsl_sarvey/00_setup_env.sh"
+
+    stream(f">> WSL 에서 툴체인 구축 시작 (리포: {wsl_repo})")
+    stream(">> ⚠️ 수백 MB~수 GB 다운로드, 수십 분 소요될 수 있습니다.")
+    if shutil.which("wsl"):
+        argv = ["wsl", "--", "bash", "-lc", cmd]
+    else:
+        argv = ["bash", "-lc", cmd]
+    try:
+        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, errors="replace")
+        for line in p.stdout:                       # 설치 진행을 실시간으로 보여준다
+            stream("  " + line.rstrip().replace("\x00", ""))
+        rc = p.wait()
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "setup_rc": 127, "error": str(exc), "status": None}
+
+    status = check_toolchain(runner=runner)         # 구축 후 재감지로 검증
+    isce2_ok = "isce2" not in status["missing"] and "conda" not in status["missing"]
+    error = None
+    if rc != 0:
+        error = "00_setup_env.sh 가 실패했습니다(위 출력 참고)."
+    elif not isce2_ok:
+        error = "설치는 끝났지만 ISCE2 가 감지되지 않습니다 — 재실행하거나 위 출력에서 원인을 확인하세요."
+    return {"ok": rc == 0 and isce2_ok, "setup_rc": rc, "status": status, "error": error}
+
+
 def format_report(status: dict) -> str:
     """check_toolchain 결과를 사람이 읽는 리포트 문자열로."""
     lines = ["=" * 56, "  InSAR F코어 처리도구 상태 (ISCE2/MiaplPy/SARvey)", "=" * 56]

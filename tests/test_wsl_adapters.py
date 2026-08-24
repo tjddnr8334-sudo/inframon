@@ -124,13 +124,29 @@ def test_adapter56_stamps_mat(tmp_path):
     _ingestable(out, tmp_path, n)
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash 없음")
+def _syntax_bash() -> str | None:
+    """`bash -n` 에 쓸 bash — Windows 에선 System32 의 **WSL 런처 bash 를 피한다**.
+
+    WSL 런처는 Windows 경로 인자를 해석하지 못해 항상 127 이 난다(문법과 무관한
+    환경 실패). Git Bash 가 있으면 그것을, 없으면 PATH 의 bash 가 런처가 아닐 때만 쓴다.
+    """
+    for cand in (r"C:\Program Files\Git\usr\bin\bash.exe",
+                 r"C:\Program Files\Git\bin\bash.exe"):
+        if Path(cand).exists():
+            return cand
+    found = shutil.which("bash")
+    if found and "system32" not in found.lower():
+        return found
+    return None
+
+
+@pytest.mark.skipif(_syntax_bash() is None, reason="문법 검증에 쓸 bash 없음(WSL 런처 제외)")
 def test_wsl_shell_scripts_syntax():
     """모든 WSL 셸 스크립트가 bash -n 문법 검증을 통과한다(F 실행 전 정합)."""
     scripts = sorted(WSL.glob("*.sh"))
     assert scripts, "셸 스크립트를 찾지 못함"
     for sh in scripts:
-        r = subprocess.run([shutil.which("bash"), "-n", str(sh)], capture_output=True, text=True)
+        r = subprocess.run([_syntax_bash(), "-n", str(sh)], capture_output=True, text=True)
         assert r.returncode == 0, f"{sh.name} 문법 오류: {r.stderr}"
 
 
