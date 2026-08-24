@@ -11,10 +11,8 @@
     INFRAMON_FULL=1     cv(transformers·torch 대형) extra 까지 설치
     INFRAMON_EXTRAS=..  기본 extras 묶음을 직접 지정(쉼표 구분)
     INFRAMON_NO_RUN=1   설치만 하고 실행은 생략(프로비저닝 검증용)
-
-  WSL/ISCE2(SARvey 레인)는 이 스크립트 범위 밖 — 필요 시:
-    python -m inframon --insar-tools          (준비도 점검)
-    python -m inframon --insar-tools-install  (한 방 구축)
+    INFRAMON_WSL=1|0    SARvey 레인(WSL+ISCE2) 구축을 묻지 않고 진행(1)/건너뜀(0).
+                        미지정이면 콘솔에서 물어본다(대답 불가 환경이면 건너뜀).
 #>
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
@@ -110,7 +108,48 @@ if ((Test-Path $Marker) -and ((Get-Content $Marker -Raw).Trim() -eq $Stamp)) {
     Write-Host "  (SARvey/WSL 레인이 필요하면: python -m inframon --insar-tools-install)"
 }
 
-# ── 3. 구동 ──────────────────────────────────────────────────────────────────
+# ── 3. 선택: SARvey 레인(WSL + ISCE2 툴체인) ─────────────────────────────────
+# 최고품질 full PSI 처리에만 필요 — SNAP(--snap-auto)·HyP3(--hyp3-insar) 레인은 이것
+# 없이 동작한다. WSL 설치는 관리자 권한 + 재부팅 1회가 필요해 '선택'으로 묻는다.
+function Ask-YesNo($msg) {
+    if ($env:INFRAMON_WSL -eq "1") { return $true }
+    if ($env:INFRAMON_WSL -eq "0") { return $false }
+    try { $a = Read-Host "$msg [y/N]" } catch { return $false }   # 비대화형 → 건너뜀
+    return ($a -match "^[yY]")
+}
+
+$wslReady = $false
+try { $d = (wsl -l -q 2>$null) -replace "`0", ""; $wslReady = [bool]($d -and $d.Trim()) } catch {}
+if (-not $wslReady) {
+    if (Ask-YesNo ">> [선택] SARvey 레인용 WSL(Ubuntu)을 설치할까요? (관리자 승인 + 재부팅 필요)") {
+        Write-Host "   관리자 권한으로 WSL 설치를 시작합니다 — UAC 창을 승인하세요."
+        Start-Process powershell -Verb RunAs -Wait -ArgumentList `
+            "-NoProfile", "-Command", "wsl --install -d Ubuntu-22.04"
+        Write-Host "   ⚠️ 재부팅 후 Ubuntu 첫 실행(사용자 생성)을 마치고, 이 bat 을 다시 실행하면" -ForegroundColor Yellow
+        Write-Host "      ISCE2 툴체인 구축을 이어서 진행합니다." -ForegroundColor Yellow
+    } else {
+        Write-Host "  WSL 건너뜀 — SNAP/HyP3 레인은 그대로 사용 가능. 나중에: python -m inframon --insar-tools"
+    }
+} else {
+    & $VPy -m inframon --insar-tools *> $null
+    if ($LASTEXITCODE -ne 0) {
+        if (Ask-YesNo ">> [선택] WSL 은 있으나 ISCE2 툴체인이 없습니다. 지금 구축할까요? (수 GB·수십 분)") {
+            & $VPy -m inframon --insar-tools-install
+            if ($LASTEXITCODE -ne 0) { Write-Host "  ⚠️ 툴체인 구축 실패 — 위 출력 확인 후 재실행 가능" -ForegroundColor Yellow }
+        } else {
+            Write-Host "  툴체인 건너뜀 — 나중에: python -m inframon --insar-tools-install"
+        }
+    } else {
+        Write-Host "  SARvey 레인: WSL + ISCE2 툴체인 준비됨 ✔" -ForegroundColor Green
+    }
+}
+
+# SNAP(레인 A, Windows 네이티브) 상태도 알려만 준다 — GUI 인스톨러라 자동화하지 않는다.
+if (-not (Test-Path "C:\Program Files\esa-snap\bin\gpt.exe")) {
+    Write-Host "  ⓘ SNAP(레인 A) 미설치 — --snap-auto 를 쓰려면: https://step.esa.int/main/download/snap-download/"
+}
+
+# ── 4. 구동 ──────────────────────────────────────────────────────────────────
 if ($env:INFRAMON_NO_RUN -eq "1") { Write-Host "INFRAMON_NO_RUN=1 — 설치만 완료."; exit 0 }
 Write-Host ">> inframon 시작 (전용 창)..."
 Set-Location $Root
