@@ -145,6 +145,10 @@ def main() -> None:
     p.add_argument("--earthdata-user", default=None, help="Earthdata 사용자 ID.")
     p.add_argument("--earthdata-pass", default=None, help="Earthdata 비밀번호.")
     p.add_argument("--earthdata-token", default=None, help="Earthdata 토큰(우선). 없으면 user/pass·~/.netrc.")
+    p.add_argument("--slc-dir", default=None, metavar="DIR",
+                   help="SLC 보관 폴더 지정 후 종료(예: E:\\SLC). 저장되면 이후 취득(--snap-auto 등)이 "
+                        "여기 있는 장면을 자동 인식·재사용해 다운로드를 건너뛴다. 환경변수 "
+                        "INFRAMON_SLC_DIR 이 우선.")
     p.add_argument("--insar-tools", action="store_true",
                    help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료. "
                         "WSL 자체가 없으면 설치 명령부터 안내(exit 1 = 준비 안 됨).")
@@ -562,7 +566,9 @@ def main() -> None:
             print("  프레임 자동선정 완료")
             print("=" * 56)
             print(f"  선정 프레임 : {acq.frame.label()}  "
-                  f"(중심성 {acq.frame.centrality_km:+.1f}km, {acq.frame.n_scenes}장 중 {len(acq.downloaded)} 다운)")
+                  f"(중심성 {acq.frame.centrality_km:+.1f}km, {acq.frame.n_scenes}장 중 {len(acq.downloaded)} 확보)")
+            if acq.from_store:
+                print(f"  보관폴더 재사용: {len(acq.from_store)}장 (다운로드 생략 — --slc-dir)")
             print(f"  burst      : {acq.burst.subswath}#{acq.burst.burst_index} "
                   f"({'포함' if acq.contained else '⚠️ 밖'})")
             for c in acq.considered[:-1]:
@@ -1331,6 +1337,28 @@ def main() -> None:
         print(f"  코드판정 여부   : {a['is_code_judgment']} · 판정: {a['verdict']}")
         print(f"  소견 {len(a['findings'])}건 → assessment.json")
         print(f"  ⚠️ {a['disclaimer']}")
+        print("=" * 56)
+        return
+
+    if args.slc_dir:
+        import re as _re
+
+        from .insar.slc_store import scan, set_slc_dir
+        try:
+            saved = set_slc_dir(args.slc_dir)
+        except ValueError as exc:
+            p.error(str(exc))
+        files = scan(saved)
+        dates = sorted(m.group(1) for f in files
+                       if (m := _re.search(r"(?<!\d)(20\d{6})T", f.name)))
+        print("=" * 56)
+        print("  SLC 보관 폴더 등록")
+        print("=" * 56)
+        print(f"  폴더            : {saved}")
+        print(f"  인식된 SLC      : {len(files)}장"
+              + (f"  ({dates[0][:4]}-{dates[0][4:6]}-{dates[0][6:]} ~ "
+                 f"{dates[-1][:4]}-{dates[-1][4:6]}-{dates[-1][6:]})" if dates else ""))
+        print("  이후 --snap-auto 등 취득이 여기 있는 장면을 자동 재사용합니다(다운로드 생략).")
         print("=" * 56)
         return
 

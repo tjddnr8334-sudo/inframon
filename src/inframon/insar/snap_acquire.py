@@ -123,6 +123,7 @@ class AcquireResult:
     contained: bool
     burst: object          # BurstLoc
     considered: list[str]  # 검증한 프레임 라벨(순위순)
+    from_store: list[str] = field(default_factory=list)  # SLC 보관 폴더에서 재사용한 장면
 
 
 def acquire(
@@ -148,6 +149,10 @@ def acquire(
     for cand in cands:
         considered.append(f"{cand.label()} (중심성 {cand.centrality_km:+.1f}km, {cand.n_scenes}장)")
         picked = cand.scenes[:count]
+        # 사용자 SLC 보관 폴더(--slc-dir/INFRAMON_SLC_DIR)에 이미 있는 장면은
+        # 하드링크/복사로 끌어와 다운로드를 건너뛴다(장당 수 GB 재다운로드 방지).
+        from .slc_store import provide as _store_provide
+        from_store = _store_provide([s["name"] for s in picked], slc_dir)
         ref = picked[0]
         # 기준영상만 먼저 받아 burst 포함 검증
         ref_zip = slc_dir / f"{ref['name']}.zip"
@@ -164,7 +169,8 @@ def acquire(
             download_fn(rest, str(slc_dir), session)
         got = [str(slc_dir / f"{s['name']}.zip") for s in picked
                if (slc_dir / f"{s['name']}.zip").exists()]
-        return AcquireResult(cand, str(slc_dir), got, burst.contained, burst, considered)
+        return AcquireResult(cand, str(slc_dir), got, burst.contained, burst, considered,
+                             from_store=from_store)
 
     raise AcquireError("모든 후보 프레임이 burst 커버리지 밖입니다("
                        "다른 궤도/기간을 넓혀 재조회하세요). 검토: " + "; ".join(considered))
