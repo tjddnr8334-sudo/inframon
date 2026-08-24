@@ -17,10 +17,15 @@ if [ ! -x "$MF/bin/conda" ]; then
 fi
 source "$MF/etc/profile.d/conda.sh"
 
-# (2) 검색·다운로드 환경 (가벼움) — asf_search/궤도/DEM
-echo ">> env: isce2 (검색·다운로드·코레지스트레이션)"
-conda create -y -n isce2 -c conda-forge "python=3.10" isce2 asf_search sentineleof sardem || {
-  echo "  isce2 conda 설치 실패 시: 검색만 필요하면 'conda create -n s1 -c conda-forge python=3.10 asf_search sentineleof sardem'"; }
+# (2) ISCE2 — **필수**(스택·코레지스트레이션의 근간). 실패하면 여기서 중단한다:
+#     조용히 넘어가면 20단계에서 알 수 없는 오류로 다시 만난다.
+echo ">> env: isce2 (검색·다운로드·코레지스트레이션) — 필수"
+if ! conda create -y -n isce2 -c conda-forge "python=3.10" isce2 asf_search sentineleof sardem; then
+  echo "⛔ ISCE2 설치 실패 — F코어(20단계)는 ISCE2 없이 진행할 수 없습니다."
+  echo "   네트워크/디스크 확인 후 재실행: bash 00_setup_env.sh"
+  echo "   (검색·다운로드만 필요하면: conda create -n s1 -c conda-forge python=3.10 asf_search sentineleof sardem)"
+  exit 1
+fi
 
 # (3) MiaplPy + MintPy
 echo ">> env: miaplpy"
@@ -28,9 +33,12 @@ conda create -y -n miaplpy -c conda-forge "python=3.10" mintpy || true
 # miaplpy 가 conda-forge 에 없으면: conda activate miaplpy && pip install git+https://github.com/insarlab/MiaplPy.git
 
 # (4) SARvey (+ inframon 코어: 50 변환/인제스트용)
-echo ">> env: sarvey"
+# 리포 경로는 이 스크립트 위치에서 역산한다 — 드라이브 문자를 하드코딩하면 리포를
+# 옮기는 순간(D:→E: 이사처럼) 조용히 깨진다.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+echo ">> env: sarvey  (inframon 코어: $REPO)"
 conda create -y -n sarvey -c conda-forge "python=3.10" numpy h5py
-conda activate sarvey && pip install sarvey && pip install -e /mnt/d/프로그램 || true
+conda activate sarvey && pip install sarvey && pip install -e "$REPO" || true
 
 echo
 echo "완료. 새 셸을 열거나 'source ~/.bashrc' 후:"

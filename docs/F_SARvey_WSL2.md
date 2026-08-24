@@ -8,6 +8,28 @@ SLC 다운로드 → 코레지스트레이션 → MiaplPy → **SARvey** PS/DS �
 > 이 문서의 스크립트(`scripts/wsl_sarvey/`)는 manifest→도구 매핑과 흐름을 담은 **템플릿**이며,
 > 도구 CLI/옵션은 **버전마다 다르므로 `# TODO(verify)` 부분은 본인 설치 버전과 대조**해 조정한다.
 
+## 0. 전제조건 — 새 컴퓨터는 여기부터 (WSL + 툴체인)
+
+새 PC 에서 가장 흔한 첫 오류는 **WSL 미설치**다. 아무 단계나 돌리기 전에 준비도부터 확인한다:
+
+```bash
+python -m inframon --insar-tools           # WSL 유무 → ISCE2/MiaplPy/SARvey 감지 (exit 0 = 준비됨)
+```
+
+- **WSL 이 없다고 나오면** (관리자 PowerShell 에서 1회, 이후 재부팅):
+  ```powershell
+  wsl --install -d Ubuntu-22.04
+  ```
+  재부팅 후 Ubuntu 첫 실행에서 리눅스 사용자 생성까지 마친다.
+- **도구가 없다고 나오면** — 한 방 설치(수 GB 다운로드·수십 분, **ISCE2 는 필수라 실패 시 중단**):
+  ```bash
+  python -m inframon --insar-tools-install
+  ```
+  내부적으로 `scripts/wsl_sarvey/00_setup_env.sh` 를 WSL 에서 실행해 miniforge + isce2/miaplpy/sarvey
+  conda 환경을 만든다(리포 경로 자동 감지 — 드라이브를 옮겨도 안전).
+- **WSL 을 아예 쓰기 싫으면** — 같은 Track H5 를 만드는 대안 레인: `--snap-auto`(Windows 네이티브,
+  `docs/시작_Windows_SNAP.md`) 또는 `--hyp3-insar`(클라우드, `docs/시작_클라우드_HyP3.md`).
+
 ## 전체 흐름
 
 ```
