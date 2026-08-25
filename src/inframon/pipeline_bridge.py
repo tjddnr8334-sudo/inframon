@@ -115,7 +115,7 @@ def run_bridge_pipeline(
     # ⑦ asc+desc 연직분해 (SNAP 연동됨)
     rep.add(StageResult("⑦asc+desc연직분해", "done",
                         "fuse_snap_asc_desc: 상승·하강 SNAP Track → 연직 U·수평 H 분해 "
-                        "(하강 부족/기하 특이 시 단일 폴백). 정자교는 하강 2장 → 단일."))
+                        "(반대 궤도 장면 부족·기하 특이 시 단일 궤도 폴백)."))
 
     # ⑪ 교량 종별(1/2/3종)·종류(PSC box/라멘)·폭·지형(산지/평지/해상)
     try:
