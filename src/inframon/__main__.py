@@ -187,6 +187,10 @@ def main() -> None:
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
+    p.add_argument("--pipeline-ifc", default=None, metavar="IFC",
+                   help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
+                        "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
+                        "부재 테이블(JSON)만 있으면 --gltf-elements 로 줘도 된다.")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
     p.add_argument("--export-bim", default=None, metavar="H5,OUT_PREFIX",
@@ -1010,8 +1014,13 @@ def main() -> None:
             _lat, _lon = (float(v) for v in args.pipeline.split(","))
         except ValueError:
             p.error("--pipeline 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
-        rep = run_bridge_pipeline(_lat, _lon, mode=args.pipeline_mode,
-                                  earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi)
+        _pout = (args.out if not str(args.out).endswith(".h5")
+                 else str(Path(args.out).parent))
+        rep = run_bridge_pipeline(_lat, _lon, out_dir=_pout, mode=args.pipeline_mode,
+                                  earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi,
+                                  ifc=args.pipeline_ifc, bim_elements=args.gltf_elements,
+                                  registry=args.registry, bridge_id=args.bridge_id,
+                                  twin_value=args.gltf_value)
         print(rep.summary())
         return
 
