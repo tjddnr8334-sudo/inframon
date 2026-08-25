@@ -22,6 +22,31 @@ from .contracts.io import ProjectStore
 from .contracts.schema import InSAROutput
 
 
+# 이 거리 안이면 '같은 교량'으로 신뢰. 넘으면 다른 교량일 수 있어 경고한다
+# (S1 프레임 기준 수백 m 는 이웃 교량이 흔히 들어오는 거리다).
+BRIDGE_MATCH_TRUST_M = 150.0
+
+
+def _match_warnings(prof, requested_name: str | None, max_km: float) -> list[str]:
+    """CSV 최근접 매칭이 '의도한 그 교량'이 아닐 수 있는 사유 목록(없으면 빈 리스트)."""
+    warns: list[str] = []
+    dist = prof.extra.get("match_dist_m")
+    try:
+        dist_f = float(dist)
+    except (TypeError, ValueError):
+        dist_f = None
+    if requested_name and prof.name and str(prof.name).strip() != str(requested_name).strip():
+        warns.append(
+            f"이름 불일치: 요청 '{requested_name}' vs 표준데이터 '{prof.name}' — "
+            "표준데이터에 대상 교량이 없어 이웃 교량이 잡혔을 수 있습니다.")
+    if dist_f is not None and dist_f > BRIDGE_MATCH_TRUST_M:
+        warns.append(
+            f"매칭 거리 {dist_f:.0f}m > {BRIDGE_MATCH_TRUST_M:.0f}m — 다른 교량의 제원"
+            "(스팬·형식·재료)으로 PINN 이 돌 수 있습니다. "
+            f"--bridge-csv-max-km 를 줄이거나(현재 {max_km}km) 제원을 직접 지정하세요.")
+    return warns
+
+
 def run_custom_pinn(
     project_h5: str | Path,
     lat: float,
@@ -72,8 +97,13 @@ def run_custom_pinn(
                 _dl = prof.extra.get("design_load")
                 collected["bridge_csv"] = (
                     f"전국교량표준데이터 최근접 {prof.name}"
-                    f"({prof.extra.get('match_dist_m')}m, 설계활하중 {_dl or '-'}, "
+                    f"(거리 {prof.extra.get('match_dist_m')}m, 설계활하중 {_dl or '-'}, "
                     f"점검 {prof.extra.get('inspect_grade') or '-'})")
+                # ⚠️ '최근접'은 '그 교량'이 아니다 — 표준데이터에 없는 도시관리 교량이면
+                # 수백 m 떨어진 **다른 교량** 제원(스팬·형식·재료)으로 PINN 이 돌아
+                # 구조 해석이 통째로 틀린다. 이름·거리 불일치를 반드시 표면화한다.
+                collected["bridge_match_warnings"] = _match_warnings(
+                    prof, bridge_name, bridge_csv_max_km)
             else:
                 collected["bridge_csv"] = f"CSV 내 {bridge_csv_max_km}km 이내 교량 없음 → OSM 폴백"
         if prof is None:

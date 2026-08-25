@@ -166,6 +166,12 @@ def main() -> None:
     p.add_argument("--bridge-csv", default=None, metavar="CSV",
                    help="전국교량표준데이터 CSV(data.go.kr/15081953). --custom-pinn 이 "
                         "최근접 교량의 실 제원·공식 종별등급을 사용.")
+    p.add_argument("--bridge-name", default=None, metavar="NAME",
+                   help="--custom-pinn 대상 교량명(예: 정자교). 표준데이터 최근접 매칭이 "
+                        "다른 이름이면 경고 — 도시관리 교량은 표준데이터에 없을 수 있다.")
+    p.add_argument("--bridge-csv-max-km", type=float, default=1.0, metavar="KM",
+                   help="--custom-pinn 표준데이터 최근접 탐색 반경(기본 1.0km). 이웃 교량이 "
+                        "잡히면 줄여라 — 150m 초과 매칭은 경고로 표시된다.")
     p.add_argument("--traffic-ex-key", default=None, metavar="KEY",
                    help="한국도로공사 EX API 인증키(data.ex.co.kr, apiId=0617 일자별 전국 교통량). "
                         "--custom-pinn 이 취득일별 교통량을 PINN 하중 시간변조로 사용. "
@@ -1019,6 +1025,8 @@ def main() -> None:
             bridge_csv = default_bridge_csv()
         try:
             summary = run_custom_pinn(args.out, lat, lon, bridge_csv=bridge_csv,
+                                      bridge_name=args.bridge_name,
+                                      bridge_csv_max_km=args.bridge_csv_max_km,
                                       traffic_ex_key=ex_key)
         except (ValueError, FileNotFoundError) as exc:
             p.error(str(exc))
@@ -1030,6 +1038,8 @@ def main() -> None:
         print(f"  스팬       : {summary['span_m']} m  · 제원출처 {_coll['profile_source']}")
         if _coll.get('bridge_csv'):
             print(f"  표준데이터 : {_coll['bridge_csv']}")
+        for _w in _coll.get('bridge_match_warnings') or []:
+            print(f"  ⚠️ 교량매칭  : {_w}")
         print(f"  종별등급   : {_coll.get('bridge_grade', '-')}  · 지형 {_coll.get('terrain', '-')}")
         print(f"  상태·노후  : 안전점검 {_coll.get('inspect_grade', '-')}  · 준공 {_coll.get('build_year', '-')}")
         print(f"  온도       : {_coll['temperature']}")

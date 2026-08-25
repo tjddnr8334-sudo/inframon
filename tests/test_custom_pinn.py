@@ -13,6 +13,38 @@ from inframon.insar.track_reader import import_track_h5
 from inframon.structure import BridgeProfile
 
 
+# ── 표준데이터 '최근접' 매칭이 '그 교량'이 아닐 때의 경고 ──
+# 실측 사고: 정자교(37.3685,127.1090)는 전국교량표준데이터에 없어 567m 떨어진 금곡교가
+# 잡혔고, 그 제원(108m PSC)으로 PINN 이 돌아 CRI 0.940 이 나왔다. 조용히 틀리면 안 된다.
+class _Prof:
+    def __init__(self, name, dist):
+        self.name = name
+        self.extra = {"match_dist_m": dist}
+
+
+def test_match_warning_on_name_mismatch():
+    from inframon.custom_pinn import _match_warnings
+    w = _match_warnings(_Prof("금곡교", 566.9), "정자교", 1.0)
+    assert any("이름 불일치" in x and "정자교" in x and "금곡교" in x for x in w)
+
+
+def test_match_warning_on_far_distance_even_without_name():
+    from inframon.custom_pinn import _match_warnings
+    w = _match_warnings(_Prof("금곡교", 566.9), None, 1.0)
+    assert len(w) == 1 and "567m" in w[0]          # 이름을 몰라도 거리로 걸러낸다
+
+
+def test_no_warning_when_same_name_and_close():
+    from inframon.custom_pinn import _match_warnings
+    assert _match_warnings(_Prof("청양교", 40.0), "청양교", 1.0) == []
+
+
+def test_match_warning_tolerates_missing_distance():
+    from inframon.custom_pinn import _match_warnings
+    p = _Prof("금곡교", None)
+    assert _match_warnings(p, "금곡교", 1.0) == []   # 거리 미상 + 이름 일치 → 경고 없음
+
+
 def _project_with_insar(tmp_path, n=10, m=5):
     """실 Track 인제스트로 date_labels 포함 /insar 를 만든다."""
     track = tmp_path / "track.h5"
