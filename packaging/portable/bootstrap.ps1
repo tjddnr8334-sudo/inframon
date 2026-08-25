@@ -131,7 +131,11 @@ if (-not $wslReady) {
         Write-Host "  WSL 건너뜀 — SNAP/HyP3 레인은 그대로 사용 가능. 나중에: python -m inframon --insar-tools"
     }
 } else {
+    # ⚠️ EAP=Stop 하의 PS5.1 은 네이티브 exe 의 stderr 리다이렉트 한 줄로도 스크립트를
+    # 죽인다(NativeCommandError) — 이 호출 동안만 Continue 로 지역화한다.
+    $eap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     & $VPy -m inframon --insar-tools *> $null
+    $ErrorActionPreference = $eap
     if ($LASTEXITCODE -ne 0) {
         if (Ask-YesNo ">> [선택] WSL 은 있으나 ISCE2 툴체인이 없습니다. 지금 구축할까요? (수 GB·수십 분)") {
             & $VPy -m inframon --insar-tools-install

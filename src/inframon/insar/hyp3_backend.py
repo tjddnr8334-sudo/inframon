@@ -90,8 +90,11 @@ def find_product_dirs(root: str | Path) -> list[Hyp3PairProduct]:
         dirs = sorted({p.parent for p in root.rglob("*_unw_phase.tif")})
     out = []
     for d in dirs:
-        d1, d2 = two_dates(d.name if _DATE_RE.search(d.name) else
-                           next(d.glob("*_unw_phase.tif")).name)
+        # 폴더 이름은 취득일 '쌍(2개)'을 담고 있을 때만 신뢰한다 — 사용자가
+        # 'jeongja_20240101' 같은 날짜 1개짜리 폴더에 tif 를 직접 넣은 경우를 방어.
+        name_dates = list(dict.fromkeys(_DATE_RE.findall(d.name)))
+        src_name = d.name if len(name_dates) >= 2 else next(d.glob("*_unw_phase.tif")).name
+        d1, d2 = two_dates(src_name)
         out.append(Hyp3PairProduct(product_dir=d, date1=d1, date2=d2))
     if not out:
         raise Hyp3Error(f"HyP3 산출물(*_unw_phase.tif)을 찾지 못함: {root}")
@@ -168,16 +171,18 @@ def products_to_track_h5(
     with rasterio.open(first) as ds0:
         ph0 = ds0.read(1).astype(np.float64)
         H, W = ph0.shape
+        tr0 = ds0.transform
         rows, cols = np.mgrid[0:H, 0:W]
-        xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
-        glon = np.asarray(xs).reshape(H, W)
-        glat = np.asarray(ys).reshape(H, W)
+        xs, ys = rasterio.transform.xy(tr0, rows.ravel(), cols.ravel())
+        gx = np.asarray(xs).reshape(H, W)      # 기준 격자의 '원 CRS' 좌표 — 격자 불일치
+        gy = np.asarray(ys).reshape(H, W)      # 쌍을 좌표 샘플할 때 쓴다
+        glon, glat = gx, gy
         crs = ds0.crs
     if crs is not None and not crs.to_epsg() == 4326:
         # HyP3 는 UTM 산출이 기본 — 경위도로 역투영해 계약(pixel_lonlat=WGS84)에 맞춘다.
         from pyproj import Transformer
         tr = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-        glon, glat = tr.transform(glon, glat)
+        glon, glat = tr.transform(gx, gy)
         glon = np.asarray(glon).reshape(H, W)
         glat = np.asarray(glat).reshape(H, W)
 
@@ -209,18 +214,39 @@ def products_to_track_h5(
     coh_acc = coh0.ravel()[idx].copy()
     scale = -WAVELENGTH_M / (4.0 * math.pi) * 1000.0
 
+    # 격자 불일치 쌍(shape/transform 다름)을 좌표로 샘플할 때 쓸 기준점(원 CRS) 좌표.
+    px = gx.ravel()[idx]
+    py = gy.ravel()[idx]
+
+    def _pair_values(tif: Path) -> np.ndarray:
+        """쌍 래스터에서 기준 격자 점 값 추출 — 같은 격자면 직접 인덱스, 다르면 좌표 샘플.
+
+        HyP3 잡은 쌍별 독립 처리라 extents 가 미세하게 다를 수 있다. shape 만 같고
+        offset 이 다르면 직접 인덱싱은 '조용히 엉뚱한 픽셀'을 읽으므로 transform 까지
+        같을 때만 지름길을 탄다(snap_backend 와 동일 정책 + offset 방어 강화).
+        """
+        with rasterio.open(tif) as ds:
+            if ds.shape == (H, W) and ds.transform == tr0:
+                return ds.read(1).astype(np.float64).ravel()[idx]
+            return np.array([v[0] for v in ds.sample(zip(px, py), indexes=1)],
+                            dtype=np.float64)
+
     dates = [ref_date]
     for k, p in enumerate(pairs, start=1):
         sec = p.date2 if p.date1 == ref_date else p.date1
         sign = 1.0 if p.date1 == ref_date else -1.0   # (보조,기준) 순서면 부호 반전
         dates.append(sec)
-        with rasterio.open(_band(p.product_dir, "unw_phase")) as ds:
-            phk = ds.read(1).astype(np.float64)
+        vals = _pair_values(_band(p.product_dir, "unw_phase"))
+        # 이 쌍에서 무효인 픽셀(nodata=0.0·비유한)은 NaN — 0 으로 두면 '가짜 무변위'가
+        # 하류 secular 적합에 섞인다(쌍별 독립 unwrap 이라 유효영역 차이가 흔함).
+        invalid = ~np.isfinite(vals) | (vals == 0.0)
+        vals = sign * vals * scale
+        vals[invalid] = np.nan
+        los[:, k] = vals
         cp = _band(p.product_dir, "corr")
         if cp is not None:
-            with rasterio.open(cp) as ds:
-                coh_acc += ds.read(1).astype(np.float64).ravel()[idx]
-        los[:, k] = sign * phk.ravel()[idx] * scale
+            cv = _pair_values(cp)
+            coh_acc += np.where(np.isfinite(cv), cv, 0.0)
     coh_mean = (coh_acc / M).astype(np.float32)
 
     # 입사각: lv_theta(수평 기준 look 고도각, rad) → incidence(deg) = 90 − el
