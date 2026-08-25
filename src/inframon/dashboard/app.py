@@ -2191,6 +2191,183 @@ def tab_psi(start: date) -> None:
                    "IFC 지오레퍼런싱(IfcMapConversion) 오면 이 좌표를 IFC 로컬로 정합해 부재 색칠.")
 
 
+def _env_checks() -> list[dict]:
+    """이 컴퓨터에서 무엇이 되고 무엇이 막혀 있는지 — 새 PC 온보딩의 핵심 화면.
+
+    각 항목: {name, ok, why(막히면 무엇을 못 하나), fix(복붙 명령)}. 네트워크·무거운
+    호출은 하지 않는다(대시보드가 멈추면 안 된다).
+    """
+    from inframon.doctor import run_doctor
+    rows: list[dict] = []
+    rep = run_doctor()
+    for d in rep.deps:
+        if d.required or not d.present:
+            rows.append({"name": f"패키지 {d.name}", "ok": bool(d.present),
+                         "why": d.enables or ("필수" if d.required else "선택 기능"),
+                         "fix": d.install or ""})
+    # 상류 처리 레인 — 하나만 있어도 track.h5 를 만들 수 있다.
+    snap = Path(r"C:\Program Files\esa-snap\bin\gpt.exe").exists()
+    rows.append({"name": "레인 A · SNAP (Windows 네이티브)", "ok": snap,
+                 "why": "WSL 없이 SLC→track.h5 처리",
+                 "fix": "https://step.esa.int/main/download/snap-download/ 설치"})
+    try:
+        from inframon.insar.toolchain import wsl_status
+        ws = wsl_status()
+        rows.append({"name": "레인 B · WSL + ISCE2/SARvey", "ok": bool(ws.get("ready")),
+                     "why": "최고품질 PSI(희소 스택 대응)",
+                     "fix": ws.get("install_cmd") or "python -m inframon --insar-tools-install"})
+    except Exception:  # noqa: BLE001
+        rows.append({"name": "레인 B · WSL + ISCE2/SARvey", "ok": False,
+                     "why": "최고품질 PSI", "fix": "python -m inframon --insar-tools"})
+    try:
+        import hyp3_sdk  # noqa: F401
+        hyp3 = True
+    except Exception:  # noqa: BLE001
+        hyp3 = False
+    rows.append({"name": "레인 C · HyP3 (클라우드)", "ok": hyp3,
+                 "why": "로컬 연산 없이 클라우드 처리",
+                 "fix": 'pip install -e ".[hyp3]"'})
+    # 자격·데이터
+    netrc = (Path.home() / ".netrc").exists() or (Path.home() / "_netrc").exists()
+    cred = netrc or bool(os.environ.get("EARTHDATA_TOKEN"))
+    rows.append({"name": "Earthdata 자격 (SLC 다운로드)", "ok": cred,
+                 "why": "위성 원본 내려받기",
+                 "fix": "https://urs.earthdata.nasa.gov 가입 → ~/.netrc 또는 --earthdata-token"})
+    try:
+        from inframon.insar.slc_store import get_slc_dir, scan
+        d = get_slc_dir()
+        rows.append({"name": "SLC 보관 폴더", "ok": d is not None,
+                     "why": f"이미 받은 장면 재사용({len(scan(d)) if d else 0}장)" if d
+                            else "재다운로드 방지(선택)",
+                     "fix": "python -m inframon --slc-dir E:\\SLC"})
+    except Exception:  # noqa: BLE001
+        pass
+    return rows
+
+
+def tab_start(path: str) -> None:
+    """⓪ 시작 — 새 컴퓨터·새 사용자를 위한 안내형 진입점(환경→교량→실행→트윈/BMAP)."""
+    st.subheader("⓪ 시작 — 교량 하나를 골라 전 과정을 돌립니다")
+    st.caption("① 이 컴퓨터 준비 상태 확인 → ② 교량 선택 → ③ 파이프라인 실행 "
+               "→ ④ 디지털트윈·BMAP 등록. 처음이면 위에서부터 순서대로 하면 됩니다.")
+
+    # ── ① 이 컴퓨터 준비 상태 ─────────────────────────────────────────
+    st.markdown("#### ① 이 컴퓨터 준비 상태")
+    with st.spinner("환경 점검 중…"):
+        rows = _env_checks()
+    lanes = [r for r in rows if r["name"].startswith("레인")]
+    lane_ok = [r["name"].split("·")[1].strip() for r in lanes if r["ok"]]
+    need = [r for r in rows if not r["ok"]]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("사용 가능한 처리 레인", f"{len(lane_ok)} / {len(lanes)}",
+              ", ".join(lane_ok) or "없음")
+    c2.metric("점검 항목", f"{sum(1 for r in rows if r['ok'])} / {len(rows)}")
+    c3.metric("저장 폴더", Path(data_root()).name, str(data_root())[:28])
+    if not lane_ok:
+        st.error("처리 레인이 하나도 없습니다 — 아래 '해결 방법' 중 하나만 설치하면 시작할 수 있습니다.")
+    elif need:
+        st.info(f"지금도 **{', '.join(lane_ok)}** 레인으로 진행할 수 있습니다. "
+                f"막힌 항목 {len(need)}건은 아래에서 확인하세요.")
+    else:
+        st.success("모든 항목 준비 완료 — 바로 진행하세요.")
+    with st.expander(f"자세히 보기 · 막힌 항목 {len(need)}건", expanded=bool(need)):
+        for r in rows:
+            mark = "✅" if r["ok"] else "⚠️"
+            st.markdown(f"{mark} **{r['name']}** — {r['why']}")
+            if not r["ok"] and r["fix"]:
+                st.code(r["fix"], language="bash")
+
+    st.divider()
+
+    # ── ② 교량 선택 ───────────────────────────────────────────────────
+    st.markdown("#### ② 교량 선택")
+    st.caption("이름으로 찾거나(전국교량표준데이터+OSM), 좌표를 직접 넣습니다. "
+               "**어떤 교량이든 됩니다** — 특정 교량 전용이 아닙니다.")
+    cq, cb = st.columns([3, 1])
+    q = cq.text_input("교량명", key="start_q", placeholder="예: 광안대교, 한강대교")
+    if cb.button("🔎 찾기", use_container_width=True, key="btn_start_find") and q.strip():
+        from inframon.public_data import find_bridge_csv
+        hits, err = _combined_bridge_search(q.strip(), find_bridge_csv(data_root()))
+        st.session_state["start_hits"] = hits
+        if err:
+            st.caption(f"OSM 검색 실패(무시 가능): {err}")
+    hits = st.session_state.get("start_hits") or []
+    if hits:
+        labels = [f"{h['name']} · {h['source']} · {h['lat']:.4f},{h['lon']:.4f}"
+                  + (f" · {h['length_m']:.0f}m" if h.get("length_m") else "") for h in hits]
+        sel = st.selectbox("검색 결과", range(len(hits)), format_func=lambda i: labels[i],
+                           key="start_pick")
+        if st.button("이 교량으로 설정", key="btn_start_set"):
+            h = hits[sel]
+            # ⚠️ 위젯의 **자기 key** 를 갱신해야 화면 값이 바뀐다. 별도 키에 넣고
+            # number_input(value=...) 로 주면, key 가 있는 위젯은 session_state 를
+            # 우선하므로 좌표가 옛 값에 고정된 채 "선택됨"만 표시돼 엉뚱한 위치로 실행된다.
+            st.session_state["start_lat_in"] = float(h["lat"])
+            st.session_state["start_lon_in"] = float(h["lon"])
+            st.session_state["start_name"] = h["name"]
+            st.rerun()
+    st.session_state.setdefault("start_lat_in", 37.5665)
+    st.session_state.setdefault("start_lon_in", 126.9780)
+    lc, oc = st.columns(2)
+    lat = lc.number_input("위도", format="%.6f", key="start_lat_in")
+    lon = oc.number_input("경도", format="%.6f", key="start_lon_in")
+    if st.session_state.get("start_name"):
+        st.caption(f"선택된 교량: **{st.session_state['start_name']}**")
+
+    st.divider()
+
+    # ── ③ 파이프라인 실행 ─────────────────────────────────────────────
+    st.markdown("#### ③ 전 과정 실행")
+    st.caption("**계획 보기**는 네트워크 조회만 해서 몇 초면 끝납니다(무료·안전). "
+               "**전체 실행**은 SLC 수 GB 다운로드와 SAR 처리를 해서 수 시간 걸립니다.")
+    ifc_in = st.text_input("IFC 파일 (선택 — 있으면 부재 GlobalId 로 결합)", key="start_ifc",
+                           placeholder="없으면 비워두세요 — 점군 트윈으로 진행합니다")
+    b1, b2 = st.columns(2)
+    run_plan = b1.button("📋 계획 보기 (빠름)", use_container_width=True, key="btn_start_plan")
+    run_full = b2.button("▶ 전체 실행 (수 시간)", use_container_width=True, key="btn_start_full")
+    if run_plan or run_full:
+        from inframon.pipeline_bridge import run_bridge_pipeline
+        out_dir = str(Path(data_root()) / "pipeline")
+        msg = "전 과정 실행 중… (SLC 다운로드·SAR 처리, 수 시간)" if run_full else "계획 수립 중…"
+        try:
+            with st.spinner(msg):
+                rep = run_bridge_pipeline(
+                    float(lat), float(lon), out_dir=out_dir,
+                    mode="full" if run_full else "plan",
+                    ifc=(ifc_in.strip() or None))
+            st.session_state["start_report"] = [
+                {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
+            st.session_state["start_ctx"] = {
+                k: rep.context.get(k) for k in ("twin", "registry", "pinn")}
+        except Exception as exc:  # noqa: BLE001 — UI 는 어떤 실패에도 살아남아야 한다
+            st.error(f"실행 실패: {type(exc).__name__}: {exc}")
+
+    rep_rows = st.session_state.get("start_report")
+    if rep_rows:
+        mark = {"done": "✅", "partial": "◐", "planned": "▷", "skip": "⏭", "error": "❌",
+                "stub": "○"}
+        st.markdown("**진행 상황**")
+        for r in rep_rows:
+            st.markdown(f"{mark.get(r['status'], '?')} **{r['step']}** — {r['detail']}")
+
+        # ── ④ 산출물 · BMAP 연결 ──────────────────────────────────────
+        ctx = st.session_state.get("start_ctx") or {}
+        twin, reg = ctx.get("twin"), ctx.get("registry")
+        if twin or reg:
+            st.divider()
+            st.markdown("#### ④ 디지털트윈 · BMAP 연결")
+            if twin:
+                st.markdown(f"- 트윈(glTF): `{twin.get('glb')}`")
+                st.markdown(f"- 3D Tiles: `{twin.get('tileset')}`")
+                st.caption(f"결합 상태: {twin.get('bound')}")
+            if reg:
+                st.markdown(f"- BMAP 레지스트리: `{reg.get('path')}` "
+                            f"(교량 {reg.get('n_bridges')}건)")
+                st.markdown("아래 명령으로 BMAP 이 붙을 API 를 띄웁니다:")
+                st.code(f"python -m inframon --serve-api --registry {reg.get('path')}",
+                        language="bash")
+
+
 def main() -> None:
     st.set_page_config(page_title="inframon — 인프라 모니터링", page_icon="🌉", layout="wide")
     # 섹션(라디오)을 오가도 위젯 값 유지: 렌더링 안 되는 섹션의 keyed 위젯은 Streamlit 이
@@ -2360,23 +2537,27 @@ def main() -> None:
 
     # 섹션 선택 — st.tabs 는 rerun 시 첫 탭으로 리셋되므로, session_state 에 유지되는
     # 라디오(key='active_tab')로 대체. 위젯 조작으로 rerun 돼도 현재 섹션이 유지된다.
-    _SECTIONS = ["① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
+    # ⓪ 시작을 맨 앞에 둔다 — 처음 켠 사용자가 "뭘 해야 하지"로 막히지 않게.
+    _SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
     active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
                       label_visibility="collapsed")
     st.divider()
 
     # 조건식(`f() if c else g()`)을 문장으로 쓰면 Streamlit 매직이 그 값(None)을 화면에
     # 그대로 찍는다 — 탭 하단에 "None" 이 남던 원인. 평범한 if/else 문으로 쓴다.
-    _NO_PROJECT = "project.h5 없음 — 사이드바에서 데모 데이터를 먼저 생성하세요."
-    _tabs = {_SECTIONS[1]: tab_pinn, _SECTIONS[2]: tab_fram, _SECTIONS[3]: tab_life}
+    _NO_PROJECT = ("project.h5 없음 — **⓪ 시작** 탭에서 교량을 골라 실행하거나, "
+                   "사이드바에서 데모 데이터를 생성하세요.")
+    _tabs = {_SECTIONS[2]: tab_pinn, _SECTIONS[3]: tab_fram, _SECTIONS[4]: tab_life}
     if active == _SECTIONS[0]:
+        tab_start(path)
+    elif active == _SECTIONS[1]:
         tab_insar(path, start)
     elif active in _tabs:
         if Path(path).exists():
             _tabs[active](path, start)
         else:
             st.info(_NO_PROJECT)
-    elif active == _SECTIONS[4]:
+    elif active == _SECTIONS[5]:
         tab_psi(start)
 
 
