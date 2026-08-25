@@ -12,8 +12,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -21,10 +22,27 @@ from .config import PipelineConfig
 from .contracts.io import ProjectStore
 from .contracts.schema import InSAROutput
 
+if TYPE_CHECKING:
+    from .structure import BridgeProfile
+
 
 # 이 거리 안이면 '같은 교량'으로 신뢰. 넘으면 다른 교량일 수 있어 경고한다
 # (S1 프레임 기준 수백 m 는 이웃 교량이 흔히 들어오는 거리다).
 BRIDGE_MATCH_TRUST_M = 150.0
+
+
+def _load_profile(src) -> "BridgeProfile":
+    """사용자 제원 — BridgeProfile 객체 / dict / JSON 경로 무엇이든 받는다."""
+    from .structure import BridgeProfile
+    if isinstance(src, BridgeProfile):
+        prof = src
+    else:
+        data = src if isinstance(src, dict) else json.loads(
+            Path(src).read_text(encoding="utf-8"))
+        prof = BridgeProfile(**data)
+    if prof.source in (None, "", "default"):
+        prof = prof.model_copy(update={"source": "manual"})
+    return prof
 
 
 def _match_warnings(prof, requested_name: str | None, max_km: float) -> list[str]:
@@ -56,6 +74,7 @@ def run_custom_pinn(
     radius_m: float = 200.0,
     bridge_csv: str | Path | None = None,
     bridge_csv_max_km: float = 1.0,
+    bridge_profile: "BridgeProfile | dict | str | Path | None" = None,
     data_go_kr_key: str | None = None,
     data_go_kr_endpoint: str | None = None,
     data_go_kr_params: dict[str, str] | None = None,
@@ -85,11 +104,17 @@ def run_custom_pinn(
         if store.has_array("/insar/date_labels"):
             date_labels = [str(d) for d in store.read_array("/insar/date_labels").astype(str)]
 
-        # 1) 교량 제원 — 전국교량표준데이터 CSV(최근접) 우선, 없으면 OSM/data.go.kr API.
+        # 1) 교량 제원 — 사용자 지정(bridge_profile) > 표준데이터 CSV(최근접) > OSM/API.
         #    CSV 자동탐색은 CLI 레이어(__main__)에서 하고, 여기선 명시적으로 받은 것만 쓴다.
         prof = None
         official_grade = None
-        if bridge_csv:
+        if bridge_profile is not None:
+            # 표준데이터에 없는 교량(도시관리·신설 등)에서 설계도서·실측 제원을 직접 넣는 경로.
+            # 최근접 매칭이 이웃 교량을 집어오는 위험을 원천 차단한다.
+            prof = _load_profile(bridge_profile)
+            official_grade = prof.extra.get("grade")
+            collected["bridge_csv"] = f"사용자 지정 제원({getattr(bridge_profile, 'name', bridge_profile)})"
+        elif bridge_csv:
             from .public_data import nearest_bridge_profile
             prof = nearest_bridge_profile(bridge_csv, lat, lon, max_km=bridge_csv_max_km)
             if prof is not None:

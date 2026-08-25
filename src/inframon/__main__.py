@@ -172,6 +172,10 @@ def main() -> None:
     p.add_argument("--bridge-csv-max-km", type=float, default=1.0, metavar="KM",
                    help="--custom-pinn 표준데이터 최근접 탐색 반경(기본 1.0km). 이웃 교량이 "
                         "잡히면 줄여라 — 150m 초과 매칭은 경고로 표시된다.")
+    p.add_argument("--bridge-profile", default=None, metavar="JSON",
+                   help="--custom-pinn 교량 제원을 직접 지정(표준데이터·OSM 보다 우선). "
+                        "표준데이터에 없는 도시관리·신설 교량에서 설계도서/실측 제원을 넣는 경로. "
+                        "키: name·bridge_type·material·length_m·width_m·section_depth_m·boundary 등.")
     p.add_argument("--traffic-ex-key", default=None, metavar="KEY",
                    help="한국도로공사 EX API 인증키(data.ex.co.kr, apiId=0617 일자별 전국 교통량). "
                         "--custom-pinn 이 취득일별 교통량을 PINN 하중 시간변조로 사용. "
@@ -1027,6 +1031,7 @@ def main() -> None:
             summary = run_custom_pinn(args.out, lat, lon, bridge_csv=bridge_csv,
                                       bridge_name=args.bridge_name,
                                       bridge_csv_max_km=args.bridge_csv_max_km,
+                                      bridge_profile=args.bridge_profile,
                                       traffic_ex_key=ex_key)
         except (ValueError, FileNotFoundError) as exc:
             p.error(str(exc))

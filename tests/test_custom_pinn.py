@@ -45,6 +45,29 @@ def test_match_warning_tolerates_missing_distance():
     assert _match_warnings(p, "금곡교", 1.0) == []   # 거리 미상 + 이름 일치 → 경고 없음
 
 
+# ── 사용자 지정 제원 — 표준데이터에 없는 교량의 정답 경로 ──
+def test_load_profile_from_json_file(tmp_path):
+    import json as _json
+
+    from inframon.custom_pinn import _load_profile
+    f = tmp_path / "jeongja.json"
+    f.write_text(_json.dumps({"name": "정자교", "bridge_type": "girder",
+                              "material": "reinforced_concrete", "length_m": 100.0,
+                              "width_m": 27.0, "section_depth_m": 1.5}),
+                 encoding="utf-8")
+    prof = _load_profile(f)
+    assert prof.name == "정자교" and prof.length_m == 100.0
+    assert prof.source == "manual"                  # 출처가 '지정'으로 기록돼야 추적된다
+
+
+def test_load_profile_from_dict_and_object():
+    from inframon.custom_pinn import _load_profile
+    from inframon.structure import BridgeProfile
+    assert _load_profile({"name": "A", "length_m": 50.0}).length_m == 50.0
+    obj = BridgeProfile(name="B", length_m=60.0, source="osm")
+    assert _load_profile(obj).source == "osm"        # 이미 출처가 있으면 보존
+
+
 def _project_with_insar(tmp_path, n=10, m=5):
     """실 Track 인제스트로 date_labels 포함 /insar 를 만든다."""
     track = tmp_path / "track.h5"
