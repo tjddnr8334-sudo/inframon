@@ -37,13 +37,14 @@ class BridgeMeta:
     relief_m: float | None      # 주변 표고 기복(산지 판정 근거)
     lat: float
     lon: float
+    source: str = "osm"          # osm(추정) | csv(전국교량표준데이터 실측)
 
     def as_dict(self) -> dict:
         return {"grade": self.grade, "structure": self.structure,
                 "structure_ko": self.structure_ko, "width_m": self.width_m,
                 "length_m": self.length_m, "max_span_m": self.max_span_m,
                 "terrain": self.terrain, "relief_m": self.relief_m,
-                "latlon": [self.lat, self.lon]}
+                "latlon": [self.lat, self.lon], "source": self.source}
 
 
 def classify_structure(tags: dict, base_class: str) -> str:
@@ -155,14 +156,39 @@ def terrain_class(lat: float, lon: float, water_context: str, *,
 
 def build_bridge_meta(lat: float, lon: float, tags: dict, base_class: str,
                       length_m: float | None, water_context: str, *,
-                      n_spans: int | None = None, elev_fn=_fetch_elevation) -> BridgeMeta:
-    """교량 확장 메타 종합(⑪)."""
+                      n_spans: int | None = None, elev_fn=_fetch_elevation,
+                      official=None) -> BridgeMeta:
+    """교량 확장 메타 종합(⑪).
+
+    `official`(전국교량표준데이터 BridgeProfile)이 있으면 **실측 제원을 추정보다
+    우선**한다 — OSM 태그만 보면 폭·경간이 흔히 비어 "폭미상·경간 None" 이 되고,
+    그 상태로 PINN 에 들어가면 단면 가정이 통째로 부실해진다. 등급도 공식값을 쓴다.
+    """
     structure = classify_structure(tags, base_class)
-    span = max_span_estimate(structure, length_m, n_spans)
-    grade = bridge_grade(length_m, span)
     width = bridge_width_m(tags)
+    span = grade = None
+    src = "osm"
+    if official is not None:
+        ex = getattr(official, "extra", None) or {}
+        if getattr(official, "length_m", None):
+            length_m = float(official.length_m)
+        if getattr(official, "width_m", None):
+            width = float(official.width_m)
+        if ex.get("max_span_m"):
+            span = float(ex["max_span_m"])
+        if ex.get("grade"):
+            grade = str(ex["grade"])
+        if getattr(official, "bridge_type", None) and base_class in (None, "", "girder"):
+            structure = classify_structure(tags, str(official.bridge_type))
+        src = "csv"
+    if span is None:
+        span = max_span_estimate(structure, length_m, n_spans)
+    if grade is None:
+        grade = bridge_grade(length_m, span)
     terrain, relief = terrain_class(lat, lon, water_context, elev_fn=elev_fn)
-    return BridgeMeta(grade=grade, structure=structure,
+    meta = BridgeMeta(grade=grade, structure=structure,
                       structure_ko=_STRUCTURE_KO.get(structure, structure),
                       width_m=width, length_m=length_m, max_span_m=span,
                       terrain=terrain, relief_m=relief, lat=lat, lon=lon)
+    meta.source = src
+    return meta

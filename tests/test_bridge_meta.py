@@ -69,3 +69,47 @@ def test_build_bridge_meta():
     assert m.structure_ko == "PSC박스교" and m.width_m == 24.0
     assert m.terrain == "평지" and m.max_span_m is not None
     assert m.as_dict()["grade"] == "1종"
+    assert m.source == "osm"                      # 공식 제원 없으면 추정임을 밝힌다
+
+
+# ── 공식 제원(전국교량표준데이터) 우선 — OSM 만 보면 '폭미상·경간 None' 이 된다 ──
+class _Official:
+    """nearest_bridge_profile 이 주는 BridgeProfile 의 최소 대역(실측: 광안대교)."""
+
+    def __init__(self, **kw):
+        self.length_m = kw.get("length_m")
+        self.width_m = kw.get("width_m")
+        self.bridge_type = kw.get("bridge_type")
+        self.extra = kw.get("extra", {})
+
+
+def test_official_specs_fill_missing_width_and_span():
+    """OSM 태그가 비어도 표준데이터가 있으면 폭·경간·등급이 채워진다."""
+    m = bm.build_bridge_meta(
+        35.1355, 129.1112, {}, "girder", 7.0, "marine",
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(length_m=7420.0, width_m=25.0, bridge_type="suspension",
+                           extra={"max_span_m": 5565.0, "grade": "1종"}))
+    assert m.width_m == 25.0 and m.length_m == 7420.0    # ①이 준 7m 를 실측이 덮는다
+    assert m.max_span_m == 5565.0 and m.grade == "1종"
+    assert m.structure == "suspension" and m.structure_ko == "현수교"
+    assert m.source == "csv"                            # 출처가 드러나야 신뢰도가 읽힌다
+
+
+def test_official_does_not_erase_osm_when_fields_missing():
+    """표준데이터에 없는 항목은 OSM/추정값을 지우지 않는다."""
+    m = bm.build_bridge_meta(
+        37.32, 127.10, {"width": "24"}, "girder", 650.0, "river",
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(extra={}))                    # 아무 값도 없는 공식 레코드
+    assert m.width_m == 24.0 and m.length_m == 650.0     # OSM 값 보존
+    assert m.max_span_m is not None                      # 추정으로 채움
+
+
+def test_official_grade_beats_estimate():
+    """공식 등급은 연장·경간 추정 등급보다 우선한다(법정 종별)."""
+    m = bm.build_bridge_meta(
+        36.0, 127.0, {}, "girder", 30.0, "river",        # 짧아서 추정은 3종/기타
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(length_m=30.0, extra={"grade": "2종"}))
+    assert m.grade == "2종"

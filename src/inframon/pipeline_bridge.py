@@ -134,11 +134,25 @@ def run_bridge_pipeline(
         length = ctx.get("bridge", {}).get("length_m")
         cls = classify_bridge(tags, length)
         water = water_context_for(cls, length)
-        meta = build_bridge_meta(lat, lon, tags, cls, length, water)
+        # 전국교량표준데이터에 실측 제원(연장·폭·주경간·등급)이 있으면 추정보다 우선.
+        # OSM 만 보면 폭·경간이 비어 PINN 단면 가정이 부실해진다.
+        official = None
+        try:
+            from .public_data import find_bridge_csv, nearest_bridge_profile
+            _csv = find_bridge_csv(str(out))
+            if _csv:
+                official = nearest_bridge_profile(_csv, lat, lon, max_km=0.3)
+        except Exception:  # noqa: BLE001 — 공공데이터 없어도 ⑪ 는 계속 간다
+            official = None
+        meta = build_bridge_meta(lat, lon, tags, cls, length, water, official=official)
         ctx["bridge_meta"] = meta.as_dict()
         wtxt = f"{meta.width_m}m" if meta.width_m else "폭미상"
+        _sp = f"경간~{meta.max_span_m:.0f}m" if meta.max_span_m else "경간미상"
+        _ln = f"연장 {meta.length_m:.0f}m · " if meta.length_m else ""
+        _src = "실측(표준데이터)" if meta.source == "csv" else "추정(OSM)"
         rep.add(StageResult("⑪교량메타", "done",
-                            f"{meta.grade}·{meta.structure_ko}·{wtxt}·경간~{meta.max_span_m}m·{meta.terrain}"))
+                            f"{meta.grade}·{meta.structure_ko}·{_ln}폭 {wtxt}·{_sp}·"
+                            f"{meta.terrain} [{_src}]"))
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑪교량메타", "error", str(e)[:70]))
 
