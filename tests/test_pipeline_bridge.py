@@ -61,6 +61,9 @@ def test_pipeline_full_runs_9_12(monkeypatch, tmp_path):
 
     _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
                             [sb.SnapPairResult("20240107", "20240119", "p.tif", True)])
+    # 실제 SNAP 은 track_h5 를 만들고 끝난다 — 파일이 없으면 엔진 계약 위반으로 막힌다
+    # (⑧이 산출물 없이 '성공'을 주장하면 하류가 조용히 깨지므로 processing_engine 이 검사).
+    (tmp_path / "t.h5").write_bytes(b"x")
     _res.track_h5 = str(tmp_path / "t.h5"); _res.weather = None
     monkeypatch.setattr(sb, "run", lambda *a, **k: _res)
     monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)
@@ -95,6 +98,9 @@ def test_pipeline_full_do_adi(monkeypatch, tmp_path):
     monkeypatch.setattr(sa, "acquire", lambda *a, **k: _Acq())
     _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
                             [sb.SnapPairResult("20240107", "20240119", "p.tif", True)])
+    # 실제 SNAP 은 track_h5 를 만들고 끝난다 — 파일이 없으면 엔진 계약 위반으로 막힌다
+    # (⑧이 산출물 없이 '성공'을 주장하면 하류가 조용히 깨지므로 processing_engine 이 검사).
+    (tmp_path / "t.h5").write_bytes(b"x")
     _res.track_h5 = str(tmp_path / "t.h5"); _res.weather = None
     monkeypatch.setattr(sb, "run", lambda *a, **k: _res)
     monkeypatch.setattr(sb, "platform_heading", lambda *a, **k: -13.1)

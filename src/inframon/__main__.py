@@ -187,6 +187,15 @@ def main() -> None:
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
+    p.add_argument("--pipeline-engine", default="snap",
+                   choices=("snap", "hyp3", "sarvey", "miaplpy", "mintpy", "stamps"),
+                   help="--pipeline ⑧ InSAR 처리 엔진(기본 snap). snap·hyp3 는 좌표만으로 "
+                        "취득·처리까지 하고, sarvey·miaplpy·mintpy·stamps 는 이미 처리한 "
+                        "산출물을 --pipeline-source 로 지목해 Track H5 로 변환한다.")
+    p.add_argument("--pipeline-source", default=None, metavar="PATH",
+                   help="--pipeline-engine 이 가져오기형(sarvey/miaplpy/mintpy/stamps)일 때 "
+                        "도구 산출물 경로(SARvey ts.h5 · MiaplPy timeseries.h5 · "
+                        "MintPy geo_timeseries.h5 · StaMPS .mat).")
     p.add_argument("--pipeline-ifc", default=None, metavar="IFC",
                    help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
                         "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
@@ -1020,7 +1029,9 @@ def main() -> None:
                                   earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi,
                                   ifc=args.pipeline_ifc, bim_elements=args.gltf_elements,
                                   registry=args.registry, bridge_id=args.bridge_id,
-                                  twin_value=args.gltf_value)
+                                  twin_value=args.gltf_value,
+                                  engine=args.pipeline_engine,
+                                  engine_source=args.pipeline_source)
         print(rep.summary())
         return
 
