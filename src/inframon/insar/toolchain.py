@@ -73,7 +73,10 @@ def default_runner(cmd: str) -> tuple[int, str]:
     else:
         argv = ["bash", "-lc", cmd]
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        # errors="replace": wsl.exe(UTF-16)/WSL bash(UTF-8) 출력이 한국어 로캘(cp949)
+        # strict 디코딩에 걸려 상태 점검이 크래시하는 것을 방지.
+        p = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                           timeout=120)
         return p.returncode, (p.stdout or "").strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 127, str(exc)
@@ -110,7 +113,8 @@ WSL_INSTALL_CMD = "wsl --install -d Ubuntu-22.04"
 def _run_argv(argv: list[str], timeout: int = 60) -> tuple[int, str]:
     """argv 실행 → (rc, 출력). wsl.exe 는 UTF-16 출력이라 NUL 을 걷어낸다."""
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                           timeout=timeout)
         out = ((p.stdout or "") + (p.stderr or "")).replace("\x00", "")
         return p.returncode, out.strip()
     except (OSError, subprocess.SubprocessError) as exc:

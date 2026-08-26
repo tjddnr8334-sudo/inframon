@@ -72,9 +72,12 @@ def test_infer_ref_date_star_vs_chain():
 
 
 # ── 합성 HyP3 산출물 ──
-def _write_product(root: Path, d1: str, d2: str, phase: float, *, lon0=127.10, lat0=37.33,
+def _write_product(root: Path, d1: str, d2: str, phase, *, lon0=127.10, lat0=37.33,
                    coh=0.8, lv_theta=0.87, dem=123.0, px=0.001, size=20) -> Path:
-    """HyP3 INSAR 산출물 폴더 모사 — unw_phase/corr/lv_theta/dem GeoTIFF 4종."""
+    """HyP3 INSAR 산출물 폴더 모사 — unw_phase/corr/lv_theta/dem GeoTIFF 4종.
+
+    phase 는 스칼라 또는 [size,size] 배열(격자 불일치·nodata 테스트용).
+    """
     rasterio = pytest.importorskip("rasterio")
     from rasterio.transform import from_origin
 
@@ -84,10 +87,12 @@ def _write_product(root: Path, d1: str, d2: str, phase: float, *, lon0=127.10, l
     tr = from_origin(lon0, lat0, px, px)
     for suffix, val in (("unw_phase", phase), ("corr", coh), ("lv_theta", lv_theta),
                         ("dem", dem)):
+        arr = (np.asarray(val, dtype="float32") if not np.isscalar(val)
+               else np.full((size, size), val, dtype="float32"))
         with rasterio.open(pdir / f"{name}_{suffix}.tif", "w", driver="GTiff",
                            height=size, width=size, count=1, dtype="float32",
                            crs="EPSG:4326", transform=tr) as ds:
-            ds.write(np.full((size, size), val, dtype="float32"), 1)
+            ds.write(arr, 1)
     return pdir
 
 
@@ -158,6 +163,57 @@ def test_track_h5_imports_into_project_contract(tmp_path):
         meta = import_track_h5(s, out)
     assert meta.n_points == n and meta.n_dates == 3
     assert meta.incidence_ds is not None                                # lv_theta 반영
+
+
+# ── M0 회귀: 격자 불일치·nodata·단일날짜 폴더 (팀장 A 코드리뷰 지적분) ──
+def test_shifted_grid_pair_sampled_by_coords_not_index(tmp_path):
+    """같은 크기·다른 offset 격자 쌍 — 직접 인덱싱이면 '조용히 엉뚱한 픽셀'을 읽는다."""
+    pytest.importorskip("rasterio")
+    h5py = pytest.importorskip("h5py")
+    size, px = 20, 0.001
+    col = np.arange(size, dtype="float32")[None, :].repeat(size, 0)
+    # 지리적 필드: phase(경도) = 0.1×(기준격자 col+1). 쌍2 격자는 서쪽으로 2px 이동 —
+    # 같은 위치의 값이 같도록 쌍2 배열은 0.1×(col−1) 로 만든다.
+    _write_product(tmp_path, "20240107", "20240119", 0.1 * (col + 1))
+    _write_product(tmp_path, "20240119", "20240131", 0.1 * (col - 1),
+                   lon0=127.10 - 2 * px)
+    prods = find_product_dirs(tmp_path)
+    out = tmp_path / "t.h5"
+    products_to_track_h5(prods, out, lat=37.32, lon=127.11, radius_km=5.0)
+    with h5py.File(out, "r") as f:
+        los = f["los_mm"][()]
+    f2 = np.isfinite(los[:, 2])
+    assert f2.sum() >= los.shape[0] - 45          # 이동 격자 밖 동쪽 2열만 NaN 허용
+    # 부호만 반대(쌍1 은 보조가 이른 쪽 → −, 쌍2 는 +)이고 크기는 같아야 한다 —
+    # 직접 인덱싱(수정 전)이면 0.2rad 만큼 어긋나 실패한다.
+    assert np.allclose(los[f2, 1], -los[f2, 2], atol=1e-3)
+
+
+def test_nodata_pair_becomes_nan_not_zero(tmp_path):
+    """이후 쌍의 nodata(0.0)는 '가짜 무변위 0'이 아니라 NaN 으로 들어가야 한다."""
+    pytest.importorskip("rasterio")
+    h5py = pytest.importorskip("h5py")
+    _write_product(tmp_path, "20240107", "20240119", 1.0)
+    _write_product(tmp_path, "20240119", "20240131", 0.0)     # 전면 nodata
+    out = tmp_path / "t.h5"
+    products_to_track_h5(find_product_dirs(tmp_path), out, lat=37.32, lon=127.11,
+                         radius_km=5.0)
+    with h5py.File(out, "r") as f:
+        los = f["los_mm"][()]
+    assert np.isnan(los[:, 2]).all()               # 0 이 아니라 NaN
+    assert np.isfinite(los[:, 1]).all()
+
+
+def test_import_root_named_with_single_date_uses_tif_name(tmp_path):
+    """'jeongja_20240101' 같은 날짜 1개짜리 폴더에 tif 를 직접 넣어도 동작해야 한다."""
+    pytest.importorskip("rasterio")
+    root = tmp_path / "jeongja_20240101"
+    pdir = _write_product(tmp_path, "20240107", "20240119", 1.0)
+    root.mkdir()
+    for f in pdir.iterdir():                       # tif 들을 루트에 직접 배치
+        f.rename(root / f.name)
+    prods = find_product_dirs(root)
+    assert prods[0].date1 == "20240107" and prods[0].date2 == "20240119"
 
 
 # ── 오케스트레이션(네트워크 전부 모사) ──

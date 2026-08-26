@@ -14,15 +14,17 @@ def test_robust_slope_two_rounds():
 
 
 def test_robust_slope_median_resists_outlier():
-    # 5회차, 실제 -5mm/yr 인데 중간 회차 하나가 크게 튐(+10) → 중앙값이 방어.
+    # 5회차, 실제 -5mm/yr 인데 4회차 하나가 크게 튐(+10) → 중앙값이 방어.
     # (회차가 적으면 '끝점' 이상치는 쌍의 절반을 오염시켜 방어 한계가 있다 — 물리적 성질)
+    # ⚠️ 이상치를 **중앙 회차(t=2=평균)**에 두면 최소제곱 기울기에 지렛대가 0이라
+    # OLS 도 정확히 -5 가 나온다(절편만 흔듦) — 대비가 성립하지 않으므로 t=3 에 둔다.
     t = [0.0, 1.0, 2.0, 3.0, 4.0]
-    y = [0.0, -5.0, +10.0, -15.0, -20.0]   # y[2] 가 -10 대신 +10 로 튐
+    y = [0.0, -5.0, -10.0, +10.0, -20.0]   # y[3] 이 -15 대신 +10 로 튐
     s = robust_slope(t, y)
     assert s == pytest.approx(-5.0, abs=0.5)
-    # 같은 데이터에 최소제곱은 이상치에 끌려간다(대비)
+    # 같은 데이터에 최소제곱은 이상치에 끌려간다(OLS≈-2.5 vs Theil–Sen=-5.0)
     ols = np.polyfit(t, y, 1)[0]
-    assert abs(ols - (-5.0)) > abs(s - (-5.0))   # Theil–Sen 이 더 정확
+    assert abs(ols - (-5.0)) > abs(s - (-5.0)) + 1.0   # 부동소수 노이즈가 아닌 실질 차이
 
 
 def _write_table(path, origin_epsg="EPSG:5186", vert_vel=None, dates=None):

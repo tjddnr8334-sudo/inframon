@@ -166,6 +166,16 @@ def main() -> None:
     p.add_argument("--bridge-csv", default=None, metavar="CSV",
                    help="전국교량표준데이터 CSV(data.go.kr/15081953). --custom-pinn 이 "
                         "최근접 교량의 실 제원·공식 종별등급을 사용.")
+    p.add_argument("--bridge-name", default=None, metavar="NAME",
+                   help="--custom-pinn 대상 교량명(예: 정자교). 표준데이터 최근접 매칭이 "
+                        "다른 이름이면 경고 — 도시관리 교량은 표준데이터에 없을 수 있다.")
+    p.add_argument("--bridge-csv-max-km", type=float, default=1.0, metavar="KM",
+                   help="--custom-pinn 표준데이터 최근접 탐색 반경(기본 1.0km). 이웃 교량이 "
+                        "잡히면 줄여라 — 150m 초과 매칭은 경고로 표시된다.")
+    p.add_argument("--bridge-profile", default=None, metavar="JSON",
+                   help="--custom-pinn 교량 제원을 직접 지정(표준데이터·OSM 보다 우선). "
+                        "표준데이터에 없는 도시관리·신설 교량에서 설계도서/실측 제원을 넣는 경로. "
+                        "키: name·bridge_type·material·length_m·width_m·section_depth_m·boundary 등.")
     p.add_argument("--traffic-ex-key", default=None, metavar="KEY",
                    help="한국도로공사 EX API 인증키(data.ex.co.kr, apiId=0617 일자별 전국 교통량). "
                         "--custom-pinn 이 취득일별 교통량을 PINN 하중 시간변조로 사용. "
@@ -177,6 +187,10 @@ def main() -> None:
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
+    p.add_argument("--pipeline-ifc", default=None, metavar="IFC",
+                   help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
+                        "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
+                        "부재 테이블(JSON)만 있으면 --gltf-elements 로 줘도 된다.")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
     p.add_argument("--export-bim", default=None, metavar="H5,OUT_PREFIX",
@@ -1000,8 +1014,13 @@ def main() -> None:
             _lat, _lon = (float(v) for v in args.pipeline.split(","))
         except ValueError:
             p.error("--pipeline 형식은 LAT,LON 입니다 (예: 37.3219,127.1083)")
-        rep = run_bridge_pipeline(_lat, _lon, mode=args.pipeline_mode,
-                                  earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi)
+        _pout = (args.out if not str(args.out).endswith(".h5")
+                 else str(Path(args.out).parent))
+        rep = run_bridge_pipeline(_lat, _lon, out_dir=_pout, mode=args.pipeline_mode,
+                                  earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi,
+                                  ifc=args.pipeline_ifc, bim_elements=args.gltf_elements,
+                                  registry=args.registry, bridge_id=args.bridge_id,
+                                  twin_value=args.gltf_value)
         print(rep.summary())
         return
 
@@ -1019,6 +1038,9 @@ def main() -> None:
             bridge_csv = default_bridge_csv()
         try:
             summary = run_custom_pinn(args.out, lat, lon, bridge_csv=bridge_csv,
+                                      bridge_name=args.bridge_name,
+                                      bridge_csv_max_km=args.bridge_csv_max_km,
+                                      bridge_profile=args.bridge_profile,
                                       traffic_ex_key=ex_key)
         except (ValueError, FileNotFoundError) as exc:
             p.error(str(exc))
@@ -1030,6 +1052,8 @@ def main() -> None:
         print(f"  스팬       : {summary['span_m']} m  · 제원출처 {_coll['profile_source']}")
         if _coll.get('bridge_csv'):
             print(f"  표준데이터 : {_coll['bridge_csv']}")
+        for _w in _coll.get('bridge_match_warnings') or []:
+            print(f"  ⚠️ 교량매칭  : {_w}")
         print(f"  종별등급   : {_coll.get('bridge_grade', '-')}  · 지형 {_coll.get('terrain', '-')}")
         print(f"  상태·노후  : 안전점검 {_coll.get('inspect_grade', '-')}  · 준공 {_coll.get('build_year', '-')}")
         print(f"  온도       : {_coll['temperature']}")

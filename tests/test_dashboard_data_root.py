@@ -1,4 +1,4 @@
-"""대시보드 data_root 폴백 — 없는 드라이브(F:\\ 등)를 조용히 쓰다 크래시하지 않게.
+"""대시보드 data_root 폴백 — 없는 드라이브를 조용히 쓰다 크래시하지 않게.
 
 `app.py` 는 streamlit 을 import 하므로, streamlit 을 최소 목으로 끼워 함수만 불러온다.
 """
@@ -9,6 +9,21 @@ import types
 from pathlib import Path
 
 import pytest
+
+
+def _missing_drive_path(*parts: str) -> str:
+    """실제로 **없는** 위치의 경로 — 드라이브 문자를 하드코딩하지 않는다.
+
+    'F:\\ 는 없다'고 못박으면 외장하드를 F: 로 꽂은 개발기에서 테스트가 깨진다
+    (실제로 깨졌다). Windows 는 존재하지 않는 드라이브 문자를 뒤에서부터 찾고,
+    리눅스/CI 는 루트 아래 없는 경로를 쓴다.
+    """
+    if sys.platform.startswith("win"):
+        for letter in "ZYXWVUTQ":
+            if not Path(f"{letter}:\\").exists():
+                return "\\".join([f"{letter}:", *parts]) if parts else f"{letter}:\\"
+        pytest.skip("사용 가능한 '없는 드라이브 문자'를 찾지 못함")
+    return "/".join(["/nonexistent-drive", *parts])
 
 
 @pytest.fixture()
@@ -33,9 +48,10 @@ def test_missing_drive_falls_back_to_repo_data(app, monkeypatch):
     기본 위치는 **절대경로**(리포의 data/)여서 어떤 드라이브에도 묶이지 않고,
     실행 위치가 달라져도 같은 곳을 가리킨다.
     """
-    monkeypatch.setattr(app, "_config_load", lambda: {"data_root": "F:\\inframon"})
+    missing = _missing_drive_path("inframon")
+    monkeypatch.setattr(app, "_config_load", lambda: {"data_root": missing})
     monkeypatch.delenv("INFRAMON_DATA_ROOT", raising=False)
-    assert not Path("F:\\inframon").exists()      # CI·개발기 모두 F:\ 없음
+    assert not Path(missing).exists()             # 실제로 없는 위치임을 확인하고 시작
     root = app.data_root()
     assert root == app._default_root()
     assert Path(root).is_absolute()               # 상대경로 "data" 가 아니다
@@ -67,10 +83,10 @@ def test_session_beats_config(app, monkeypatch, tmp_path):
 def test_recipe_dir_falls_back_when_session_path_unusable(app, monkeypatch, tmp_path):
     """세션에 남은 recipe_dir 이 없는 드라이브여도 데이터 루트 하위로 폴백."""
     monkeypatch.setattr(app, "data_root", lambda: str(tmp_path))
-    app.st.session_state = {"recipe_dir": "F:\\inframon\\insar_recipe"}
+    app.st.session_state = {"recipe_dir": _missing_drive_path("inframon", "insar_recipe")}
     assert app._recipe_dir() == str(tmp_path / "insar_recipe")
 
 
 def test_usable_dir_predicate(app, tmp_path):
     assert app._usable_dir(str(tmp_path / "new")) is True
-    assert app._usable_dir("F:\\definitely\\missing\\drive") is False
+    assert app._usable_dir(_missing_drive_path("definitely", "missing")) is False

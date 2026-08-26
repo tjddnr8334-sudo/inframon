@@ -50,10 +50,19 @@ def run_bridge_pipeline(
     lat: float, lon: float, *, out_dir: str | Path = "data/pipeline",
     mode: str = "plan", roi_sizes=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
     earthdata_token: str | None = None, snap_count: int = 8, do_adi: bool = False,
+    ifc: str | Path | None = None, bim_elements: str | Path | None = None,
+    registry: str | Path | None = None, bridge_id: str | None = None,
+    twin_value: str = "cri",
 ) -> PipelineReport:
     """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).
 
     do_adi=True 면 ⑨ PS/DS 를 코히런스 1차 대신 **진폭분산 ADI**(쌍별 진폭 ~20분 추가)로.
+
+    ⑬ 디지털트윈: `ifc`(또는 `bim_elements`)를 주면 부재 GlobalId 로 결합해 glTF·3D Tiles
+    를 낸다. **없어도 진행**한다 — 점군 트윈만 만들고 결합은 생략(임의 교량은 IFC 가
+    없는 게 정상이며, 여기서 멈추면 체인이 끊긴다).
+    ⑭ BMAP: 산출 project.h5 를 `registry`(기본 <out>/bridge_registry.json)에 등록해
+    `--serve-api` 로 바로 서빙 가능한 상태로 만든다.
     """
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     rep = PipelineReport(lat=lat, lon=lon)
@@ -115,7 +124,7 @@ def run_bridge_pipeline(
     # ⑦ asc+desc 연직분해 (SNAP 연동됨)
     rep.add(StageResult("⑦asc+desc연직분해", "done",
                         "fuse_snap_asc_desc: 상승·하강 SNAP Track → 연직 U·수평 H 분해 "
-                        "(하강 부족/기하 특이 시 단일 폴백). 정자교는 하강 2장 → 단일."))
+                        "(반대 궤도 장면 부족·기하 특이 시 단일 궤도 폴백)."))
 
     # ⑪ 교량 종별(1/2/3종)·종류(PSC box/라멘)·폭·지형(산지/평지/해상)
     try:
@@ -133,14 +142,21 @@ def run_bridge_pipeline(
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑪교량메타", "error", str(e)[:70]))
 
-    # ⑧⑨⑫ 중량 단계 — plan 이면 계획, full 이면 실행
+    # ⑧⑨⑫⑬⑭ 중량 단계 — plan 이면 계획, full 이면 실행
+    _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
+                 + (" (IFC 부재 GlobalId 결합)" if (ifc or bim_elements)
+                    else " — IFC 미지정: 점군 트윈만(결합 생략)"))
     heavy = [
         ("⑧InSAR처리(SNAP)", "snap_backend.run / --snap-auto"),
         ("⑨PS/DS(교량30m)", "build_bridge_track_ps_ds (ADI PS/DS, 데크 30m)"),
         ("⑫PINN→FRAM", "--custom-pinn (형식별 PINN + FRAM CRI)"),
+        ("⑬IFC디지털트윈", _twin_how),
+        ("⑭BMAP등록", "bridge_registry.json 등록 → --serve-api 서빙"),
     ]
     if mode == "full":
-        _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi)
+        _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
+                   ifc=ifc, bim_elements=bim_elements, registry=registry,
+                   bridge_id=bridge_id, twin_value=twin_value)
     else:
         for step, how in heavy:
             rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
@@ -148,7 +164,80 @@ def run_bridge_pipeline(
     return rep
 
 
-def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
+def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
+                       bridge_id, twin_value):
+    """⑬ 디지털트윈(glTF·3D Tiles) + ⑭ BMAP 레지스트리 등록.
+
+    IFC 가 없으면 결합만 건너뛰고 **점군 트윈은 그대로 만든다** — 임의 교량에서 IFC 는
+    있는 쪽이 예외라, 없다고 체인을 끊으면 목표(트윈→BMAP)에 도달할 수 없다.
+    """
+    proj = (ctx.get("pinn") or {}).get("project")
+    if not proj or not Path(proj).exists():
+        rep.add(StageResult("⑬IFC디지털트윈", "skip", "project.h5 없음(⑫ 실패) → 트윈 생략"))
+        rep.add(StageResult("⑭BMAP등록", "skip", "project.h5 없음 → 등록 생략"))
+        return
+
+    # ⑬ 트윈 — 부재 결합(있으면) → glTF → 3D Tiles
+    glb = out / "twin.glb"
+    try:
+        from .insar.gltf_export import export_insar_gltf, write_3dtiles_tileset
+        guids = element_z = None
+        bound = "IFC 미지정 → 점군 트윈(GlobalId 결합 없음)"
+        src = ifc or bim_elements
+        if src:
+            try:
+                from .insar.gltf_export import guid_map_from_alignment
+                guids, ginfo = guid_map_from_alignment(proj, str(src))
+                element_z = ginfo.get("element_z")
+                n_bound = int(sum(1 for g in guids if g)) if guids is not None else 0
+                bound = f"부재 결합 {n_bound}/{len(guids)}점 (GlobalId)"
+            except Exception as e:  # noqa: BLE001 — 결합 실패해도 트윈은 만든다
+                bound = f"부재 결합 실패({str(e)[:50]}) → 점군 트윈으로 진행"
+        r = export_insar_gltf(proj, glb, value=twin_value, fram_project=proj,
+                              element_guids=guids, element_z=element_z,
+                              z_source="element" if element_z is not None else "flat")
+        t = write_3dtiles_tileset(glb)
+        ctx["twin"] = {"glb": str(glb), "tileset": t.get("out") or str(out / "tileset.json"),
+                       "meta": str(glb) + ".meta.json", "bound": bound,
+                       "n_points": r.get("n_points") if isinstance(r, dict) else None}
+        rep.add(StageResult("⑬IFC디지털트윈", "done",
+                            f"{bound} · {glb.name}+3D Tiles"))
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult("⑬IFC디지털트윈", "error", str(e)[:100]))
+
+    # ⑭ BMAP 레지스트리 등록 — 있으면 갱신, 없으면 추가(멱등)
+    try:
+        import json as _json
+        reg_path = Path(registry) if registry else (out / "bridge_registry.json")
+        data = {"bridges": []}
+        if reg_path.exists():
+            try:
+                data = _json.loads(reg_path.read_text(encoding="utf-8")) or {"bridges": []}
+            except ValueError:
+                data = {"bridges": []}
+        data.setdefault("bridges", [])
+        name = (ctx.get("bridge") or {}).get("name") or f"bridge_{lat:.4f}_{lon:.4f}"
+        bid = bridge_id or f"INFRAMON-{lat:.4f}_{lon:.4f}"
+        entry = {"bridge_id": bid, "name": name, "project_h5": str(Path(proj).resolve()),
+                 "wgs84_center": [round(lat, 6), round(lon, 6)]}
+        if ctx.get("twin"):
+            entry["twin_gltf"] = ctx["twin"]["glb"]
+            entry["twin_tileset"] = ctx["twin"]["tileset"]
+        data["bridges"] = [b for b in data["bridges"] if b.get("bridge_id") != bid] + [entry]
+        reg_path.parent.mkdir(parents=True, exist_ok=True)
+        reg_path.write_text(_json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        ctx["registry"] = {"path": str(reg_path), "bridge_id": bid,
+                           "n_bridges": len(data["bridges"])}
+        rep.add(StageResult("⑭BMAP등록", "done",
+                            f"{bid} · 교량 {len(data['bridges'])}건 · {reg_path.name} "
+                            f"→ --serve-api --registry {reg_path}"))
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult("⑭BMAP등록", "error", str(e)[:100]))
+
+
+def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
+               ifc=None, bim_elements=None, registry=None, bridge_id=None,
+               twin_value="cri"):
     """중량 단계 실제 실행(mode='full') — SNAP 처리→PS/DS→PINN. 실패는 단계별 보고."""
     from .insar.snap_acquire import acquire
     from .insar.snap_backend import (amplitude_pairs, build_bridge_track_ps_ds,
@@ -173,6 +262,9 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
         ctx["snap"] = res.as_dict()
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑧InSAR처리(SNAP)", "error", str(e)[:100]))
+        # 뒤 단계를 조용히 빠뜨리면 "왜 트윈이 없지?" 가 된다 — 사유와 함께 명시 보고.
+        for _s in ("⑨PS/DS(교량30m)", "⑫PINN→FRAM", "⑬IFC디지털트윈", "⑭BMAP등록"):
+            rep.add(StageResult(_s, "skip", "⑧ InSAR 처리 실패 → 선행 산출물 없음"))
         return
 
     # heading(단일 궤도 기록용) — 기준 SLC 에서
@@ -225,3 +317,7 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False):
                             f"CRI {summ['cri_global_max']:.3f} · 경보 {summ['warning_level']} · {proj}"))
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑫PINN→FRAM", "error", str(e)[:100]))
+
+    # ⑬⑭ 디지털트윈 → BMAP 등록 (목표 체인의 마지막 두 고리)
+    _twin_and_register(rep, ctx, lat, lon, out, ifc=ifc, bim_elements=bim_elements,
+                       registry=registry, bridge_id=bridge_id, twin_value=twin_value)
