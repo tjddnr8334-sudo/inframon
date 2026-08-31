@@ -108,6 +108,10 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--check-target", default=None, metavar="LAT,LON",
+                   help="--check-track 의 대상 교량 좌표. 주면 '이 트랙이 그 교량을 실제로 "
+                        "담고 있는가'(반경 30m 내 점수·이격)까지 검사한다 — 광역 필드가 "
+                        "교량 트랙 행세를 하던 것을 막는다.")
     p.add_argument("--insar-conditions", default=None, metavar="RECIPE_DIR",
                    help="교량 InSAR 신뢰성 조건(기하·시간샘플링·산란체·처리)을 레시피로 평가 후 종료. "
                         "SARvey 교량 맞춤의 전제조건 게이팅(--check-track 의 입력측 짝).")
@@ -1200,7 +1204,11 @@ def main() -> None:
     if args.check_track:
         from .insar.track_preflight import preflight_track_h5
 
-        rep = preflight_track_h5(args.check_track)
+        _tgt = None
+        if args.check_target:
+            _la, _lo = (float(v) for v in str(args.check_target).split(","))
+            _tgt = (_la, _lo)
+        rep = preflight_track_h5(args.check_track, target=_tgt)
         print("=" * 56)
         print("  Track HDF5 투입 사전검증 (preflight)")
         print("=" * 56)
@@ -1213,6 +1221,15 @@ def main() -> None:
             print(f"  LOS 유한 비율   : {rep.los_finite_frac * 100:.1f}%")
         print(f"  고도(z)/CRS     : {'있음' if rep.has_height else '없음'} / {rep.crs or '-'}"
               + ("  (경위도로 보임)" if rep.looks_geographic else ""))
+        if rep.extent_km:
+            print(f"  점군 공간범위   : {rep.extent_km[0]:.2f} × {rep.extent_km[1]:.2f} km")
+        if rep.los_abs_max is not None:
+            print(f"  |LOS| 최대      : {rep.los_abs_max:.2f} mm"
+                  + ("  ⚠️ λ/4 에 갇힘(래핑 의심)" if rep.looks_wrapped else ""))
+        if rep.target is not None and rep.n_within_deck is not None:
+            print(f"  대상 교량 포함  : 30m내 {rep.n_within_deck}점 · 100m내 "
+                  f"{rep.n_within_near}점 · 최근접 {rep.dist_min_m:.0f}m · "
+                  f"이격중앙 {rep.dist_median_m:.0f}m")
         if rep.errors:
             print("  ❌ 차단 오류")
             for e in rep.errors:

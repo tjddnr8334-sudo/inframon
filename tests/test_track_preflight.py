@@ -132,3 +132,98 @@ def test_preflight_corrupt_file_no_crash(tmp_path):
     rep = preflight_track_h5(p)
     assert not rep.is_ready
     assert rep.errors                                    # 예외 없이 오류로 보고
+
+
+# ── 대상 교량을 실제로 담고 있는가 (target 좌표를 준 경우만) ──
+def _geo_track(path, *, center=(37.32, 127.10), spread_deg=0.0002, n=40, **kw):
+    """경위도 좌표 트랙 — center 주변 spread_deg 안에 n 점."""
+    rng = np.linspace(-spread_deg, spread_deg, n)
+    lonlat = np.column_stack([center[1] + rng, center[0] + rng * 0.5])
+    return _write_track(path, lonlat=lonlat, n_points=n, **kw)
+
+
+def test_target_absent_keeps_old_behavior(tmp_path):
+    """좌표를 주지 않으면 공간 검사를 하지 않는다 — 기존 호출부가 그대로 동작한다."""
+    p = _geo_track(tmp_path / "t.h5", height=True, crs="EPSG:4326")
+    rep = preflight_track_h5(p)
+    assert rep.is_ready and rep.target is None
+    assert rep.n_within_deck is None
+
+
+def test_target_far_from_points_blocks(tmp_path):
+    """대상 반경 30m 안에 점이 0개면 '이 교량의 트랙이 아니다' 로 차단한다.
+
+    6km 광역 PS 필드가 교량 트랙 행세를 하며 ✅ 를 받던 것을 막는 검사다.
+    """
+    p = _geo_track(tmp_path / "far.h5", center=(37.32, 127.10), height=True)
+    rep = preflight_track_h5(p, target=(37.40, 127.20))    # ~11km 떨어진 교량
+    assert not rep.is_ready
+    assert any("0개" in e for e in rep.errors)
+    assert rep.n_within_deck == 0 and rep.dist_min_m > 1000
+
+
+def test_target_within_deck_passes(tmp_path):
+    p = _geo_track(tmp_path / "near.h5", center=(37.32, 127.10), height=True)
+    rep = preflight_track_h5(p, target=(37.32, 127.10))
+    assert rep.is_ready and rep.n_within_deck > 0
+    assert rep.dist_min_m < 30.0
+
+
+def test_wide_field_warns_when_bridge_is_a_speck(tmp_path):
+    """교량 30m 내가 1% 미만이면 '광역 필드' 경고 — 차단은 아니되 잘라 쓰라고 말한다."""
+    n = 2000
+    rng = np.random.default_rng(0)
+    lonlat = np.column_stack([127.10 + rng.uniform(-0.03, 0.03, n),
+                              37.32 + rng.uniform(-0.03, 0.03, n)])
+    lonlat[:3] = [127.10, 37.32]                            # 교량 위 3점만
+    p = _write_track(tmp_path / "wide.h5", lonlat=lonlat, n_points=n, height=True)
+    rep = preflight_track_h5(p, target=(37.32, 127.10))
+    assert rep.is_ready                                     # 차단은 아니다
+    assert any("광역 필드" in w for w in rep.warnings)
+    assert rep.extent_km is not None and rep.extent_km[0] > 4.0
+
+
+# ── 위상 언래핑 — λ/4 에 갇힌 산출물은 물리적 의미가 없다 ──
+def test_wrapped_los_is_blocked(tmp_path):
+    """LOS 가 ±λ/4 안에서 균일하면 언래핑 안 된 산출물로 보고 차단한다."""
+    from inframon.insar.track_preflight import LOS_WRAP_LIMIT_MM
+
+    rng = np.random.default_rng(1)
+    los = rng.uniform(-LOS_WRAP_LIMIT_MM, LOS_WRAP_LIMIT_MM, (40, 6))
+    p = _geo_track(tmp_path / "wrapped.h5", los=los, height=True)
+    rep = preflight_track_h5(p)
+    assert not rep.is_ready and rep.looks_wrapped
+    assert any("언래핑" in e for e in rep.errors)
+
+
+def test_small_real_signal_is_not_called_wrapped(tmp_path):
+    """실제 변위가 작아 |LOS|max 가 λ/4 미만이어도, 0 근처에 몰려 있으면 래핑이 아니다."""
+    rng = np.random.default_rng(2)
+    los = rng.normal(0.0, 2.0, (40, 6))                     # σ=2mm — λ/4 안이지만 0 집중
+    p = _geo_track(tmp_path / "small.h5", los=los, height=True)
+    rep = preflight_track_h5(p)
+    assert not rep.looks_wrapped and rep.is_ready
+
+
+def test_unwrapped_signal_passes(tmp_path):
+    """λ/4 를 넘는 점이 하나라도 있으면 언래핑된 산출물이다."""
+    rng = np.random.default_rng(3)
+    los = rng.normal(0.0, 30.0, (40, 6))
+    p = _geo_track(tmp_path / "unwrapped.h5", los=los, height=True)
+    rep = preflight_track_h5(p)
+    assert not rep.looks_wrapped and rep.is_ready
+    assert rep.los_abs_max > 13.87
+
+
+def test_file_wavelength_sets_the_wrap_limit(tmp_path):
+    """파일이 자기 λ 를 기록하면 그 λ/4 로 판정한다(엔진별 λ 차이 흡수)."""
+    lam_m = 0.05546576                                      # snap_backend.WAVELENGTH_M
+    limit = lam_m * 1000.0 / 4.0
+    rng = np.random.default_rng(4)
+    los = rng.uniform(-limit, limit, (40, 6))
+    los.flat[0] = limit                                     # 정확히 λ/4 에 닿는 점
+    p = _geo_track(tmp_path / "lam.h5", los=los, height=True)
+    with h5py.File(p, "a") as f:
+        f.attrs["RADAR_WAVELENGTH"] = lam_m
+    rep = preflight_track_h5(p)
+    assert rep.looks_wrapped, rep.los_abs_max
