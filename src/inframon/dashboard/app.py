@@ -2320,6 +2320,16 @@ def tab_start(path: str) -> None:
     st.markdown("#### ③ 전 과정 실행")
     st.caption("**계획 보기**는 네트워크 조회만 해서 몇 초면 끝납니다(무료·안전). "
                "**전체 실행**은 SLC 수 GB 다운로드와 SAR 처리를 해서 수 시간 걸립니다.")
+    from inframon.insar import processing_engine as _pe
+    eng = st.selectbox("InSAR 처리 엔진", _pe.ENGINE_NAMES, key="start_engine",
+                       format_func=lambda n: f"{n} — {_pe.describe(n)}")
+    src_in = ""
+    if _pe.needs_source(eng):
+        st.warning(f"**{eng}** 는 이미 처리된 산출물을 Track H5 로 변환하는 엔진입니다 "
+                   "(리포에 실행 드라이버가 없습니다). 좌표만으로 처리까지 하려면 "
+                   "**snap** 또는 **hyp3** 를 고르세요.")
+        src_in = st.text_input(f"{eng} 산출물 경로", key="start_engine_source",
+                               placeholder="예: work/sarvey/outputs/xxx_ts.h5")
     ifc_in = st.text_input("IFC 파일 (선택 — 있으면 부재 GlobalId 로 결합)", key="start_ifc",
                            placeholder="없으면 비워두세요 — 점군 트윈으로 진행합니다")
     b1, b2 = st.columns(2)
@@ -2334,7 +2344,8 @@ def tab_start(path: str) -> None:
                 rep = run_bridge_pipeline(
                     float(lat), float(lon), out_dir=out_dir,
                     mode="full" if run_full else "plan",
-                    ifc=(ifc_in.strip() or None))
+                    ifc=(ifc_in.strip() or None),
+                    engine=eng, engine_source=(src_in.strip() or None))
             st.session_state["start_report"] = [
                 {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
             st.session_state["start_ctx"] = {

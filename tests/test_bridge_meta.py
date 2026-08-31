@@ -69,3 +69,75 @@ def test_build_bridge_meta():
     assert m.structure_ko == "PSC박스교" and m.width_m == 24.0
     assert m.terrain == "평지" and m.max_span_m is not None
     assert m.as_dict()["grade"] == "1종"
+    assert m.source == "osm"                      # 공식 제원 없으면 추정임을 밝힌다
+
+
+# ── 공식 제원(전국교량표준데이터) 우선 — OSM 만 보면 '폭미상·경간 None' 이 된다 ──
+class _Official:
+    """nearest_bridge_profile 이 주는 BridgeProfile 의 최소 대역(실측: 광안대교)."""
+
+    def __init__(self, **kw):
+        self.length_m = kw.get("length_m")
+        self.width_m = kw.get("width_m")
+        self.bridge_type = kw.get("bridge_type")
+        self.extra = kw.get("extra", {})
+
+
+def test_official_specs_fill_missing_width_and_span():
+    """OSM 태그가 비어도 표준데이터가 있으면 폭·연장·등급이 채워진다(광안대교 실측)."""
+    m = bm.build_bridge_meta(
+        35.1355, 129.1112, {}, "girder", 7.0, "marine",
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(length_m=7420.0, width_m=25.0, bridge_type="suspension",
+                           extra={"max_span_m": 5565.0, "grade": "1종",
+                                  "max_span_source": "estimate"}))
+    assert m.width_m == 25.0 and m.length_m == 7420.0    # ①이 준 7m 를 실측이 덮는다
+    assert m.grade == "1종"
+    assert m.structure == "suspension" and m.structure_ko == "현수교"
+    assert m.source == "csv"                            # 출처가 드러나야 신뢰도가 읽힌다
+
+
+def test_estimated_span_is_never_labeled_measured():
+    """경간은 표준데이터에 컬럼이 없어 추정값이다 — '실측' 으로 둔갑하면 안 된다.
+
+    광안대교 연장 7420m × 현수교비 0.75 = 5565m 는 실제 주경간(약 500m)의 11배이고
+    세계 최장 현수교 주경간(2023m)도 넘는다. 값 자체를 정답으로 박지 않고 **출처**를 고정한다.
+    """
+    m = bm.build_bridge_meta(
+        35.1355, 129.1112, {}, "girder", 7.0, "marine",
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(length_m=7420.0, width_m=25.0, bridge_type="suspension",
+                           extra={"max_span_m": 5565.0, "grade": "1종",
+                                  "max_span_source": "estimate"}))
+    assert m.source_of("max_span_m") == "estimate"      # 경간: 추정
+    assert m.source_of("length_m") == "csv"             # 연장: 실측
+    assert m.source_of("width_m") == "csv"              # 폭: 실측
+    assert m.as_dict()["source_by_field"]["max_span_m"] == "estimate"
+
+
+def test_public_data_marks_span_as_estimate():
+    """표준데이터 레코드 → BridgeProfile 이 경간의 출처를 estimate 로 실어 보낸다."""
+    from inframon.public_data import bridge_profile_from_record
+    prof = bridge_profile_from_record({"교량명": "광안대교", "교량연장": "7420",
+                                       "교량폭": "25.0", "상부구조형식": "현수교"})
+    assert prof.extra["max_span_source"] == "estimate"
+    assert prof.extra["max_span_m"] is not None          # 값은 그대로 쓰되 출처를 밝힌다
+
+
+def test_official_does_not_erase_osm_when_fields_missing():
+    """표준데이터에 없는 항목은 OSM/추정값을 지우지 않는다."""
+    m = bm.build_bridge_meta(
+        37.32, 127.10, {"width": "24"}, "girder", 650.0, "river",
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(extra={}))                    # 아무 값도 없는 공식 레코드
+    assert m.width_m == 24.0 and m.length_m == 650.0     # OSM 값 보존
+    assert m.max_span_m is not None                      # 추정으로 채움
+
+
+def test_official_grade_beats_estimate():
+    """공식 등급은 연장·경간 추정 등급보다 우선한다(법정 종별)."""
+    m = bm.build_bridge_meta(
+        36.0, 127.0, {}, "girder", 30.0, "river",        # 짧아서 추정은 3종/기타
+        elev_fn=lambda la, lo: [20] * 9,
+        official=_Official(length_m=30.0, extra={"grade": "2종"}))
+    assert m.grade == "2종"

@@ -52,11 +52,15 @@ def run_bridge_pipeline(
     earthdata_token: str | None = None, snap_count: int = 8, do_adi: bool = False,
     ifc: str | Path | None = None, bim_elements: str | Path | None = None,
     registry: str | Path | None = None, bridge_id: str | None = None,
-    twin_value: str = "cri",
+    twin_value: str = "cri", engine: str = "snap",
+    engine_source: str | Path | None = None,
 ) -> PipelineReport:
     """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).
 
     do_adi=True 면 ⑨ PS/DS 를 코히런스 1차 대신 **진폭분산 ADI**(쌍별 진폭 ~20분 추가)로.
+
+    ⑧ 처리 엔진은 `engine` 으로 고른다(snap·hyp3·sarvey·miaplpy·mintpy·stamps).
+    가져오기형(sarvey 등)은 이미 처리된 산출물을 `engine_source` 로 지목해야 한다.
 
     ⑬ 디지털트윈: `ifc`(또는 `bim_elements`)를 주면 부재 GlobalId 로 결합해 glTF·3D Tiles
     를 낸다. **없어도 진행**한다 — 점군 트윈만 만들고 결합은 생략(임의 교량은 IFC 가
@@ -134,11 +138,37 @@ def run_bridge_pipeline(
         length = ctx.get("bridge", {}).get("length_m")
         cls = classify_bridge(tags, length)
         water = water_context_for(cls, length)
-        meta = build_bridge_meta(lat, lon, tags, cls, length, water)
+        # 전국교량표준데이터에 실측 제원(연장·폭·주경간·등급)이 있으면 추정보다 우선.
+        # OSM 만 보면 폭·경간이 비어 PINN 단면 가정이 부실해진다.
+        official = None
+        try:
+            from .public_data import find_bridge_csv, nearest_bridge_profile
+            _csv = find_bridge_csv(str(out))
+            if _csv:
+                official = nearest_bridge_profile(_csv, lat, lon, max_km=0.3)
+        except Exception:  # noqa: BLE001 — 공공데이터 없어도 ⑪ 는 계속 간다
+            official = None
+        meta = build_bridge_meta(lat, lon, tags, cls, length, water, official=official)
         ctx["bridge_meta"] = meta.as_dict()
-        wtxt = f"{meta.width_m}m" if meta.width_m else "폭미상"
+        # 항목마다 출처 딱지를 따로 붙인다 — 표준데이터에 경간 컬럼이 없어 연장×비율로
+        # 추정한 값에 '실측' 딱지가 붙던 것(광안대교 경간 5565m)을 막는다.
+        _tag = {"csv": "실측", "estimate": "추정", "osm": "OSM"}
+        def _mark(fld: str) -> str:
+            t = _tag.get(meta.source_of(fld))
+            return f"[{t}]" if t else ""
+        wtxt = f"{meta.width_m}m{_mark('width_m')}" if meta.width_m else "폭미상"
+        _sp = (f"경간~{meta.max_span_m:.0f}m{_mark('max_span_m')}"
+               if meta.max_span_m else "경간미상")
+        _ln = f"연장 {meta.length_m:.0f}m{_mark('length_m')} · " if meta.length_m else ""
+        # 매칭 교량명·이격을 함께 보여야 "엉뚱한 교량 제원을 썼다" 를 사람이 알아챈다.
+        _mt = ""
+        if official is not None:
+            _d = (getattr(official, "extra", None) or {}).get("match_dist_m")
+            _mt = (f" · 표준데이터 '{official.name}'"
+                   + (f" {_d:.0f}m" if isinstance(_d, (int, float)) else ""))
         rep.add(StageResult("⑪교량메타", "done",
-                            f"{meta.grade}·{meta.structure_ko}·{wtxt}·경간~{meta.max_span_m}m·{meta.terrain}"))
+                            f"{meta.grade}{_mark('grade')}·{meta.structure_ko}·{_ln}"
+                            f"폭 {wtxt}·{_sp}·{meta.terrain}{_mt}"))
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑪교량메타", "error", str(e)[:70]))
 
@@ -146,9 +176,16 @@ def run_bridge_pipeline(
     _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
                  + (" (IFC 부재 GlobalId 결합)" if (ifc or bim_elements)
                     else " — IFC 미지정: 점군 트윈만(결합 생략)"))
+    from .insar import processing_engine as _pe
+    _eng_how = _pe.describe(engine)
+    if _pe.needs_source(engine) and not engine_source:
+        _eng_how += " — ⚠️ source 필요(이미 처리된 산출물 경로)"
+    _ps_how = ("build_bridge_track_ps_ds (ADI PS/DS, 데크 30m)"
+               if _pe.supports_deck_ps_ds(engine)
+               else f"{engine} 엔진은 Track H5 직접 산출 → 재추출 불필요")
     heavy = [
-        ("⑧InSAR처리(SNAP)", "snap_backend.run / --snap-auto"),
-        ("⑨PS/DS(교량30m)", "build_bridge_track_ps_ds (ADI PS/DS, 데크 30m)"),
+        (f"⑧InSAR처리({engine})", _eng_how),
+        ("⑨PS/DS(교량30m)", _ps_how),
         ("⑫PINN→FRAM", "--custom-pinn (형식별 PINN + FRAM CRI)"),
         ("⑬IFC디지털트윈", _twin_how),
         ("⑭BMAP등록", "bridge_registry.json 등록 → --serve-api 서빙"),
@@ -156,7 +193,8 @@ def run_bridge_pipeline(
     if mode == "full":
         _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
                    ifc=ifc, bim_elements=bim_elements, registry=registry,
-                   bridge_id=bridge_id, twin_value=twin_value)
+                   bridge_id=bridge_id, twin_value=twin_value,
+                   engine=engine, engine_source=engine_source)
     else:
         for step, how in heavy:
             rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
@@ -237,45 +275,61 @@ def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
 
 def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
                ifc=None, bim_elements=None, registry=None, bridge_id=None,
-               twin_value="cri"):
-    """중량 단계 실제 실행(mode='full') — SNAP 처리→PS/DS→PINN. 실패는 단계별 보고."""
-    from .insar.snap_acquire import acquire
+               twin_value="cri", engine="snap", engine_source=None):
+    """중량 단계 실제 실행(mode='full') — ⑧처리→PS/DS→PINN. 실패는 단계별 보고.
+
+    ⑧은 `insar.processing_engine` 으로 갈아끼운다(snap·hyp3·sarvey·miaplpy·mintpy·
+    stamps). 하류가 보는 계약은 Track H5 경로 하나라, 엔진이 바뀌어도 ⑨ 이후는 같다.
+    """
+    from .insar import processing_engine as pe
     from .insar.snap_backend import (amplitude_pairs, build_bridge_track_ps_ds,
                                      platform_heading, scene_date)
-    from .insar.snap_backend import run as snap_run
+    _label = f"⑧InSAR처리({engine})"
     try:
-        acq = acquire(lat, lon, str(out), count=snap_count, start="2024-01-01",
-                      end="2025-07-01", token=token)
-        ctx["slc_dir"] = acq.slc_dir
-        res = snap_run([str(x) for x in Path(acq.slc_dir).glob("*.zip")], lat, lon,
-                       out_dir=str(out), out_h5=str(out / "track.h5"),
-                       era5_master=True)          # ⑤ ERA5 master·씬 소거 적용
-        if res.weather is not None and hasattr(res.weather, "selected_master"):
-            rep.add(StageResult("⑤ERA5master(실행)", "done",
-                                f"master {res.weather.selected_master} · "
-                                f"악천후 소거 {getattr(res.weather, 'n_excluded', 0)}장"))
-        _bl = getattr(res, "rejected_slaves", [])
-        _blt = f" · baseline/도플러 사전제거 {len(_bl)}장" if _bl else ""
-        rep.add(StageResult("⑧InSAR처리(SNAP)", "done",
-                            f"{res.reference} · 쌍 {sum(p.ok for p in res.pairs)}/"
-                            f"{len(res.pairs)}{_blt}"))
-        ctx["snap"] = res.as_dict()
+        eres = pe.run(engine, lat, lon, out, out / "track.h5", token=token,
+                      count=snap_count, source=engine_source)
     except Exception as e:  # noqa: BLE001
-        rep.add(StageResult("⑧InSAR처리(SNAP)", "error", str(e)[:100]))
+        rep.add(StageResult(_label, "error", str(e)[:120]))
         # 뒤 단계를 조용히 빠뜨리면 "왜 트윈이 없지?" 가 된다 — 사유와 함께 명시 보고.
         for _s in ("⑨PS/DS(교량30m)", "⑫PINN→FRAM", "⑬IFC디지털트윈", "⑭BMAP등록"):
             rep.add(StageResult(_s, "skip", "⑧ InSAR 처리 실패 → 선행 산출물 없음"))
         return
 
-    # heading(단일 궤도 기록용) — 기준 SLC 에서
-    ref_scene = next((str(s) for s in Path(acq.slc_dir).glob("*.zip")
-                      if scene_date(str(s)) == res.reference), None)
-    hd = platform_heading(ref_scene, res.burst.subswath) if ref_scene else None
+    # ⑧ 성공 후 기록 — **엔진 실행과 같은 try 에 두면 안 된다**. 보고용 부기가 던진
+    # 예외로 이미 done 인 ⑧이 error 로 뒤집히고 하류가 통째로 skip 되기 때문이다.
+    res = eres.native                              # SNAP 만 쌍 정보를 준다(⑨ 입력)
+    ctx["insar_engine"] = {"name": eres.engine, "track_h5": eres.track_h5,
+                           "n_points": eres.n_points, "detail": eres.detail}
+    if eres.extra.get("slc_dir"):
+        ctx["slc_dir"] = eres.extra["slc_dir"]
+    if res is not None and getattr(res, "weather", None) is not None \
+            and hasattr(res.weather, "selected_master"):
+        rep.add(StageResult("⑤ERA5master(실행)", "done",
+                            f"master {res.weather.selected_master} · "
+                            f"악천후 소거 {getattr(res.weather, 'n_excluded', 0)}장"))
+    _bl = getattr(res, "rejected_slaves", []) if res is not None else []
+    _blt = f" · baseline/도플러 사전제거 {len(_bl)}장" if _bl else ""
+    rep.add(StageResult(_label, "done", f"{eres.detail}{_blt} → {Path(eres.track_h5).name}"))
+    if res is not None and hasattr(res, "as_dict"):
+        ctx["snap"] = res.as_dict()
 
-    # ⑨ 교량 데크 30m PS/DS
+    # heading(단일 궤도 기록용) — 기준 SLC 에서. SNAP 이 아니면 SLC·burst 정보가 없다.
+    deck_ps_ds = bool(getattr(eres, "supports_deck_ps_ds", False)) and res is not None
+    hd = None
+    if deck_ps_ds and ctx.get("slc_dir"):
+        ref_scene = next((str(s) for s in Path(ctx["slc_dir"]).glob("*.zip")
+                          if scene_date(str(s)) == res.reference), None)
+        hd = platform_heading(ref_scene, res.burst.subswath) if ref_scene else None
+
+    # ⑨ 교량 데크 30m PS/DS — 쌍별 GeoTIFF 가 필요해 **쌍을 주는 엔진 전용**이다.
+    # 타 엔진은 이미 시계열까지 만든 Track H5 를 주므로 그것을 그대로 하류로 넘긴다.
     geometry = ctx.get("bridge", {}).get("geometry")
     deck_h5 = str(out / "track_deck.h5")
-    if geometry:
+    if not deck_ps_ds:
+        rep.add(StageResult("⑨PS/DS(교량30m)", "skip",
+                            f"{eres.engine} 엔진은 Track H5 를 직접 산출 — 데크 PS/DS 재추출 불필요"))
+        deck_h5 = eres.track_h5
+    elif geometry:
         try:
             amps = None
             if do_adi:                              # 진폭쌍 → ADI(~20분 추가)
@@ -296,10 +350,10 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
                                 f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}{_rft}{_rjt}"))
         except Exception as e:  # noqa: BLE001
             rep.add(StageResult("⑨PS/DS(교량30m)", "error", str(e)[:90]))
-            deck_h5 = res.track_h5
+            deck_h5 = eres.track_h5
     else:
         rep.add(StageResult("⑨PS/DS(교량30m)", "partial", "교량 geometry 없음 → 반경 track 사용"))
-        deck_h5 = res.track_h5
+        deck_h5 = eres.track_h5
 
     # ⑫ import → 교량맞춤 PINN → FRAM
     try:

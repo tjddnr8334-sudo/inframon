@@ -246,7 +246,11 @@ def bridge_profile_from_record(record: dict) -> BridgeProfile:
         load_per_len=inf.get("load_per_len", 1.0e4),
         boundary=inf.get("boundary", "simply_supported"),
         source="data_go_kr:전국교량표준데이터",
+        # ⚠️ max_span_m 은 **실측이 아니다** — 표준데이터(15081953)에 경간 컬럼 자체가 없어
+        #    연장×형식별 비율로 추정한 값이다. 출처를 같이 실어 하류가 실측으로 오인하지
+        #    않게 한다(장대교는 연장에 접속교가 포함돼 추정 오차가 수 배로 커진다).
         extra={"osm_structure": str(struct_raw), "lanes": lanes, "max_span_m": span,
+               "max_span_source": "estimate",
                "facility_kind": _pick(record, f["facility_kind"]),
                "completion": _pick(record, f["completion"]),
                "grade": normalize_grade(_pick(record, f["grade"])),   # 공식 종별등급

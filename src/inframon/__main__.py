@@ -108,6 +108,10 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--check-target", default=None, metavar="LAT,LON",
+                   help="--check-track 의 대상 교량 좌표. 주면 '이 트랙이 그 교량을 실제로 "
+                        "담고 있는가'(반경 30m 내 점수·이격)까지 검사한다 — 광역 필드가 "
+                        "교량 트랙 행세를 하던 것을 막는다.")
     p.add_argument("--insar-conditions", default=None, metavar="RECIPE_DIR",
                    help="교량 InSAR 신뢰성 조건(기하·시간샘플링·산란체·처리)을 레시피로 평가 후 종료. "
                         "SARvey 교량 맞춤의 전제조건 게이팅(--check-track 의 입력측 짝).")
@@ -187,6 +191,15 @@ def main() -> None:
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
+    p.add_argument("--pipeline-engine", default="snap",
+                   choices=("snap", "hyp3", "sarvey", "miaplpy", "mintpy", "stamps"),
+                   help="--pipeline ⑧ InSAR 처리 엔진(기본 snap). snap·hyp3 는 좌표만으로 "
+                        "취득·처리까지 하고, sarvey·miaplpy·mintpy·stamps 는 이미 처리한 "
+                        "산출물을 --pipeline-source 로 지목해 Track H5 로 변환한다.")
+    p.add_argument("--pipeline-source", default=None, metavar="PATH",
+                   help="--pipeline-engine 이 가져오기형(sarvey/miaplpy/mintpy/stamps)일 때 "
+                        "도구 산출물 경로(SARvey ts.h5 · MiaplPy timeseries.h5 · "
+                        "MintPy geo_timeseries.h5 · StaMPS .mat).")
     p.add_argument("--pipeline-ifc", default=None, metavar="IFC",
                    help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
                         "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
@@ -1020,7 +1033,9 @@ def main() -> None:
                                   earthdata_token=args.earthdata_token, do_adi=args.pipeline_adi,
                                   ifc=args.pipeline_ifc, bim_elements=args.gltf_elements,
                                   registry=args.registry, bridge_id=args.bridge_id,
-                                  twin_value=args.gltf_value)
+                                  twin_value=args.gltf_value,
+                                  engine=args.pipeline_engine,
+                                  engine_source=args.pipeline_source)
         print(rep.summary())
         return
 
@@ -1189,7 +1204,11 @@ def main() -> None:
     if args.check_track:
         from .insar.track_preflight import preflight_track_h5
 
-        rep = preflight_track_h5(args.check_track)
+        _tgt = None
+        if args.check_target:
+            _la, _lo = (float(v) for v in str(args.check_target).split(","))
+            _tgt = (_la, _lo)
+        rep = preflight_track_h5(args.check_track, target=_tgt)
         print("=" * 56)
         print("  Track HDF5 투입 사전검증 (preflight)")
         print("=" * 56)
@@ -1202,6 +1221,15 @@ def main() -> None:
             print(f"  LOS 유한 비율   : {rep.los_finite_frac * 100:.1f}%")
         print(f"  고도(z)/CRS     : {'있음' if rep.has_height else '없음'} / {rep.crs or '-'}"
               + ("  (경위도로 보임)" if rep.looks_geographic else ""))
+        if rep.extent_km:
+            print(f"  점군 공간범위   : {rep.extent_km[0]:.2f} × {rep.extent_km[1]:.2f} km")
+        if rep.los_abs_max is not None:
+            print(f"  |LOS| 최대      : {rep.los_abs_max:.2f} mm"
+                  + ("  ⚠️ λ/4 에 갇힘(래핑 의심)" if rep.looks_wrapped else ""))
+        if rep.target is not None and rep.n_within_deck is not None:
+            print(f"  대상 교량 포함  : 30m내 {rep.n_within_deck}점 · 100m내 "
+                  f"{rep.n_within_near}점 · 최근접 {rep.dist_min_m:.0f}m · "
+                  f"이격중앙 {rep.dist_median_m:.0f}m")
         if rep.errors:
             print("  ❌ 차단 오류")
             for e in rep.errors:

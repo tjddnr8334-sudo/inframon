@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # 종류 세분(bridge_profile 형식에 추가)
 BOX_GIRDER = "box_girder"       # PSC box 형교
@@ -37,13 +37,22 @@ class BridgeMeta:
     relief_m: float | None      # 주변 표고 기복(산지 판정 근거)
     lat: float
     lon: float
+    source: str = "osm"          # osm(추정) | csv(전국교량표준데이터 실측이 하나라도 있음)
+    # 항목별 출처: csv(실측) | estimate(식으로 추정) | osm(태그) | unknown.
+    # 종합 source 하나로는 "연장은 실측인데 경간은 추정" 을 표현할 수 없다.
+    source_by_field: dict = field(default_factory=dict)
+
+    def source_of(self, field_name: str) -> str:
+        """항목 출처 — 기록이 없으면 종합 source 로 물러난다(구 호출부 호환)."""
+        return self.source_by_field.get(field_name, self.source)
 
     def as_dict(self) -> dict:
         return {"grade": self.grade, "structure": self.structure,
                 "structure_ko": self.structure_ko, "width_m": self.width_m,
                 "length_m": self.length_m, "max_span_m": self.max_span_m,
                 "terrain": self.terrain, "relief_m": self.relief_m,
-                "latlon": [self.lat, self.lon]}
+                "latlon": [self.lat, self.lon], "source": self.source,
+                "source_by_field": dict(self.source_by_field)}
 
 
 def classify_structure(tags: dict, base_class: str) -> str:
@@ -155,14 +164,56 @@ def terrain_class(lat: float, lon: float, water_context: str, *,
 
 def build_bridge_meta(lat: float, lon: float, tags: dict, base_class: str,
                       length_m: float | None, water_context: str, *,
-                      n_spans: int | None = None, elev_fn=_fetch_elevation) -> BridgeMeta:
-    """교량 확장 메타 종합(⑪)."""
+                      n_spans: int | None = None, elev_fn=_fetch_elevation,
+                      official=None) -> BridgeMeta:
+    """교량 확장 메타 종합(⑪).
+
+    `official`(전국교량표준데이터 BridgeProfile)이 있으면 **실측 제원을 추정보다
+    우선**한다 — OSM 태그만 보면 폭·경간이 흔히 비어 "폭미상·경간 None" 이 되고,
+    그 상태로 PINN 에 들어가면 단면 가정이 통째로 부실해진다. 등급도 공식값을 쓴다.
+    """
     structure = classify_structure(tags, base_class)
-    span = max_span_estimate(structure, length_m, n_spans)
-    grade = bridge_grade(length_m, span)
     width = bridge_width_m(tags)
+    span = grade = None
+    # 출처는 **항목 단위**로 기록한다 — 표준데이터에 실측이 있는 항목(연장·폭·등급)과
+    # 없는 항목(경간: CSV 에 컬럼이 없어 연장×비율 추정)이 섞여 있는데, 하나라도 CSV 면
+    # 전부 '실측' 이라고 뭉뚱그리면 추정값이 실측으로 둔갑한다(광안대교 경간 5565m).
+    by_field: dict[str, str] = {}
+    if official is not None:
+        ex = getattr(official, "extra", None) or {}
+        if getattr(official, "length_m", None):
+            length_m = float(official.length_m)
+            by_field["length_m"] = "csv"
+        if getattr(official, "width_m", None):
+            width = float(official.width_m)
+            by_field["width_m"] = "csv"
+        if ex.get("max_span_m"):
+            span = float(ex["max_span_m"])
+            # CSV 가 실은 추정치를 실어 보낸 경우(현재 전국교량표준데이터가 그렇다)
+            by_field["max_span_m"] = ("csv" if ex.get("max_span_source") == "csv"
+                                      else "estimate")
+        if ex.get("grade"):
+            grade = str(ex["grade"])
+            by_field["grade"] = "csv"
+        if getattr(official, "bridge_type", None) and base_class in (None, "", "girder"):
+            structure = classify_structure(tags, str(official.bridge_type))
+            by_field["structure"] = "csv"
+    if span is None:
+        span = max_span_estimate(structure, length_m, n_spans)
+        by_field["max_span_m"] = "estimate"
+    if grade is None:
+        grade = bridge_grade(length_m, span)
+        by_field["grade"] = "estimate"
+    by_field.setdefault("length_m", "osm" if length_m is not None else "unknown")
+    by_field.setdefault("width_m", "osm" if width is not None else "unknown")
+    by_field.setdefault("structure", "osm")
+    # 종합 출처는 "CSV 실측이 하나라도 들어왔는가" — 항목별 진실은 source_by_field 가 갖는다.
+    src = "csv" if "csv" in by_field.values() else "osm"
     terrain, relief = terrain_class(lat, lon, water_context, elev_fn=elev_fn)
-    return BridgeMeta(grade=grade, structure=structure,
+    meta = BridgeMeta(grade=grade, structure=structure,
                       structure_ko=_STRUCTURE_KO.get(structure, structure),
                       width_m=width, length_m=length_m, max_span_m=span,
                       terrain=terrain, relief_m=relief, lat=lat, lon=lon)
+    meta.source = src
+    meta.source_by_field = by_field
+    return meta
