@@ -50,6 +50,10 @@ class EngineResult:
     detail: str = ""
     native: object | None = None      # 엔진 고유 결과(SNAP 은 SnapRunResult → ⑨에 쓰임)
     extra: dict = field(default_factory=dict)
+    # ⑨ 데크 PS/DS 재추출이 가능한가 = **쌍별 GeoTIFF(pairs·reference·burst)를 주는가**.
+    # native 가 None 인지로 판정하면 안 된다 — hyp3 도 native 를 주지만 쌍 정보가 없어
+    # ⑨가 res.pairs 를 만지는 순간 AttributeError 로 ⑧이 사후에 실패로 뒤집힌다.
+    supports_deck_ps_ds: bool = False
 
 
 _REGISTRY: dict[str, Callable[..., EngineResult]] = {}
@@ -85,6 +89,16 @@ def describe(name: str) -> str:
 def needs_source(name: str) -> bool:
     """가져오기형이면 True — 사용자가 도구 산출물을 지목해야 한다."""
     return (name or "").lower() in IMPORT_ENGINES
+
+
+# ⑨(데크 30m PS/DS 재추출)는 쌍별 GeoTIFF 를 주는 엔진에서만 가능하다.
+# plan 문구와 full 실행 분기가 **같은 사실**을 보게 하려고 여기 한 곳에 둔다.
+DECK_PS_DS_ENGINES = ("snap",)
+
+
+def supports_deck_ps_ds(name: str) -> bool:
+    """⑨ 데크 PS/DS 재추출이 가능한 엔진인가(쌍 정보를 주는가)."""
+    return (name or "").lower() in DECK_PS_DS_ENGINES
 
 
 # ── 처리형 ────────────────────────────────────────────────────────────────
@@ -163,6 +177,9 @@ for _n in IMPORT_ENGINES:
 def run(name: str, lat: float, lon: float, out_dir, out_h5, **opts) -> EngineResult:
     """엔진 이름으로 ⑧을 실행한다. 산출 Track H5 는 계약(track_preflight)을 만족해야 한다."""
     res = resolve(name)(lat, lon, out_dir, out_h5, **opts)
+    # 엔진이 스스로 신고하게 두지 않고 여기서 한 번에 세운다 — plan 문구(⑨)와 full 분기가
+    # 같은 사실(DECK_PS_DS_ENGINES)을 보게 하기 위해서다.
+    res.supports_deck_ps_ds = supports_deck_ps_ds(res.engine or name)
     if not res.track_h5 or not Path(res.track_h5).exists():
         raise EngineError(f"{name} 엔진이 Track H5 를 만들지 못했습니다: {res.track_h5}")
     return res

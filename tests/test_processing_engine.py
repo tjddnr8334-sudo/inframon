@@ -177,3 +177,43 @@ def test_plan_warns_import_engine_without_source(tmp_path, monkeypatch):
     rep = pb.run_bridge_pipeline(37.0, 127.0, out_dir=tmp_path, mode="plan", engine="sarvey")
     d = next(s.detail for s in rep.stages if s.step == "⑧InSAR처리(sarvey)")
     assert "source 필요" in d
+
+
+# ── 회귀: 실제 Hyp3RunResult 로 full 을 돌려도 ⑧이 뒤집히지 않는가 ──
+# 이전엔 필드만 흉내 낸 목으로 검사해서, 실제 클래스에 as_dict·pairs 가 없다는 사실이
+# 테스트를 통과했다. ⑧은 done 을 낸 뒤 보고용 부기에서 AttributeError 로 error 로
+# 뒤집히고 ⑨⑫⑬⑭ 가 전부 skip 됐다. 목이 아니라 **실물**로 고정한다.
+def test_hyp3_full_does_not_flip_stage8_to_error(tmp_path, monkeypatch):
+    import inframon.pipeline_bridge as pb
+    from inframon.insar.hyp3_backend import Hyp3RunResult
+
+    h5 = tmp_path / "hyp3_track.h5"
+    h5.write_bytes(b"x")
+    native = Hyp3RunResult(track_h5=str(h5), n_points=42, ref_date="20240119",
+                           epochs=["20240119", "20240131"], n_ok=3, n_fail=0,
+                           burst_id="136231_IW2")
+    monkeypatch.setattr(pe, "run", lambda *a, **k: pe.EngineResult(
+        engine="hyp3", track_h5=str(h5), n_points=42, detail="쌍 3", native=native,
+        supports_deck_ps_ds=pe.supports_deck_ps_ds("hyp3")))
+    monkeypatch.setattr(pb, "_twin_and_register", lambda *a, **k: None)
+
+    rep = pb.PipelineReport(lat=37.0, lon=127.0)
+    pb._run_heavy(rep, {"bridge": {"geometry": [(37.0, 127.0), (37.001, 127.001)]}},
+                  37.0, 127.0, tmp_path, None, 8, False,
+                  ifc=None, bim_elements=None, registry=None, bridge_id="t",
+                  twin_value=None, engine="hyp3", engine_source=None)
+
+    s8 = [s for s in rep.stages if s.step.startswith("⑧")]
+    assert [s.status for s in s8] == ["done"], [(s.step, s.status, s.detail) for s in s8]
+    skipped = [s for s in rep.stages if s.status == "skip" and "선행 산출물 없음" in s.detail]
+    assert not skipped, [s.step for s in skipped]
+    # ⑨는 '쌍이 없어 재추출 불필요' 로 정상 skip 하고 track_h5 를 그대로 하류로 넘긴다.
+    s9 = next(s for s in rep.stages if s.step.startswith("⑨"))
+    assert s9.status == "skip" and "재추출 불필요" in s9.detail
+
+
+def test_deck_ps_ds_capability_is_single_source_of_truth():
+    """⑨ 가능 여부는 엔진 이름 한 곳에서만 판정한다(plan 문구와 full 분기가 갈리지 않게)."""
+    assert pe.supports_deck_ps_ds("snap")
+    for name in ("hyp3", *pe.IMPORT_ENGINES):
+        assert not pe.supports_deck_ps_ds(name), name
