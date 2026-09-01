@@ -108,6 +108,12 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--audit-artifacts", nargs="*", default=None, metavar="PROJECT_H5",
+                   help="산출물(project.h5)이 보고에 쓸 수 있는 것인지 감사해 표로 출력 후 "
+                        "종료. 경로를 생략하면 data/ 아래를 훑는다. --audit-out 으로 "
+                        "마크다운 저장. 하나라도 '보고 불가'면 종료코드 1.")
+    p.add_argument("--audit-out", default=None, metavar="MD",
+                   help="--audit-artifacts 결과를 마크다운 파일로 저장")
     p.add_argument("--check-target", default=None, metavar="LAT,LON",
                    help="--check-track 의 대상 교량 좌표. 주면 '이 트랙이 그 교량을 실제로 "
                         "담고 있는가'(반경 30m 내 점수·이격)까지 검사한다 — 광역 필드가 "
@@ -1200,6 +1206,26 @@ def main() -> None:
                 print(f"                   {_gr['advice']}")
         print("=" * 56)
         return
+
+    if args.audit_artifacts is not None:
+        import sys as _sys
+        from pathlib import Path as _P
+
+        from .audit import audit_many, format_report
+
+        paths = [_P(x) for x in args.audit_artifacts]
+        if not paths:                      # 경로 생략 → data/ 아래 project.h5 전부
+            paths = sorted(_P("data").rglob("*project*.h5"))
+        rows = audit_many(paths)
+        report = format_report(rows)
+        print("=" * 60)
+        print("  산출물 감사 — 보고에 쓸 수 있는가")
+        print("=" * 60)
+        print(report)
+        if args.audit_out:
+            _P(args.audit_out).write_text(report + "\n", encoding="utf-8")
+            print(f"\n  저장: {args.audit_out}")
+        _sys.exit(1 if any(r.verdict == "보고 불가" for r in rows) else 0)
 
     if args.check_track:
         from .insar.track_preflight import preflight_track_h5
