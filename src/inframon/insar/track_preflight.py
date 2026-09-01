@@ -63,6 +63,7 @@ class TrackPreflight:
     date_last: str | None = None
     los_abs_max: float | None = None
     looks_wrapped: bool = False
+    unwrapped_declared: bool | None = None       # 파일이 스스로 적어둔 언래핑 여부
     target: tuple[float, float] | None = None
     n_within_deck: int | None = None              # target 반경 30m 내 점수
     n_within_near: int | None = None              # target 반경 100m 내 점수
@@ -179,6 +180,15 @@ def preflight_track_h5(path: str | Path, *,
                     warnings.append(f"los_mm 의 {(1 - finite) * 100:.1f}% 가 NaN/Inf 입니다")
                 _w = _wrap_check(los, wavelength_mm=info.get("wavelength_mm"))
                 info.update(_w)
+                # 파일이 스스로 "언래핑 안 했다" 고 적어두면 통계 판정보다 그 사실이 우선이다
+                # (변위가 작아 통계로는 구분이 안 되는 구간에서도 정직하게 차단된다).
+                _declared = f.attrs.get("unwrapped")
+                if _declared is not None:
+                    info["unwrapped_declared"] = bool(np.asarray(_declared).item())
+                    if not info["unwrapped_declared"]:
+                        info["looks_wrapped"] = True
+                        _w["looks_wrapped"] = True
+                        _w.setdefault("wrap_limit_mm", LOS_WRAP_LIMIT_MM)
                 if _w.get("looks_wrapped"):
                     errors.append(
                         f"LOS 가 ±λ/4({_w['wrap_limit_mm']:.2f}mm) 안에 갇혀 균일하게 퍼져 "
@@ -254,6 +264,7 @@ def preflight_track_h5(path: str | Path, *,
         date_last=info.get("date_last"),
         los_abs_max=info.get("los_abs_max"),
         looks_wrapped=bool(info.get("looks_wrapped", False)),
+        unwrapped_declared=info.get("unwrapped_declared"),
         target=info.get("target"),
         n_within_deck=info.get("n_within_deck"),
         n_within_near=info.get("n_within_near"),

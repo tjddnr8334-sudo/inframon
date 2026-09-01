@@ -353,17 +353,40 @@ def _default_graph_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "scripts" / "snap"
 
 
+def _band_indices(tif: str | Path) -> dict:
+    """산출 GeoTIFF 의 (phase, coherence, incidence) 밴드 번호.
+
+    언래핑 레인(`snap_unwrap.label_bands`)이 밴드에 이름을 새겨두면 그것을 쓰고,
+    이름이 없는 기존 래핑 산출은 예전 규약(1=위상, 2=coherence, 3=입사각)을 따른다.
+    """
+    import rasterio
+
+    with rasterio.open(tif) as ds:
+        names = list(ds.descriptions or ())
+        count = ds.count
+    idx = {r: (names.index(r) + 1 if r in names else None)
+           for r in ("phase", "coherence", "incidence")}
+    if idx["phase"] and idx["coherence"]:
+        return idx
+    return {"phase": 1, "coherence": 2, "incidence": 3 if count >= 3 else None}
+
+
 # ── 지오코딩 결과 → Track H5 계약 ────────────────────────────────────────
 def build_track_h5(
     pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
     *, lat: float, lon: float, coh_min: float = 0.3, radius_km: float = 3.0,
     heading: float | None = None, max_points: int = 20000,
+    unwrapped: bool = False,
 ) -> int:
     """스타 네트워크 지오코딩 산출(각 [phase, coh, incidence]) → inframon Track H5.
 
     각 쌍 tif 의 band1=phase(rad)·band2=coherence·band3=incidence(deg). 교량 반경 내
     coh≥coh_min 점을 골라 los_mm = −λ/4π·phase·1000, 기준일 변위=0 으로 시계열 구성.
     점이 부족하면 반경을 2배씩 넓혀 재시도. 반환: 점 수 N.
+
+    `unwrapped` 는 입력 위상이 **언래핑됐는지**를 그대로 파일에 적는다(추정하지 않는다).
+    래핑 위상이면 LOS 가 ±λ/4 에 갇혀 물리적 의미가 없고, preflight 가 그 사실로
+    산출물을 차단한다 — 그러려면 "무엇으로 만들었는지"가 파일에 남아 있어야 한다.
     """
     import h5py
     import numpy as np
@@ -373,11 +396,15 @@ def build_track_h5(
     if not ok_pairs:
         raise SnapError("성공한 간섭도 쌍이 없어 Track 을 만들 수 없습니다.")
 
-    # 기준 격자 = 첫 쌍
+    # 기준 격자 = 첫 쌍. 밴드 번호는 **이름이 있으면 이름으로** 찾는다 — 언래핑 레인은
+    # TC 산출이 [coh, 위상, 입사각] 순서라, 번호를 외워 쓰면 위상과 coherence 가 뒤바뀐다.
+    bidx = _band_indices(ok_pairs[0].product)
     with rasterio.open(ok_pairs[0].product) as ds0:
-        ph0 = ds0.read(1).astype(np.float64)
-        coh0 = ds0.read(2).astype(np.float64)
-        inc0 = ds0.read(3).astype(np.float64) if ds0.count >= 3 else np.full(ph0.shape, np.nan)
+        ph0 = ds0.read(bidx["phase"]).astype(np.float64)
+        coh0 = ds0.read(bidx["coherence"]).astype(np.float64)
+        inc0 = (ds0.read(bidx["incidence"]).astype(np.float64)
+                if bidx["incidence"] and ds0.count >= bidx["incidence"]
+                else np.full(ph0.shape, np.nan))
         H, W = ph0.shape
         rows, cols = np.mgrid[0:H, 0:W]
         xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
@@ -410,15 +437,17 @@ def build_track_h5(
     dates = [ref_date]
     for k, p in enumerate(ok_pairs, start=1):
         dates.append(p.sec_date)
+        pb = _band_indices(p.product)
         with rasterio.open(p.product) as ds:
-            phk = ds.read(1).astype(np.float64)
-            cohk = ds.read(2).astype(np.float64)
+            phk = ds.read(pb["phase"]).astype(np.float64)
+            cohk = ds.read(pb["coherence"]).astype(np.float64)
         if phk.shape == (H, W):                 # 동일 격자 → 직접 인덱스
             los[:, k] = phk.ravel()[idx] * scale
             coh_acc += cohk.ravel()[idx]
         else:                                    # 다르면 좌표 샘플
             with rasterio.open(p.product) as ds:
-                samp = np.array([v[0] for v in ds.sample(zip(pt_lon, pt_lat), indexes=1)],
+                samp = np.array([v[0] for v in ds.sample(zip(pt_lon, pt_lat),
+                                                         indexes=pb["phase"])],
                                 dtype=np.float64)
             los[:, k] = samp * scale
     coh_mean = (coh_acc / M).astype(np.float32)
@@ -435,8 +464,11 @@ def build_track_h5(
             f.create_dataset("incidenceAngle", data=incidence)
         if heading is not None and math.isfinite(heading):
             f.attrs["HEADING"] = float(heading)
-        f.attrs["source"] = "SNAP(Windows) star-network wrapped-phase → LOS"
+        f.attrs["source"] = ("SNAP(Windows) star-network "
+                             + ("snaphu-unwrapped" if unwrapped else "wrapped-phase")
+                             + " → LOS")
         f.attrs["RADAR_WAVELENGTH"] = WAVELENGTH_M
+        f.attrs["unwrapped"] = bool(unwrapped)
     return N
 
 
