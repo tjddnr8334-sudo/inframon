@@ -36,6 +36,29 @@ class PipelineReport:
     def add(self, r: StageResult) -> None:
         self.stages.append(r)
 
+    def write_json(self, path: str | Path, *, args: dict | None = None) -> str:
+        """실행 기록을 <out>/pipeline_report.json 에 남긴다(성공·실패 무관).
+
+        기존에는 산출물 옆에 '무엇을 어떤 인자로 돌려서 나온 것인지' 가 남지 않아,
+        나중에 그 project.h5 가 어느 교량·어느 엔진·어느 커밋 산출인지 재구성할 수
+        없었다(data/chyg 옆에는 실패 로그만 있었다). 이 파일이 그 공백을 메운다.
+        """
+        import json
+        rec = {
+            "schema": "inframon.pipeline_report/1",
+            "target": {"lat": self.lat, "lon": self.lon},
+            "args": args or {},
+            "git_commit": _git_commit(),
+            "inframon_version": _version(),
+            "stages": [{"step": s.step, "status": s.status, "detail": s.detail}
+                       for s in self.stages],
+            "context": _jsonable(self.context),
+        }
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(path)
+
     def summary(self) -> str:
         mark = {"done": "✅", "partial": "◐", "stub": "○", "planned": "▷",
                 "skip": "–", "error": "✗"}
@@ -44,6 +67,42 @@ class PipelineReport:
             lines.append(f"  {mark.get(s.status, '?')} {s.step:<22} {s.detail}")
         lines.append("=" * 60)
         return "\n".join(lines)
+
+
+def _git_commit() -> str | None:
+    """산출물이 어느 코드에서 나왔는지 — 재현의 첫 단추."""
+    import subprocess
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             cwd=str(Path(__file__).resolve().parents[2]),
+                             capture_output=True, text=True, errors="replace", timeout=5)
+        return out.stdout.strip() or None if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None                       # git 없는 배포본에서도 파이프라인은 돈다
+
+
+def _version() -> str | None:
+    try:
+        from importlib.metadata import version
+        return version("inframon")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _jsonable(obj):
+    """JSON 으로 못 쓰는 값(ndarray·Path 등)을 문자열로 낮춰 기록이 통째로 실패하지 않게."""
+    import numpy as np
+    if isinstance(obj, dict):
+        return {str(k): _jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_jsonable(v) for v in obj]
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist() if obj.size <= 64 else f"<ndarray {obj.shape} {obj.dtype}>"
+    return str(obj)
 
 
 def run_bridge_pipeline(
@@ -190,14 +249,29 @@ def run_bridge_pipeline(
         ("⑬IFC디지털트윈", _twin_how),
         ("⑭BMAP등록", "bridge_registry.json 등록 → --serve-api 서빙"),
     ]
-    if mode == "full":
-        _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
-                   ifc=ifc, bim_elements=bim_elements, registry=registry,
-                   bridge_id=bridge_id, twin_value=twin_value,
-                   engine=engine, engine_source=engine_source)
-    else:
-        for step, how in heavy:
-            rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
+    try:
+        if mode == "full":
+            _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
+                       ifc=ifc, bim_elements=bim_elements, registry=registry,
+                       bridge_id=bridge_id, twin_value=twin_value,
+                       engine=engine, engine_source=engine_source)
+        else:
+            for step, how in heavy:
+                rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
+    finally:
+        # 실패한 실행일수록 기록이 필요하다 — 성공·실패 무관하게 남긴다.
+        try:
+            rep.write_json(out / "pipeline_report.json", args={
+                "mode": mode, "engine": engine,
+                "engine_source": str(engine_source) if engine_source else None,
+                "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
+                "ifc": str(ifc) if ifc else None,
+                "bim_elements": str(bim_elements) if bim_elements else None,
+                "registry": str(registry) if registry else None,
+                "bridge_id": bridge_id, "twin_value": twin_value,
+            })
+        except OSError as e:  # 기록 실패가 파이프라인을 죽이면 안 된다
+            rep.add(StageResult("실행기록", "error", f"pipeline_report.json 기록 실패: {e}"))
 
     return rep
 
@@ -286,8 +360,11 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
                                      platform_heading, scene_date)
     _label = f"⑧InSAR처리({engine})"
     try:
+        # ①에서 확인된 연장을 넘겨 가져오기형이 교량 범위로 자를 수 있게 한다 —
+        # 없으면 광역 PSI 필드가 그대로 하류(PINN·CRI)로 흘러 지반을 교량으로 계산한다.
+        _blen = (ctx.get("bridge") or {}).get("length_m")
         eres = pe.run(engine, lat, lon, out, out / "track.h5", token=token,
-                      count=snap_count, source=engine_source)
+                      count=snap_count, source=engine_source, bridge_length_m=_blen)
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult(_label, "error", str(e)[:120]))
         # 뒤 단계를 조용히 빠뜨리면 "왜 트윈이 없지?" 가 된다 — 사유와 함께 명시 보고.
@@ -326,8 +403,10 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
     geometry = ctx.get("bridge", {}).get("geometry")
     deck_h5 = str(out / "track_deck.h5")
     if not deck_ps_ds:
+        _bb = (eres.extra or {}).get("deck_bbox")
         rep.add(StageResult("⑨PS/DS(교량30m)", "skip",
-                            f"{eres.engine} 엔진은 Track H5 를 직접 산출 — 데크 PS/DS 재추출 불필요"))
+                            f"{eres.engine} 엔진이 시계열까지 산출 — 데크 범위는 ⑧에서 bbox 로 제한"
+                            + ("" if _bb else " (마스킹 없음: 광역 필드 주의)")))
         deck_h5 = eres.track_h5
     elif geometry:
         try:
