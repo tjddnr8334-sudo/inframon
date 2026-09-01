@@ -1436,6 +1436,13 @@ def main() -> None:
 
         status = check_toolchain()
         print(format_report(status))
+        # SNAP 레인(Windows)도 언래핑에는 snaphu 가 필요하다 — 없으면 래핑 위상까지만
+        # 나오고, 그 산출물은 preflight 가 차단한다. 사전에 알려야 헛돌지 않는다.
+        from .insar.snap_unwrap import install_hint, is_available
+        ok, msg = is_available()
+        print(f"  {'✅' if ok else '❌'} 위상 언래핑(SNAP 레인): {msg}")
+        if not ok:
+            print("     " + install_hint().splitlines()[1].strip())
         if not status["ready"]:
             print("  → 지금 설치하려면: python -m inframon --insar-tools-install")
             _sys.exit(1)

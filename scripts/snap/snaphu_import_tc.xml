@@ -1,0 +1,66 @@
+<graph id="Graph">
+  <version>1.0</version>
+
+  <!-- snaphu 가 푼 위상을 되받아 지오코딩까지. 두 입력이 필요하다:
+       ① SnaphuExport 가 낸 래핑 산출(.dim) — 메타·coherence
+       ② snaphu 가 낸 언래핑 위상(UnwPhase*.hdr)
+       SnaphuImport 가 둘을 합치고, BandMaths 로 언래핑 위상·coherence 만 남긴 뒤
+       Terrain-Correction 으로 지오코딩한다(coreg_ifg_tc.xml 과 같은 격자 규약). -->
+
+  <node id="Read-wrapped">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${wrappedDim}</file></parameters>
+  </node>
+  <node id="Read-unwrapped">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${unwrappedHdr}</file></parameters>
+  </node>
+
+  <node id="SnaphuImport">
+    <operator>SnaphuImport</operator>
+    <sources>
+      <sourceProduct refid="Read-wrapped"/>
+      <sourceProduct.1 refid="Read-unwrapped"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <!-- false 로 둬야 coherence 가 살아남는다. true 면 산출이 [언래핑위상, 입사각]
+           뿐이라 하류(build_track_h5)가 점을 고를 coherence 를 잃는다(실행으로 확인). -->
+      <doNotKeepWrapped>false</doNotKeepWrapped>
+    </parameters>
+  </node>
+
+  <!-- 밴드 이름을 BandMaths 로 **지정하지 않는다**: SnaphuImport 가 붙이는 이름
+       (Unw_Phase_... 계열)은 SNAP 버전마다 달라 추측하면 "Undefined symbol" 로 죽는다
+       (실행으로 확인). 대신 정규식으로 "언래핑 위상 + coherence" 만 고른다 — 순서는
+       band1=위상, band2=coherence, band3=입사각(TC 가 덧붙임)로 하류 규약과 맞는다. -->
+  <node id="PickBands">
+    <operator>BandSelect</operator>
+    <sources><sourceProduct refid="SnaphuImport"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <bandNamePattern>(Unw|unw).*|coh.*</bandNamePattern>
+    </parameters>
+  </node>
+
+  <node id="TerrainCorrection">
+    <operator>Terrain-Correction</operator>
+    <sources><sourceProduct refid="PickBands"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <demResamplingMethod>BILINEAR_INTERPOLATION</demResamplingMethod>
+      <imgResamplingMethod>NEAREST_NEIGHBOUR</imgResamplingMethod>
+      <pixelSpacingInMeter>14.0</pixelSpacingInMeter>
+      <mapProjection>WGS84(DD)</mapProjection>
+      <saveIncidenceAngleFromEllipsoid>true</saveIncidenceAngleFromEllipsoid>
+      <nodataValueAtSea>false</nodataValueAtSea>
+    </parameters>
+  </node>
+
+  <node id="Write">
+    <operator>Write</operator>
+    <sources><sourceProduct refid="TerrainCorrection"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${outFile}</file>
+      <formatName>GeoTIFF</formatName>
+    </parameters>
+  </node>
+</graph>

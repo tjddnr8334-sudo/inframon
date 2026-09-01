@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from inframon import pipeline_bridge as pb
 from inframon.insar.roi_selection import RoiResult
 
@@ -134,3 +136,59 @@ def test_pipeline_summary_renders(monkeypatch):
     rep = pb.run_bridge_pipeline(37.3219, 127.1083, mode="plan")
     txt = rep.summary()
     assert "표준 교량" in txt and "①교량선정" in txt and "③ROI도심지가중" in txt
+
+
+# ── 실행 기록(provenance) — 성공·실패 모두 남는가 ──
+def test_pipeline_writes_report_json(tmp_path, monkeypatch):
+    """산출물 옆에 '무엇을 어떤 인자로 돌렸나' 가 남아야 나중에 재현할 수 있다."""
+    import json
+
+    import inframon.pipeline_bridge as pb
+
+    for mod, fn in (("inframon.insar.osm_bridge", "confirm_bridge"),
+                    ("inframon.insar.roi_selection", "select_roi"),
+                    ("inframon.insar.snap_acquire", "search_frames")):
+        monkeypatch.setattr(f"{mod}.{fn}",
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off")),
+                            raising=False)
+    pb.run_bridge_pipeline(37.0, 127.0, out_dir=tmp_path, mode="plan", engine="hyp3")
+
+    rec = json.loads((tmp_path / "pipeline_report.json").read_text(encoding="utf-8"))
+    assert rec["target"] == {"lat": 37.0, "lon": 127.0}
+    assert rec["args"]["engine"] == "hyp3" and rec["args"]["mode"] == "plan"
+    assert any(s["step"].startswith("⑧") for s in rec["stages"])
+    assert "git_commit" in rec                       # 어느 코드에서 나온 산출인가
+
+
+def test_report_json_written_even_when_stage_raises(tmp_path, monkeypatch):
+    """실패한 실행일수록 기록이 필요하다 — 예외가 나도 파일은 남는다."""
+    import inframon.pipeline_bridge as pb
+
+    for mod, fn in (("inframon.insar.osm_bridge", "confirm_bridge"),
+                    ("inframon.insar.roi_selection", "select_roi"),
+                    ("inframon.insar.snap_acquire", "search_frames")):
+        monkeypatch.setattr(f"{mod}.{fn}",
+                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off")),
+                            raising=False)
+    monkeypatch.setattr(pb, "_run_heavy",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError, match="boom"):
+        pb.run_bridge_pipeline(37.0, 127.0, out_dir=tmp_path, mode="full")
+    assert (tmp_path / "pipeline_report.json").exists()
+
+
+def test_report_json_survives_unserializable_context(tmp_path, monkeypatch):
+    """ndarray 같은 값이 섞여도 기록이 통째로 실패하지 않는다."""
+    import json
+
+    import numpy as np
+
+    import inframon.pipeline_bridge as pb
+
+    rep = pb.PipelineReport(lat=1.0, lon=2.0)
+    rep.context["roi_bbox"] = np.arange(4, dtype=float)
+    rep.context["big"] = np.zeros((100, 100))
+    rep.write_json(tmp_path / "r.json")
+    rec = json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))
+    assert rec["context"]["roi_bbox"] == [0.0, 1.0, 2.0, 3.0]
+    assert "ndarray" in rec["context"]["big"]        # 큰 배열은 요약만

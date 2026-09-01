@@ -1,0 +1,154 @@
+<graph id="Graph">
+  <version>1.0</version>
+
+  <!-- 코레지 → 간섭도 → Deburst → Goldstein 필터 → SnaphuExport.
+       coreg_ifg_tc.xml 과 앞부분은 같고, 끝이 TC(지오코딩 GeoTIFF) 가 아니라
+       **레이더 기하 그대로의 snaphu 입력 폴더**다. 언래핑은 지오코딩 전에 해야 한다. -->
+
+  <node id="Read-ref">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${refFile}</file></parameters>
+  </node>
+  <node id="Read-sec">
+    <operator>Read</operator><sources/>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement"><file>${secFile}</file></parameters>
+  </node>
+
+  <node id="Split-ref">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex>
+      <lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters>
+  </node>
+  <node id="Split-sec">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>VV</selectedPolarisations>
+      <firstBurstIndex>${firstBurst}</firstBurstIndex>
+      <lastBurstIndex>${lastBurst}</lastBurstIndex>
+    </parameters>
+  </node>
+
+  <node id="Orbit-ref">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-ref"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+  <node id="Orbit-sec">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-sec"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+
+  <node id="BackGeocoding">
+    <operator>Back-Geocoding</operator>
+    <sources>
+      <sourceProduct refid="Orbit-ref"/>
+      <sourceProduct.1 refid="Orbit-sec"/>
+    </sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <demName>${demName}</demName>
+      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
+    </parameters>
+  </node>
+
+  <node id="Interferogram">
+    <operator>Interferogram</operator>
+    <sources><sourceProduct refid="BackGeocoding"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <subtractFlatEarthPhase>true</subtractFlatEarthPhase>
+      <subtractTopographicPhase>true</subtractTopographicPhase>
+      <demName>${demName}</demName>
+      <includeCoherence>true</includeCoherence>
+      <cohWinAz>3</cohWinAz>
+      <cohWinRg>10</cohWinRg>
+    </parameters>
+  </node>
+
+  <node id="Deburst">
+    <operator>TOPSAR-Deburst</operator>
+    <sources><sourceProduct refid="Interferogram"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <selectedPolarisations>VV</selectedPolarisations>
+    </parameters>
+  </node>
+
+  <!-- Goldstein 위상필터는 여기 넣지 않는다: gpt 에서 필터 산출물이 coherence 밴드를
+       떨어뜨려 SnaphuExport 가 coh_*.img 를 쓰지 못하고, snaphu 가
+       "Can't open file coh_....snaphu.img" 로 죽는다(실행으로 확인).
+       필터를 다시 넣으려면 BandMerge 로 coherence 를 되붙여야 한다. -->
+
+  <!-- 교량 주변만 남긴다. 언래핑은 화소 수에 비례해 비싸고(전 버스트 24889×1505 는
+       수십 분~시간), 교량 밖 지반은 어차피 ⑨에서 버린다. geoRegion 이 비면 전체. -->
+  <node id="Subset">
+    <operator>Subset</operator>
+    <sources><sourceProduct refid="Deburst"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <geoRegion>${geoRegion}</geoRegion>
+      <copyMetadata>true</copyMetadata>
+    </parameters>
+  </node>
+
+  <!-- SnaphuExport 는 snaphu.conf 에 CORRFILE(coh_*.snaphu.img)을 적어 놓고도 그
+       이미지를 쓰지 않는다(SNAP 동작, 실행으로 확인 — snaphu 가 "Can't open file
+       coh_....snaphu.img" 로 죽는다). 같은 Deburst 산출에서 coherence 만 따로 ENVI 로
+       내보내 두고, 파이썬 쪽에서 conf 가 요구하는 이름으로 옮겨 붙인다. -->
+  <node id="CohSelect">
+    <operator>BandSelect</operator>
+    <sources><sourceProduct refid="Subset"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <sourceBands>${cohBand}</sourceBands>
+    </parameters>
+  </node>
+  <node id="WriteCoh">
+    <operator>Write</operator>
+    <sources><sourceProduct refid="CohSelect"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${cohFolder}</file>
+      <formatName>ENVI</formatName>
+    </parameters>
+  </node>
+
+  <!-- ③ SnaphuImport 는 "래핑 산출(.dim) + 언래핑 위상(.hdr)" 둘을 받는다.
+       SnaphuExport 는 .dim 을 남기지 않으므로 여기서 같은 Subset 산출을 저장해 둔다. -->
+  <node id="WriteWrapped">
+    <operator>Write</operator>
+    <sources><sourceProduct refid="Subset"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <file>${wrappedDim}</file>
+      <formatName>BEAM-DIMAP</formatName>
+    </parameters>
+  </node>
+
+  <node id="SnaphuExport">
+    <operator>SnaphuExport</operator>
+    <sources><sourceProduct refid="Subset"/></sources>
+    <parameters class="com.bc.ceres.binding.dom.XppDomElement">
+      <targetFolder>${targetFolder}</targetFolder>
+      <statCostMode>DEFO</statCostMode>
+      <!-- MCF 는 이 데이터에서 "((Maximum flow) * NSHORTCYCLE) too large" 로 죽는다
+           (실행으로 확인). MST 는 SNAP 기본값이자 안정적이다. -->
+      <initMethod>MST</initMethod>
+      <numberOfTileRows>1</numberOfTileRows>
+      <numberOfTileCols>1</numberOfTileCols>
+      <numberOfProcessors>4</numberOfProcessors>
+      <rowOverlap>0</rowOverlap>
+      <colOverlap>0</colOverlap>
+      <tileCostThreshold>500</tileCostThreshold>
+    </parameters>
+  </node>
+</graph>

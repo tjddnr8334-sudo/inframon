@@ -42,7 +42,15 @@ def convert(
     date_key: str = "date",
     coh_key: str = "temporalCoherence",
     unit: str = "m",
+    bbox=None,
+    max_points: int = 0,
 ) -> tuple[int, int]:
+    """SARvey 결과 → inframon Track H5.
+
+    `bbox=(min_lon, min_lat, max_lon, max_lat)` 를 주면 그 안의 점만 남긴다 —
+    광역 PSI 필드(수만 점) 그대로 넘기면 하류가 교량이 아니라 주변 지반을 본다.
+    `max_points` 는 coherence 상위 N 점만(52/54/56 어댑터와 같은 규약).
+    """
     with h5py.File(sarvey_h5, "r") as f:
         for k in (disp_key, lat_key, lon_key, date_key):
             if k not in f:
@@ -65,6 +73,19 @@ def convert(
     los_mm = (disp * 1000.0 if unit == "m" else disp).astype(np.float32)
     lonlat = np.column_stack([lon, lat]).astype(np.float64)
 
+    # ── 교량 범위로 자르기(52/54/56 어댑터와 같은 규약) ──
+    if bbox:
+        mn_lon, mn_lat, mx_lon, mx_lat = bbox
+        keep = ((lon >= mn_lon) & (lon <= mx_lon) & (lat >= mn_lat) & (lat <= mx_lat))
+        if not keep.any():
+            raise ValueError(f"bbox {bbox} 안에 점이 0개입니다 — 좌표·산출물 범위를 확인하세요.")
+        lonlat, los_mm, coh = lonlat[keep], los_mm[keep], coh[keep]
+        n_points = int(keep.sum())
+    if max_points and n_points > max_points:
+        sel = np.argsort(-coh)[:max_points]
+        lonlat, los_mm, coh = lonlat[sel], los_mm[sel], coh[sel]
+        n_points = max_points
+
     with h5py.File(out, "w") as f:
         f.create_dataset("pixel_lonlat", data=lonlat)
         f.create_dataset("epochs", data=epochs)
@@ -73,6 +94,8 @@ def convert(
         f.attrs["FILE_TYPE"] = "sarvey_export"
         f.attrs["source_h5"] = sarvey_h5
         f.attrs["unit"] = "mm"
+        if bbox:
+            f.attrs["bbox"] = np.asarray(bbox, dtype=np.float64)
     return n_points, n_dates
 
 
@@ -86,9 +109,14 @@ def main() -> None:
     p.add_argument("--date-key", default="date")
     p.add_argument("--coh-key", default="temporalCoherence")
     p.add_argument("--unit", default="m", choices=["m", "mm"])
+    p.add_argument("--bbox", nargs=4, type=float, default=None,
+                   metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+                   help="교량 범위로 자르기 — 광역 PSI 필드를 그대로 넘기지 않는다")
+    p.add_argument("--max-points", type=int, default=0, help="coherence 상위 N 점만")
     a = p.parse_args()
     n, m = convert(a.sarvey_h5, a.out, disp_key=a.disp_key, lat_key=a.lat_key,
-                   lon_key=a.lon_key, date_key=a.date_key, coh_key=a.coh_key, unit=a.unit)
+                   lon_key=a.lon_key, date_key=a.date_key, coh_key=a.coh_key, unit=a.unit,
+                   bbox=a.bbox, max_points=a.max_points)
     print(f"변환 완료: {a.out}  (점 {n} · 시점 {m})")
     print(f"다음(Windows): python -m inframon --import-track-h5 {a.out} --out data/project.h5")
 
