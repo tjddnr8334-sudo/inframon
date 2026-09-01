@@ -108,6 +108,27 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--pontifex-push", default=None, metavar="PROJECT_H5",
+                   help="⑭ 산출물을 Pontifex 교량 모니터링 플랫폼에 올린다. "
+                        "--pontifex-bridge-id 필수. 감사에서 '보고 불가'면 막는다.")
+    p.add_argument("--pontifex-bridge-id", type=int, default=None,
+                   help="Pontifex 교량 id (플랫폼 /api/ingest/bridge/ 응답의 id)")
+    p.add_argument("--pontifex-base", default="http://localhost:38000",
+                   help="Pontifex 주소 (기본 http://localhost:38000)")
+    p.add_argument("--pontifex-token", default=None,
+                   help="X-Pontifex-Token 값. dev 스택은 생략 가능")
+    p.add_argument("--pontifex-dry-run", action="store_true",
+                   help="전송하지 않고 무엇을 올릴지만 보여준다")
+    p.add_argument("--pontifex-force", action="store_true",
+                   help="감사 '보고 불가' 산출물도 올린다 — 사유를 알고 쓸 때만")
+    p.add_argument("--pontifex-register", default=None, metavar="NAME,LAT,LON",
+                   help="교량을 먼저 등록하고 부여된 id 로 이어서 올린다")
+    p.add_argument("--audit-artifacts", nargs="*", default=None, metavar="PROJECT_H5",
+                   help="산출물(project.h5)이 보고에 쓸 수 있는 것인지 감사해 표로 출력 후 "
+                        "종료. 경로를 생략하면 data/ 아래를 훑는다. --audit-out 으로 "
+                        "마크다운 저장. 하나라도 '보고 불가'면 종료코드 1.")
+    p.add_argument("--audit-out", default=None, metavar="MD",
+                   help="--audit-artifacts 결과를 마크다운 파일로 저장")
     p.add_argument("--check-target", default=None, metavar="LAT,LON",
                    help="--check-track 의 대상 교량 좌표. 주면 '이 트랙이 그 교량을 실제로 "
                         "담고 있는가'(반경 30m 내 점수·이격)까지 검사한다 — 광역 필드가 "
@@ -1200,6 +1221,64 @@ def main() -> None:
                 print(f"                   {_gr['advice']}")
         print("=" * 56)
         return
+
+    if args.pontifex_push or args.pontifex_register:
+        import sys as _sys
+
+        from .pontifex import PontifexError, push, register_bridge
+
+        try:
+            bid = args.pontifex_bridge_id
+            if args.pontifex_register:
+                _n, _la, _lo = args.pontifex_register.split(",")
+                got = register_bridge(_n.strip(), float(_la), float(_lo),
+                                      base=args.pontifex_base, token=args.pontifex_token)
+                bid = got.get("id", bid)
+                print(f"  등록: {got.get('name')} → id={bid} "
+                      f"· {(got.get('region') or {}).get('name', '-')} "
+                      f"· {args.pontifex_base}{got.get('detail_url', '')}")
+            if not args.pontifex_push:
+                return
+            if bid is None:
+                print("  ⛔ --pontifex-bridge-id 가 필요합니다"
+                      "(또는 --pontifex-register 로 먼저 등록).")
+                _sys.exit(2)
+            res = push(args.pontifex_push, int(bid), base=args.pontifex_base,
+                       token=args.pontifex_token, dry_run=args.pontifex_dry_run,
+                       allow_unreportable=args.pontifex_force)
+            print("=" * 56)
+            print("  ⑭ Pontifex 연동")
+            print("=" * 56)
+            print(f"  {res.describe()}")
+            for w in res.warnings:
+                print(f"  ⚠️  {w}")
+            if not args.pontifex_dry_run:
+                print(f"  확인: {args.pontifex_base}/bridge/{bid}/")
+            print("=" * 56)
+        except PontifexError as e:
+            print(f"  ⛔ {e}")
+            _sys.exit(1)
+        return
+
+    if args.audit_artifacts is not None:
+        import sys as _sys
+        from pathlib import Path as _P
+
+        from .audit import audit_many, format_report
+
+        paths = [_P(x) for x in args.audit_artifacts]
+        if not paths:                      # 경로 생략 → data/ 아래 project.h5 전부
+            paths = sorted(_P("data").rglob("*project*.h5"))
+        rows = audit_many(paths)
+        report = format_report(rows)
+        print("=" * 60)
+        print("  산출물 감사 — 보고에 쓸 수 있는가")
+        print("=" * 60)
+        print(report)
+        if args.audit_out:
+            _P(args.audit_out).write_text(report + "\n", encoding="utf-8")
+            print(f"\n  저장: {args.audit_out}")
+        _sys.exit(1 if any(r.verdict == "보고 불가" for r in rows) else 0)
 
     if args.check_track:
         from .insar.track_preflight import preflight_track_h5

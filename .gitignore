@@ -39,3 +39,7 @@ data/bench/
 isce.log
 *.isce.log
 SAFE_files.txt
+
+# 파트너 전달본(스마트인사이드에이아이 pontifex) — 남의 코드다. 공개 저장소에 올리지 않는다.
+pontifex-*.tar.gz
+pontifex-*/
