@@ -68,10 +68,17 @@ def install_hint() -> str:
 
 
 def to_wsl_path(path: str | Path) -> str:
-    """E:\\프로그램\\x → /mnt/e/프로그램/x (WSL 로 건너갈 때만 쓴다)."""
-    p = Path(path).resolve()
-    s = str(p).replace("\\", "/")
+    """E:\\프로그램\\x → /mnt/e/프로그램/x (WSL 로 건너갈 때만 쓴다).
+
+    문자열을 먼저 본다 — 호스트 OS 로 resolve() 부터 하면 리눅스에서 "E:\\..." 가
+    상대경로로 취급돼 cwd 가 앞에 붙는다(리눅스 CI 에서 드러났다). 드라이브 문자가
+    없을 때만 현재 OS 기준으로 절대화해 다시 본다.
+    """
+    s = str(path).replace("\\", "/")
     m = re.match(r"^([A-Za-z]):/(.*)$", s)
+    if m is None:
+        s = str(Path(path).resolve()).replace("\\", "/")
+        m = re.match(r"^([A-Za-z]):/(.*)$", s)
     return f"/mnt/{m.group(1).lower()}/{m.group(2)}" if m else s
 
 
