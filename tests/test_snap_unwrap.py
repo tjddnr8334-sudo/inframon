@@ -76,7 +76,8 @@ def test_wsl_invocation_translates_cwd(tmp_path, monkeypatch):
     monkeypatch.setattr(su.subprocess, "run", _fake_run)
     hdr = su.run_snaphu(tmp_path, tool=su.SnaphuTool(kind="wsl", path="/usr/bin/snaphu"))
     inner = seen["args"][-1]
-    assert inner.startswith("cd '/mnt/") and "snaphu -f snaphu.conf" in inner
+    assert inner.startswith(f"cd '{su.to_wsl_path(tmp_path)}'")
+    assert "snaphu -f snaphu.conf" in inner
     assert hdr.name == "UnwPhase_x.hdr"
 
 
