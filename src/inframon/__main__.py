@@ -351,6 +351,12 @@ def main() -> None:
                         "(WSL/ISCE2 불필요). --snap-target 또는 --snap-bridges 필요.")
     p.add_argument("--snap-target", default=None, metavar="LAT,LON",
                    help="--snap-insar 단일 교량 대상 좌표.")
+    p.add_argument("--snap-unwrap", action="store_true",
+                   help="SNAP 처리에 **위상 언래핑**(snaphu)을 넣는다. 없으면 LOS 가 ±λ/4 에 "
+                        "갇혀 물리적 의미가 없다. snaphu 가 없으면 진행하지 않고 설치를 안내. "
+                        "비용 때문에 교량 ±--snap-unwrap-km 만 푼다.")
+    p.add_argument("--snap-unwrap-km", type=float, default=2.0,
+                   help="언래핑 범위(교량 중심 반경, 기본 2.0km)")
     p.add_argument("--snap-auto", default=None, metavar="LAT,LON",
                    help="프레임 자동선정: 교량 좌표로 ASF 조회→최적 프레임 선택→SLC 다운로드"
                         "→burst 포함 검증→SNAP 처리. Earthdata 자격 필요(--earthdata-*/~/.netrc).")
@@ -653,7 +659,9 @@ def main() -> None:
                 out_h5 = args.out if args.out.endswith(".h5") else str(_Path(out_dir) / "track_snap.h5")
                 res = snap_run(scenes, lat, lon, out_dir=out_dir, out_h5=out_h5,
                                dem=args.snap_dem, gpt=args.snap_gpt,
-                               era5_master=args.snap_era5_master)
+                               era5_master=args.snap_era5_master,
+                               unwrap=args.snap_unwrap,
+                               unwrap_half_km=args.snap_unwrap_km)
                 print("=" * 56)
                 print("  SNAP(Windows 네이티브) InSAR → Track H5 완료")
                 if res.weather is not None and hasattr(res.weather, "selected_master"):
