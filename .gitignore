@@ -46,3 +46,7 @@ pontifex-*/
 
 # 재처리 대상 스택 — PC 마다 경로가 다르다(.example 만 저장소에)
 configs/rerun_stacks.json
+
+# 파트너 제공 교량 제원 CSV(스마트인사이드에이아이) — 남의 데이터다
+data/bridges_load.csv
+data/bridges_specs.csv

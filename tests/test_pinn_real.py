@@ -368,3 +368,18 @@ def test_ei_clipped_around_geometric_not_global_ceiling():
     assert mid == geom * 1.2 and hit is False
     # 기하 EI 를 모르면 예전 절대범위로 물러난다(동작 보존)
     assert _clip_ei(1e20, None)[0] == 1e14
+
+
+def test_structural_span_prefers_measured_n_spans():
+    """경간수가 실측으로 있으면 추정하지 않는다 — 광안대교 경간 추정 5,565m 문제의 뿌리."""
+    prof = BridgeProfile(bridge_type="slab", length_m=108.0, boundary="simply_supported")
+    prof.extra = {"n_spans": 5}
+    span, n = _structural_span(prof, 108.0)
+    assert n == 5 and span == 21.6           # 108/5 — 형식별 비율 추정을 쓰지 않는다
+
+
+def test_structural_span_uses_measured_max_span_when_no_count():
+    prof = BridgeProfile(bridge_type="suspension", length_m=8428.6, boundary="continuous")
+    prof.extra = {"max_span_m": 500.0, "max_span_source": "csv"}
+    span, n = _structural_span(prof, 8428.6)
+    assert n == 17 and abs(span - 8428.6 / 17) < 0.1

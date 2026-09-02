@@ -144,10 +144,36 @@ def run_custom_pinn(
             if prof is not None:
                 official_grade = prof.extra.get("grade")     # 공식 시설물종별등급(추정보다 우선)
                 _dl = prof.extra.get("design_load")
+                _ex = prof.extra or {}
+                # CSV 에 **실측으로 들어 있는 값**을 보고에 그대로 드러낸다 — 추정으로
+                # 대체하지 않았음을 사람이 확인할 수 있어야 한다.
+                _bits = [f"거리 {_ex.get('match_dist_m')}m"]
+                if _ex.get("carriage_width_m"):
+                    _bits.append(f"차도폭 {_ex['carriage_width_m']}m"
+                                 f"(폭 {prof.width_m}−보도 {_ex.get('sidewalk_width_m')})")
+                if _ex.get("lanes"):
+                    _bits.append(f"{_ex['lanes']:.0f}차로")
+                if _dl:
+                    _bits.append(f"설계활하중 {_dl}")
+                if _ex.get("allow_load_ton"):
+                    _bits.append(f"허용통행 {_ex['allow_load_ton']}t")
+                if _ex.get("inspect_grade"):
+                    _bits.append(f"점검 {_ex['inspect_grade']}"
+                                 + (f"({_ex.get('inspect_date')})" if _ex.get("inspect_date") else ""))
+                if _ex.get("seismic_applied"):
+                    _bits.append(f"내진 {_ex['seismic_applied']}")
+                if _ex.get("manager"):
+                    _bits.append(f"관리 {_ex['manager']}")
                 collected["bridge_csv"] = (
-                    f"전국교량표준데이터 최근접 {prof.name}"
-                    f"(거리 {prof.extra.get('match_dist_m')}m, 설계활하중 {_dl or '-'}, "
-                    f"점검 {prof.extra.get('inspect_grade') or '-'})")
+                    f"전국교량표준데이터 {prof.name} — " + " · ".join(_bits))
+                collected["bridge_csv_measured"] = {
+                    k: _ex.get(k) for k in
+                    ("carriage_width_m", "sidewalk_width_m", "separated", "lanes",
+                     "allow_load_ton", "seismic_applied", "seismic_secured",
+                     "inspect_grade", "inspect_date", "inspect_type", "road_kind",
+                     "road_route", "clearance_m", "manager", "address",
+                     "data_base_date", "design_load", "grade", "completion")
+                    if _ex.get(k) is not None}
                 # ⚠️ '최근접'은 '그 교량'이 아니다 — 표준데이터에 없는 도시관리 교량이면
                 # 수백 m 떨어진 **다른 교량** 제원(스팬·형식·재료)으로 PINN 이 돌아
                 # 구조 해석이 통째로 틀린다. 이름·거리 불일치를 반드시 표면화한다.
@@ -156,6 +182,64 @@ def run_custom_pinn(
             elif "채택하지 않음" not in str(collected.get("bridge_csv", "")):
                 # 위에서 '멀어서 안 씀' 을 이미 적었으면 그 사유를 덮어쓰지 않는다.
                 collected["bridge_csv"] = f"CSV 내 {bridge_csv_max_km}km 이내 교량 없음 → OSM 폴백"
+        # ── 제원 CSV 실측 우선 적용 ──
+        # 전국교량표준데이터에는 **경간수·최대경간이 없다**. 그 두 값을 담은 CSV가 있으면
+        # 추정(max_span_estimate)을 쓸 이유가 없다 — 광안대교 추정 5,565m vs 실측 500m.
+        try:
+            from .bridge_specs_csv import lookup as _spec_lookup
+            _spec = _spec_lookup(lat, lon, name=bridge_name)
+        except Exception:  # noqa: BLE001 — 제원 CSV 없어도 파이프라인은 계속 간다
+            _spec = None
+        # '가까운 기록'이 '그 교량'은 아니다 — 이름이 맞거나 신뢰 거리 안일 때만 쓴다.
+        # (표준데이터 매칭에서 565m 떨어진 금곡교 제원이 들어가던 것과 같은 함정)
+        if _spec is not None:
+            _sn = (_spec.name or "").strip()
+            _pn = (bridge_name or getattr(prof, "name", None) or "").strip()
+            _same = bool(_sn and _pn and (_sn in _pn or _pn in _sn))
+            _near = (_spec.dist_m is not None and _spec.dist_m <= BRIDGE_MATCH_TRUST_M)
+            if not (_same or _near):
+                collected["bridge_specs_csv"] = (
+                    f"제원 CSV 최근접 {_sn or '-'}({_spec.dist_m}m)은 "
+                    f"{BRIDGE_MATCH_TRUST_M:.0f}m 밖이고 이름도 달라 채택하지 않음")
+                _spec = None
+        if _spec is not None and _spec.measured():
+            collected["bridge_specs_csv"] = (
+                f"{_spec.name or '-'} — {_spec.describe()} "
+                f"[{_spec.source_file} · {_spec.dist_m}m]")
+            if prof is None:
+                from .structure import BridgeProfile
+                prof = BridgeProfile(bridge_type="girder")
+                prof.source = f"specs_csv:{_spec.source_file}"   # 출처를 정확히 남긴다
+                collected["bridge_csv"] = collected.get("bridge_csv", "")
+            ex = dict(prof.extra or {})
+            if _spec.max_span_m:                  # 실측 최대경간 — 추정을 대체
+                ex["max_span_m"] = _spec.max_span_m
+                ex["max_span_source"] = "csv"
+            if _spec.n_spans:
+                ex["n_spans"] = _spec.n_spans     # 경간수 실측 → 구조 경간을 정확히 나눈다
+            if _spec.lanes and not ex.get("lanes"):
+                ex["lanes"] = float(_spec.lanes)
+            ex["specs_csv"] = {"file": _spec.source_file, "dist_m": _spec.dist_m,
+                               "name": _spec.name, "structure_raw": _spec.structure_raw}
+            prof.extra = ex
+            if _spec.length_m and not prof.length_m:
+                prof.length_m = _spec.length_m
+            if _spec.width_m and not prof.width_m:
+                prof.width_m = _spec.width_m
+            elif not prof.width_m and _spec.lanes:
+                # 폭을 모르면 **기하학적 EI 를 계산할 수 없고**, 그러면 EI 식별 상한이
+                # 기하 기준을 잃어 1e14 로 돌아가 f₁ 이 200Hz 로 튄다(정자교에서 겪음).
+                # 실측 차로수로 폭을 채우고 추정임을 명시한다.
+                prof.width_m = round(_spec.lanes * 3.5 + 1.0, 1)
+                ex["width_source"] = f"차로수 {_spec.lanes} 추정"
+            if _spec.structure_raw:               # 'PC슬래브교(PCS)' 같은 구체 형식
+                from .public_data import parse_structure_ko
+                _bt, _mat = parse_structure_ko(_spec.structure_raw)
+                if _bt:
+                    prof.bridge_type = _bt
+                if _mat:
+                    prof.material = _mat
+
         if prof is None:
             from .bridge_info import fetch_bridge_profile
             prof = fetch_bridge_profile(

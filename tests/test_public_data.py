@@ -161,3 +161,32 @@ def test_bridge_profile_grade_field_present():
     # 확인된 표준데이터 등급 컬럼이 프리셋에 존재
     assert "grade" in DATASETS["national_bridge_standard"]["fields"]
     assert "시설물종별등급구분" in DATASETS["national_bridge_standard"]["fields"]["grade"]
+
+
+def test_measured_csv_fields_are_ingested_not_estimated():
+    """CSV 에 실측으로 있는 값은 추정으로 대체하지 않고 그대로 들어와야 한다.
+
+    보도폭·허용통행하중·내진·점검일자·관리기관은 파일에 있는데도 쓰이지 않고 있었다.
+    """
+    rec = {"교량명": "청양교", "상부구조형식": "RC슬래브교", "교량연장": "90",
+           "교량폭": "22", "교량보도폭": "8", "차로수": "4", "설계활하중": "DB-24",
+           "허용통행하중": "43.2", "상하행선분리여부": "N", "내진설계적용여부": "미적용",
+           "내진성능확보여부": "N", "최종안전점검결과": "C", "최종안전점검일자": "2025-11-30",
+           "최종안전점검유형": "정기점검", "도로종류": "군도", "관리기관명": "충청남도 청양군",
+           "소재지지번주소": "충청남도 청양군 청양읍 교월리", "데이터기준일자": "2025-12-31"}
+    prof = bridge_profile_from_record(rec)
+    ex = prof.extra
+    # 차도폭 = 교량폭 − 보도폭. 보도까지 차로로 세면 활하중이 과대해진다.
+    assert ex["sidewalk_width_m"] == 8.0 and ex["carriage_width_m"] == 14.0
+    assert ex["allow_load_ton"] == 43.2 and ex["separated"] == "N"
+    assert ex["seismic_applied"] == "미적용" and ex["seismic_secured"] == "N"
+    assert ex["inspect_grade"] == "C" and ex["inspect_date"] == "2025-11-30"
+    assert ex["road_kind"] == "군도" and ex["manager"] == "충청남도 청양군"
+    assert ex["data_base_date"] == "2025-12-31"       # 언제 기준 값인지도 남긴다
+
+
+def test_carriage_width_absent_when_no_sidewalk_column():
+    """보도폭이 없으면 차도폭을 지어내지 않는다(None)."""
+    prof = bridge_profile_from_record(
+        {"교량명": "x", "상부구조형식": "PSCI거더교", "교량연장": "50", "교량폭": "10"})
+    assert prof.extra["carriage_width_m"] is None and prof.extra["sidewalk_width_m"] is None

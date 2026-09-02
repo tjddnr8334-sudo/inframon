@@ -122,6 +122,13 @@ def _span_meters(xyz: np.ndarray) -> float:
     return ext * 111000.0 if ext < 1.0 else ext
 
 
+def _num_or(v, default=0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 LIVE_LOAD_PER_LANE_N_M = 12.7e3   # 대표 도로 설계활하중 [N/m/차로] (KL-510 등 수준)
 LANE_WIDTH_M = 3.5                # 차로 폭 [m]
 
@@ -135,15 +142,25 @@ def _effective_load_for_ei(prof, use_traffic: bool, traffic) -> tuple[float, str
     """
     if use_traffic and traffic is not None:
         tr = np.asarray(traffic, dtype=float).ravel()
-        n_lanes = max(1, round((float(prof.width_m) if prof.width_m else 2 * LANE_WIDTH_M)
-                               / LANE_WIDTH_M))
+        # 차로수는 CSV 실측(차로수)이 있으면 그것을, 없으면 **차도폭**(교량폭 − 보도폭)으로
+        # 센다. 보도까지 차로로 세면 활하중이 과대해진다(청양교: 폭 22m 중 보도 8m —
+        # 총폭이면 6차로, 차도폭이면 4차로).
+        ex = prof.extra or {}
+        n_lanes = _num_or(ex.get("lanes"), 0)
+        if not n_lanes:
+            w = _num_or(ex.get("carriage_width_m"), 0) or (
+                float(prof.width_m) if prof.width_m else 2 * LANE_WIDTH_M)
+            n_lanes = w / LANE_WIDTH_M
+        n_lanes = max(1, round(n_lanes))
         # 설계활하중 등급(전국교량표준데이터 DB-24/DB-18…)이 있으면 차로당 활하중을 그 배율로 보정.
         dlf = (prof.extra or {}).get("design_load_factor")
         per_lane = LIVE_LOAD_PER_LANE_N_M * (dlf if dlf else 1.0)
         peak = float(tr.max() / (tr.mean() + 1e-9))          # 평균 대비 교통 피크비
         q = per_lane * n_lanes * peak
         dl_tag = f"·{prof.extra.get('design_load')}" if dlf else ""
-        return q, (f"교통 활하중({n_lanes}차로×{per_lane/1e3:.1f}kN/m{dl_tag}"
+        _src = ("차로수 실측" if ex.get("lanes") else
+                ("차도폭 실측" if ex.get("carriage_width_m") else "총폭 추정"))
+        return q, (f"교통 활하중({n_lanes}차로[{_src}]×{per_lane/1e3:.1f}kN/m{dl_tag}"
                    f"×피크{peak:.2f}={q/1e3:.0f}kN/m)")
     return float(prof.load_per_len), f"자중 균일하중({prof.load_per_len/1e3:.0f}kN/m)"
 
@@ -155,6 +172,17 @@ def _structural_span(prof, L_full: float) -> tuple[float, int]:
     단경간(단순지지·고정)은 연장 그대로 → 기존 동작 불변(골든 안전).
     ※ EI 식별(q·L⁴/(w·d4_hat))은 경간 선택에 불변이라 여기서 바꾸지 않는다.
     """
+    # 경간수·최대경간이 **실측으로 있으면** 추정하지 않는다(제원 CSV). 이게 없어서
+    # 광안대교 최대경간이 5,565m(실측 500m)로 추정되던 문제가 있었다.
+    ex = getattr(prof, "extra", None) or {}
+    n_meas = ex.get("n_spans")
+    if n_meas and L_full:
+        n = max(1, int(n_meas))
+        return (round(L_full / n, 2) if n > 1 else L_full), n
+    if ex.get("max_span_source") == "csv" and ex.get("max_span_m") and L_full:
+        ms = float(ex["max_span_m"])
+        n = max(1, round(L_full / ms)) if ms > 0 else 1
+        return (round(L_full / n, 2) if n > 1 else L_full), n
     if getattr(prof, "boundary", None) != "continuous" or not L_full:
         return L_full, 1
     from ..insar.bridge_meta import max_span_estimate
