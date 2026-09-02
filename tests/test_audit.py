@@ -41,7 +41,10 @@ def _project(path, *, los=None, lonlat=(127.0, 37.0), n=50, m=5,
         src = {"path": track_path, "attrs": {"source": source}}
         ins.attrs["track_source"] = json.dumps(src)
         if span_m is not None:
-            f.create_group("pinn").attrs["inputs"] = json.dumps({"total_length_m": span_m})
+            # 실 산출물 대부분이 그렇듯 기본은 '표준데이터 제원을 썼다' — OSM 폴백 사례는
+            # 해당 테스트가 직접 덮어쓴다.
+            f.create_group("pinn").attrs["inputs"] = json.dumps(
+                {"total_length_m": span_m, "profile_source": "data_go_kr:전국교량표준데이터"})
         if cri is not None:
             f.create_group("fram").attrs["reference_range"] = json.dumps({"worst_cri": cri})
     return path
@@ -227,3 +230,66 @@ def test_same_bridge_far_registration_is_not_called_a_wrong_bridge(tmp_path, mon
     assert a.target_name == "청양교 chyg" and a.verdict == COND
     assert any("이름은 일치" in r for r in a.reasons)
     assert not any("다른 교량 제원일 수 있다" in r for r in a.reasons)
+
+
+def test_reports_what_pinn_actually_used(tmp_path, monkeypatch):
+    """PINN 이 먼 CSV 기록을 **쓰지 않았으면** '잘못된 제원'처럼 적으면 안 된다.
+
+    정자교는 표준데이터에 없어 565m 떨어진 금곡교가 최근접이지만, PINN 은 OSM 제원을 썼다.
+    """
+    import json as _json
+
+    class _Prof:
+        name = "금곡교"
+        length_m = 108.0
+        extra = {"match_dist_m": 565.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    p = tmp_path / "p.h5"
+    _project(p, span_m=107.0)
+    import h5py
+    with h5py.File(p, "a") as f:                       # PINN 이 OSM 제원을 썼다고 기록
+        f["pinn"].attrs["inputs"] = _json.dumps(
+            {"total_length_m": 107.0, "profile_source": "osm"})
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.pinn_profile_source == "osm" and a.verdict == COND
+    assert any("표준데이터에 이 교량이 없다" in r and "osm" in r for r in a.reasons)
+    assert not any("다른 교량 제원일 수 있다" in r for r in a.reasons)
+
+
+def test_csv_specs_actually_used_still_flagged_when_far(tmp_path, monkeypatch):
+    """반대로 PINN 이 먼 CSV 기록을 실제로 썼다면 그건 경고해야 한다."""
+    class _Prof:
+        name = "금곡교"
+        length_m = 108.0
+        extra = {"match_dist_m": 565.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    import json as _json
+
+    import h5py
+    p = tmp_path / "p.h5"
+    _project(p, span_m=108.0)
+    with h5py.File(p, "a") as f:
+        f["pinn"].attrs["inputs"] = _json.dumps(
+            {"total_length_m": 108.0, "profile_source": "data_go_kr:전국교량표준데이터"})
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert any("다른 교량 제원일 수 있다" in r for r in a.reasons)
+
+
+def test_no_pinn_span_does_not_crash_the_audit(tmp_path, monkeypatch):
+    """PINN 을 안 돌린 산출물에서도 감사는 죽지 않고 리포트를 돌려준다."""
+    class _Prof:
+        name = "금곡교"
+        length_m = 108.0
+        extra = {"match_dist_m": 565.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    a = audit_artifact(_project(tmp_path / "p.h5", span_m=None), target=(37.0, 127.0))
+    assert a.pinn_span_m is None and a.verdict in (OK, COND, NO)
