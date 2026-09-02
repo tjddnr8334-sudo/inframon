@@ -39,10 +39,17 @@ DEFAULT_STACKS = REPO / "configs" / "rerun_stacks.json"
 
 
 def _load_stacks(path: Path | None) -> dict:
+    """스택 설정을 읽는다. `_` 로 시작하는 키는 주석이라 건너뛴다.
+
+    JSON 에는 주석이 없어 설정 파일에 `_설명`·`_사용` 같은 키를 두는 관례를 쓰는데,
+    그걸 스택으로 오해하면 시작하자마자 죽는다(예시 파일이 바로 그 형태다).
+    """
     p = path or DEFAULT_STACKS
     if not p.exists():
         return {}
-    return json.loads(p.read_text(encoding="utf-8"))
+    data = json.loads(p.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.items()
+            if not str(k).startswith("_") and isinstance(v, dict)}
 
 
 def _target_from_recipe(recipe: Path) -> tuple[float, float] | None:
@@ -73,7 +80,8 @@ def preflight_env(unwrap: bool) -> None:
 
 
 def run_stack(name: str, slc_dir: str, out_dir: str, target: tuple[float, float], *,
-              unwrap: bool = True, half_km: float = 2.0, count: int | None = None) -> dict:
+              unwrap: bool = True, half_km: float = 2.0, count: int | None = None,
+              radius_km: float = 0.5) -> dict:
     from inframon.insar.snap_backend import run as snap_run
     from inframon.insar.track_preflight import preflight_track_h5
 
@@ -96,8 +104,11 @@ def run_stack(name: str, slc_dir: str, out_dir: str, target: tuple[float, float]
     print(f"\n{'=' * 60}\n  {name} — SLC {len(scenes)}장 → "
           f"{'언래핑 ' if unwrap else ''}재처리\n{'=' * 60}", flush=True)
     t0 = time.time()
+    # 반경을 좁게 잡는다 — 기본 3km 로 track 을 만들면 교량 위 점이 0.05% 밖에 안 되고
+    # 감사가 '광역 필드'로 낮춘다. 언래핑은 ±half_km 를 풀되, track 은 교량 주변만 담는다.
     res = snap_run(scenes, lat, lon, out_dir=str(out), out_h5=str(h5),
-                   era5_master=True, unwrap=unwrap, unwrap_half_km=half_km)
+                   era5_master=True, unwrap=unwrap, unwrap_half_km=half_km,
+                   radius_km=radius_km)
     ok = sum(1 for p in res.pairs if p.ok)
     print(f"  쌍 {ok}/{len(res.pairs)} 성공 · N={res.n_points} · {time.time() - t0:.0f}s",
           flush=True)
@@ -126,6 +137,8 @@ def main() -> None:
     ap.add_argument("--stack", default="all", help="설정 파일에서 돌릴 스택 이름 또는 all")
     ap.add_argument("--count", type=int, default=None, help="앞에서 N 장만(시험용)")
     ap.add_argument("--half-km", type=float, default=2.0, help="언래핑 범위(반경 km)")
+    ap.add_argument("--radius-km", type=float, default=0.5,
+                    help="track 에 담을 교량 반경(기본 0.5km) — 넓히면 광역 필드가 된다")
     ap.add_argument("--no-unwrap", action="store_true", help="언래핑 없이(비교용)")
     a = ap.parse_args()
 
@@ -161,7 +174,8 @@ def main() -> None:
     for name, slc, out, tgt in jobs:
         try:
             results.append(run_stack(name, slc, out, tgt, unwrap=unwrap,
-                                     half_km=a.half_km, count=a.count))
+                                     half_km=a.half_km, count=a.count,
+                                     radius_km=a.radius_km))
         except SystemExit:
             raise
         except Exception as e:  # noqa: BLE001 — 한 스택 실패가 다음을 막지 않는다

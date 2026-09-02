@@ -203,3 +203,27 @@ def test_close_standard_data_match_still_checks_span(tmp_path, monkeypatch):
                         lambda *a, **k: _Prof())
     a = audit_artifact(_project(tmp_path / "p.h5", span_m=16967.7), target=(37.0, 127.0))
     assert a.verdict == NO and a.span_ratio > 300
+
+
+def test_same_bridge_far_registration_is_not_called_a_wrong_bridge(tmp_path, monkeypatch):
+    """표준데이터 등록 좌표(교량시작점)가 멀 뿐 같은 교량이면 문구가 달라야 한다.
+
+    청양교↔청양교(671m)와 정자교↔금곡교(567m)는 성격이 전혀 다르다.
+    """
+    import json as _json
+
+    class _Prof:
+        name = "청양교"
+        length_m = 90.0
+        extra = {"match_dist_m": 671.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    (tmp_path / "bridge_target.json").write_text(
+        _json.dumps({"name": "청양교 chyg", "selected_lat": 37.0, "selected_lon": 127.0}),
+        encoding="utf-8")
+    a = audit_artifact(_project(tmp_path / "p.h5", span_m=90.0))
+    assert a.target_name == "청양교 chyg" and a.verdict == COND
+    assert any("이름은 일치" in r for r in a.reasons)
+    assert not any("다른 교량 제원일 수 있다" in r for r in a.reasons)

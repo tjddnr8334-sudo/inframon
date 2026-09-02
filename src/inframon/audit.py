@@ -55,6 +55,7 @@ class ArtifactAudit:
     span_ratio: float | None = None
     official_name: str | None = None
     official_dist_m: float | None = None
+    target_name: str | None = None
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -99,6 +100,7 @@ def audit_artifact(path: str | Path, *, target: tuple[float, float] | None = Non
                 inp = _json_attr(f["pinn"], "inputs")
                 a.pinn_span_m = _num(inp.get("total_length_m") or inp.get("span_m"))
             a.target = target or _target_from(src, p)
+            a.target_name = _target_name(p)
             if a.target and xyz is not None and xyz.shape[1] >= 2:
                 d = _dist_m(xyz[:, 0], xyz[:, 1], *a.target)
                 a.n_within_deck = int((d <= DECK_RADIUS_M).sum())
@@ -203,8 +205,16 @@ def _judge(a: ArtifactAudit) -> None:
     # 표준데이터가 멀리서 매칭됐으면 그 '실연장' 은 다른 교량 것이다 — 비교 자체가 근거가
     # 못 되므로 판정을 낮춘다(실측: 정자교 재처리에서 567m 떨어진 금곡교가 매칭됐다).
     if (a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M):
-        soft.append(f"표준데이터 매칭이 {a.official_dist_m:.0f}m 떨어진 "
-                    f"'{a.official_name}' — 다른 교량 제원일 수 있다")
+        # 이름이 같으면 '다른 교량'이 아니라 **표준데이터 등록 좌표가 먼** 것이다
+        # (CSV 는 교량시작점을 쓴다). 사실이 다르므로 문구도 달라야 한다.
+        # 한쪽이 다른 쪽을 품으면 같은 교량이다("청양교 chyg" ↔ "청양교").
+        _t, _o = (a.target_name or "").strip(), (a.official_name or "").strip()
+        same = bool(_t and _o and (_t in _o or _o in _t))
+        soft.append(
+            f"표준데이터 '{a.official_name}' 등록 좌표가 {a.official_dist_m:.0f}m 떨어져 있다"
+            f"(이름은 일치 — 제원은 맞을 가능성이 높으나 확인 필요)" if same else
+            f"표준데이터 매칭이 {a.official_dist_m:.0f}m 떨어진 "
+            f"'{a.official_name}' — 다른 교량 제원일 수 있다")
     elif a.span_ratio is not None and a.span_ratio > SPAN_RATIO_MAX:
         hard.append(f"PINN 경간 {a.pinn_span_m:.0f}m 가 실연장 "
                     f"{a.official_length_m:.0f}m 의 {a.span_ratio:.1f}배")
@@ -328,6 +338,39 @@ def _name_tokens(p: Path) -> list[str]:
         if head and head != tok and head not in out:
             out.append(head)
     return out
+
+
+def _target_name(p: Path) -> str | None:
+    """산출물 곁의 기록에서 대상 교량 **이름**을 찾는다(있으면 매칭 판단이 정확해진다)."""
+    for cand in (p.parent / "bridge_target.json", p.parent / "bridge_registry.json"):
+        if not cand.exists():
+            continue
+        try:
+            d = json.loads(cand.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        n = _find_name(d)
+        if n:
+            return n
+    return None
+
+
+def _find_name(node) -> str | None:
+    if isinstance(node, dict):
+        for k in ("name", "bridge_name", "교량명"):
+            v = node.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+        for v in node.values():
+            got = _find_name(v)
+            if got:
+                return got
+    elif isinstance(node, list):
+        for v in node:
+            got = _find_name(v)
+            if got:
+                return got
+    return None
 
 
 def _target_from_json(path: Path) -> tuple[float, float] | None:
