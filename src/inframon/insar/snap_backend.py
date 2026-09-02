@@ -951,7 +951,8 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
         era5_master: bool = False, precip_max_mm: float | None = 8.0,
         humidity_max_pct: float | None = None, temp_max_c: float | None = None,
         temp_min_c: float | None = None, unwrap: bool = False,
-        unwrap_half_km: float = 2.0) -> SnapRunResult:
+        unwrap_half_km: float = 2.0, max_temporal_days: float = 72.0,
+        max_perp_m: float = 150.0) -> SnapRunResult:
     """전체: 스타 네트워크 처리 → Track H5. 임의 한국 교량 재사용 진입점.
 
     era5_master=True 면 ⑤ ERA5(강수·습도·온도)로 master(reference) 선정 + 악천후 씬 소거
@@ -969,7 +970,9 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
 
     res = process_star_network(scenes, lat, lon, out_dir, reference=reference,
                                dem=dem, graph_dir=graph_dir, gpt=gpt,
-                               unwrap=unwrap, unwrap_half_km=unwrap_half_km)
+                               unwrap=unwrap, unwrap_half_km=unwrap_half_km,
+                               max_temporal_days=max_temporal_days,
+                               max_perp_m=max_perp_m)
     res.weather = weather
     ref = str(reference) if reference else min([str(s) for s in scenes], key=scene_date)
     hd = platform_heading(ref, res.burst.subswath)

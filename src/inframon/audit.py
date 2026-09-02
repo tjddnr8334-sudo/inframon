@@ -420,16 +420,28 @@ def _target_from(src: dict, p: Path) -> tuple[float, float] | None:
     return None
 
 
+# 폴더 이름에서 뽑은 토큰으로 레시피를 찾는데, 토큰이 헐거우면 **남의 교량 좌표를 주워온다**.
+# (실제로 'test' 가 다른 시험 폴더의 bridge_target.json 을 물어와 판정이 뒤집혔다.)
+_GENERIC_TOKENS = {"data", "project", "test", "tests", "tmp", "temp", "out", "output",
+                   "rerun", "work", "deck", "track", "snap", "unw", "wrap", "pytest"}
+_MIN_TOKEN_LEN = 4
+
+
 def _name_tokens(p: Path) -> list[str]:
-    """산출물에서 뽑을 수 있는 교량 이름 후보 — 좁은 것부터."""
-    out = []
-    for raw in (p.stem.replace("project", "").replace("_exe", ""), p.parent.name):
-        tok = raw.strip("_ ")
-        if tok and tok not in out and tok not in ("data", ""):
+    """산출물에서 뽑을 수 있는 교량 이름 후보 — 좁은 것부터, 일반어는 버린다."""
+    out: list[str] = []
+
+    def _add(tok: str) -> None:
+        tok = tok.strip("_- ")
+        if (len(tok) >= _MIN_TOKEN_LEN and tok.lower() not in _GENERIC_TOKENS
+                and tok not in out):
             out.append(tok)
-        head = tok.split("_")[0]                # jeongja_snap → jeongja
-        if head and head != tok and head not in out:
-            out.append(head)
+
+    for raw in (p.stem.replace("project", "").replace("_exe", ""), p.parent.name):
+        _add(raw)
+        head = raw.strip("_- ").split("_")[0]      # jeongja_snap → jeongja
+        if head != raw:
+            _add(head)
     return out
 
 

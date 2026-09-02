@@ -359,3 +359,35 @@ def test_span_uses_structural_span_not_total_length(tmp_path):
     _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=True)
     a = audit_artifact(p, target=(37.0, 127.0))
     assert a.freq_coef == round(5.44 * 45.0, 1) and a.verdict != NO
+
+
+def test_generic_folder_name_does_not_borrow_another_bridge_target(tmp_path):
+    """폴더 이름이 일반어면 좌표 자동탐색이 **남의 교량 기록**을 주워오면 안 된다.
+
+    실제로 'test' 토큰이 이웃 시험 폴더의 bridge_target.json 을 물어와 판정이 뒤집혔다.
+    """
+    import json as _json
+
+    other = tmp_path / "test_other_bridge"
+    other.mkdir()
+    (other / "bridge_target.json").write_text(
+        _json.dumps({"name": "남의교", "selected_lat": 37.0, "selected_lon": 127.0}),
+        encoding="utf-8")
+    mine = tmp_path / "test_mine"
+    mine.mkdir()
+    a = audit_artifact(_project(mine / "project.h5"))
+    assert a.target is None                      # 이웃 폴더 좌표를 가져오지 않는다
+    assert any("대상 좌표 미지정" in r for r in a.reasons)
+
+
+def test_distinctive_folder_name_still_finds_its_recipe(tmp_path):
+    """반면 고유한 이름은 그대로 찾아야 한다(honam_project.h5 ↔ recipe_honam_asc/)."""
+    import json as _json
+
+    rec = tmp_path / "recipe_honam_asc"
+    rec.mkdir()
+    (rec / "bridge_target.json").write_text(
+        _json.dumps({"name": "칠백로", "selected_lat": 35.9, "selected_lon": 128.9}),
+        encoding="utf-8")
+    a = audit_artifact(_project(tmp_path / "honam_project.h5", lonlat=(128.9, 35.9)))
+    assert a.target == (35.9, 128.9)
