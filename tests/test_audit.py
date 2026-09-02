@@ -293,3 +293,69 @@ def test_no_pinn_span_does_not_crash_the_audit(tmp_path, monkeypatch):
                         lambda *a, **k: _Prof())
     a = audit_artifact(_project(tmp_path / "p.h5", span_m=None), target=(37.0, 127.0))
     assert a.pinn_span_m is None and a.verdict in (OK, COND, NO)
+
+
+# ── ⑥ PINN 출력 타당성 ──────────────────────────────────────────────────
+def _with_pinn(path, **inputs):
+    """_project 산출물의 pinn 그룹에 EI·고유진동수를 심는다."""
+    import json as _json
+
+    import h5py
+    with h5py.File(path, "a") as f:
+        g = f["pinn"]
+        base = _json.loads(g.attrs["inputs"])
+        base.update(inputs)
+        g.attrs["inputs"] = _json.dumps(base)
+        if "ei" in inputs:
+            g.create_dataset("EI", data=np.asarray(inputs["ei"], dtype=np.float64))
+        if "freq" in inputs:
+            g.create_dataset("natural_freq", data=np.asarray(inputs["freq"], dtype=np.float64))
+    return path
+
+
+def test_impossible_natural_frequency_blocks(tmp_path):
+    """90m 교량에서 232Hz 는 물리적으로 불가능하다 — ①~⑤가 통과해도 막는다.
+
+    실제로 청양교 재처리 산출이 ①~⑤ 통과·f₁ 232Hz 로 ✅ 를 받았던 구멍이다.
+    """
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=90.0, freq=[232.1, 633.9], EI_identified=True)
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.natural_freq_hz == 232.1 and a.verdict == NO
+    assert any("불가능" in r for r in a.reasons)
+
+
+def test_plausible_frequency_passes(tmp_path):
+    """45m 경간 5.4Hz 는 정상 — 통과해야 한다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44, 14.6], EI_identified=True)
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.freq_coef is not None and a.verdict == OK, a.reasons
+
+
+def test_saturated_ei_blocks(tmp_path):
+    """식별 EI 가 전부 상한에 붙었으면 강성 식별이 실패한 것이다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.4], EI_global=1e14,
+               ei=[1e14] * 6, EI_identified=True)
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.ei_saturated_frac == 1.0 and a.verdict == NO
+    assert any("포화" in r for r in a.reasons)
+
+
+def test_declared_identification_failure_is_conditional_not_blocked(tmp_path):
+    """실패를 실패로 적고 설계 제원으로 모달을 냈으면 조건부다 — 변위·CRI 는 살아 있다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=False,
+               EI_modal_basis="geometric")
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.ei_identified is False and a.verdict == COND
+    assert any("설계 제원 기준" in r for r in a.reasons)
+
+
+def test_span_uses_structural_span_not_total_length(tmp_path):
+    """다경간 연속교는 연장이 아니라 **구조 경간**으로 진동수를 판단해야 한다."""
+    p = _project(tmp_path / "p.h5", span_m=900.0)          # 연장 900m, 경간 45m
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=True)
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.freq_coef == round(5.44 * 45.0, 1) and a.verdict != NO

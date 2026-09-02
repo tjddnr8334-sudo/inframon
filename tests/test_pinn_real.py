@@ -290,9 +290,16 @@ def test_pde_terms_and_params():
     import torch
 
     from inframon.pinn.pde import PDE_TERMS, make_pde_params
-    assert PDE_TERMS["girder"] == (False, False, False)
+    assert PDE_TERMS["girder"] == (False, False, False, False)
     assert PDE_TERMS["cable_stayed"][1] is True       # 탄성지지 항
     assert PDE_TERMS["arch"][0] is True               # 축력 항
+    # 실 데이터에 가장 많은 형식은 **빠짐없이 등록**돼 있어야 한다. 표에 없으면 조용히
+    # 보 연산자로 폴백해, 라멘·PSCI거더·슬래브·박스가 전부 같은 모델로 돈다.
+    for t in ("slab", "box_girder", "rahmen", "psc_girder", "truss", "suspension"):
+        assert t in PDE_TERMS, t
+    # PSC 는 프리스트레스가 압축이라 축력 항이 켜지고 부호가 고정된다(p2 ≥ 0).
+    assert PDE_TERMS["psc_girder"][0] is True and PDE_TERMS["psc_girder"][3] is True
+    assert make_pde_params("psc_girder", torch)[0] is not None
     # girder: 둘 다 None / cable_stayed: p0만 / arch: p2만
     assert make_pde_params("girder", torch) == (None, None)
     p2, p0 = make_pde_params("cable_stayed", torch)
@@ -342,3 +349,22 @@ def test_pipeline_hotswap_pinn_real(tmp_path):
     assert isinstance(fram, FRAMOutput)
     assert fram.n_points == 25
     assert 0.0 <= fram.cri_global_max <= 1.0
+
+
+def test_ei_clipped_around_geometric_not_global_ceiling():
+    """식별 EI 는 기하학적 EI 주변에서만 물리적이다.
+
+    전역 상한(1e14)만 두면 관측이 휨 정보를 담지 못할 때 전 점이 상한에 붙어
+    '무한 강체'가 되고, 그 EI 로 낸 고유진동수가 90m 교량에서 232Hz 로 나온다.
+    """
+    from inframon.pinn.real_engine import EI_GEOM_HI, EI_GEOM_LO, _clip_ei
+
+    geom = 1.443e11
+    hi, hit_hi = _clip_ei(1e14, geom)
+    assert hi == geom * EI_GEOM_HI and hit_hi is True
+    lo, hit_lo = _clip_ei(1.0, geom)
+    assert lo == geom * EI_GEOM_LO and hit_lo is True
+    mid, hit = _clip_ei(geom * 1.2, geom)
+    assert mid == geom * 1.2 and hit is False
+    # 기하 EI 를 모르면 예전 절대범위로 물러난다(동작 보존)
+    assert _clip_ei(1e20, None)[0] == 1e14

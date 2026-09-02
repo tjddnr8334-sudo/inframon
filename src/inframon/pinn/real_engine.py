@@ -164,7 +164,8 @@ def _structural_span(prof, L_full: float) -> tuple[float, int]:
 
 
 def _identify_EI_from_pde(
-    d4_hat: float, L_m: float, q: float = Q0_NOMINAL, w_scale_m: float = 1.0
+    d4_hat: float, L_m: float, q: float = Q0_NOMINAL, w_scale_m: float = 1.0,
+    geom_ei: float | None = None,
 ) -> float:
     """비차원화 Euler-Bernoulli PDE 균형으로 **절대 EI[N·m²]** 식별.
 
@@ -176,10 +177,28 @@ def _identify_EI_from_pde(
     물리 범위로 클립. (d4_hat→0: 거의 강체 → EI 매우 큼 → 상한.)
     """
     EI = q * L_m**4 / (w_scale_m * abs(d4_hat) + 1e-30)
-    return float(np.clip(EI, 1e6, 1e14))
+    return _clip_ei(EI, geom_ei)[0]
 
 
-def _ei_from_shape(xn, shape_m, L_m, q, n_spans: int = 1):
+# 식별 EI 는 **기하학적 EI(단면·재료로 계산한 값)** 주변에서만 물리적이다. 손상은 강성을
+# 낮추고, 합성거동·부재추가는 높이지만, 수십 배는 아니다. 전역 상한(1e14)만 두면 관측이
+# 휨 정보를 담지 못할 때(d4→0) 전 점이 상한에 붙어 '무한 강체'가 나온다 — 실제로 청양교
+# 재처리에서 100% 포화·f₁ 232Hz 가 나왔다.
+EI_GEOM_LO, EI_GEOM_HI = 0.05, 20.0     # 기하 EI 대비 허용 배수
+EI_ABS_LO, EI_ABS_HI = 1.0e6, 1.0e14    # 기하 EI 를 모를 때의 최후 범위
+
+
+def _clip_ei(ei: float, geom_ei: float | None) -> tuple[float, bool]:
+    """(클립된 EI, 경계에 닿았는가). 기하 EI 를 알면 그 배수로, 모르면 절대범위로."""
+    if geom_ei and geom_ei > 0:
+        lo, hi = geom_ei * EI_GEOM_LO, geom_ei * EI_GEOM_HI
+    else:
+        lo, hi = EI_ABS_LO, EI_ABS_HI
+    out = float(np.clip(ei, lo, hi))
+    return out, bool(ei <= lo or ei >= hi)
+
+
+def _ei_from_shape(xn, shape_m, L_m, q, n_spans: int = 1, geom_ei: float | None = None):
     """관측 처짐형상(미터) → 절대 EI[N·m²]. **미분 없이** 4차 다항 최소제곱의 x⁴ 계수로.
 
     보 방정식 EI·w⁗=q 의 특수해는 w_p=q·x⁴/(24EI) 이고, 경계조건이 만드는 동차해는
@@ -220,9 +239,9 @@ def _ei_from_shape(xn, shape_m, L_m, q, n_spans: int = 1):
                 if e is not None:
                     eis.append(e)
         if eis:
-            return float(np.clip(np.median(eis), 1e6, 1e14))
+            return _clip_ei(float(np.median(eis)), geom_ei)[0]
     e = _ei_seg(x, y, L_m)
-    return None if e is None else float(np.clip(e, 1e6, 1e14))
+    return None if e is None else _clip_ei(e, geom_ei)[0]
 
 
 def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) -> PINNOutput:
@@ -367,6 +386,9 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
 
     # 시점별 절대 EI 식별. NN autograd 4차도함수는 spectral bias 로 절대 EI 를 ~2.5× 부풀린다
     # (OpenSees 검증). 항상 계산해 두되, 연직 관측이 있으면 아래에서 형상 기반 식별로 교체한다.
+    # 식별 범위는 **기하학적 EI**(단면·재료로 계산) 주변으로 묶는다 — 전역 상한만 두면
+    # 관측이 휨 정보를 못 담을 때 전 점이 상한에 붙어 '무한 강체'가 나온다.
+    _geom_ei = prof.geometric_EI() if hasattr(prof, "geometric_EI") else None
     sub_idx = list(range(0, M, max(1, M // 12)))
     d4_vals = []
     for tc in t_sub:
@@ -392,19 +414,22 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
             # 형상 점이 부족한 시점만 autograd(_identify_EI_from_pde)로 폴백한다.
             ei_list = []
             for k, dv in enumerate(d4_vals):
-                ei = (_ei_from_shape(xn, vert[:, sub_idx[k]] * 1e-3, L_m, q_eff, n_spans)
+                ei = (_ei_from_shape(xn, vert[:, sub_idx[k]] * 1e-3, L_m, q_eff, n_spans,
+                                     geom_ei=_geom_ei)
                       if k < len(sub_idx) else None)
                 if ei is None:
-                    ei = _identify_EI_from_pde(dv, L_m, q_eff, w_scale_used * 1e-3)
+                    ei = _identify_EI_from_pde(dv, L_m, q_eff, w_scale_used * 1e-3,
+                                               geom_ei=_geom_ei)
                 ei_list.append(ei)
             EI_series = np.array(ei_list, dtype=np.float64)
             EI_global = float(np.median(EI_series))
         else:
             # 데모·단일트랙(연직 없음): 기존 NN autograd → PDE 균형 경로(골든 회귀 불변).
-            EI_global = _identify_EI_from_pde(d4_hat, L_m, q_eff, w_scale_used * 1e-3)
+            EI_global = _identify_EI_from_pde(d4_hat, L_m, q_eff, w_scale_used * 1e-3,
+                                              geom_ei=_geom_ei)
             EI_series = np.array(
-                [_identify_EI_from_pde(v, L_m, q_eff, w_scale_used * 1e-3) for v in d4_vals],
-                dtype=np.float64)
+                [_identify_EI_from_pde(v, L_m, q_eff, w_scale_used * 1e-3, geom_ei=_geom_ei)
+                 for v in d4_vals], dtype=np.float64)
         # t_sub 는 정규화 시간(0~1) → 첫 취득일 기준 연 단위로 되돌린다.
         EI_series_t = (t_sub.detach().cpu().numpy().astype(np.float64)
                        * float(np.ptp(dates)) / 365.25)
@@ -432,7 +457,16 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     # 고유진동수: FEM 모달 (식별 EI_global, 프로파일 ρA, 단일경간·경계) — 다경간 연속교는
     # 연장이 아니라 단일 경간·고정단 근사로 물리적 진동수를 얻는다. 깊은(짧은) 보는 E-B 가
     # 전단·회전관성을 무시해 과대예측하므로 Timoshenko 보정계수를 곱한다(슬렌더 보엔 ≈1).
-    natural_freq = _fem_beam_frequencies(EI_global, prof.rho_a(), span_m, prof.boundary)
+    # 식별 EI 가 허용 경계에 붙었다면 그것은 "무한히 강하다"가 아니라 **식별 실패**다
+    # (관측 형상이 휨 정보를 담지 못함). 그 값으로 모달을 돌리면 물리적으로 불가능한
+    # 고유진동수가 나온다(청양교 90m 에서 232Hz). 실패는 실패로 적고, 모달은 설계 제원
+    # (기하학적 EI) 기준으로 돌려 최소한 물리적인 값을 준다.
+    _ei_ok = True
+    if _geom_ei and _geom_ei > 0:
+        _ei_ok = bool(EI_GEOM_LO * 1.001 < EI_global / _geom_ei < EI_GEOM_HI * 0.999)
+    _ei_modal = EI_global if _ei_ok else (_geom_ei or EI_global)
+    _ei_basis = "identified" if _ei_ok else ("geometric" if _geom_ei else "identified")
+    natural_freq = _fem_beam_frequencies(_ei_modal, prof.rho_a(), span_m, prof.boundary)
     natural_freq = natural_freq * _timoshenko_factors(prof, span_m, len(natural_freq))
 
     # ───────── 가상센싱(virtual sensing): 상부거더 전체 변위장 ─────────
@@ -629,6 +663,10 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         "section_area_m2": prof.section_area_m2(),
         "second_moment_I_m4": prof.second_moment_I_m4(),
         "geometric_EI_Nm2": prof.geometric_EI(),
+        # 강성 식별이 수렴했는가 · 고유진동수를 무엇으로 계산했는가(설계값이면 그렇게 적는다)
+        "EI_identified": bool(_ei_ok),
+        "EI_modal_basis": _ei_basis,
+        "EI_modal_Nm2": float(_ei_modal),
         "width_m": prof.width_m, "section_depth_m": prof.section_depth_m,
         "boundary": prof.boundary, "rho_a_kg_m": prof.rho_a(),   # FEM 교차검증용 경계·질량
         "structural_span_m": span_m, "n_spans": n_spans,         # 다경간 단일경간·경간수
