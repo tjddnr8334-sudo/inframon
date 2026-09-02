@@ -42,6 +42,26 @@ DATASETS = {
             "inspect_grade": ["최종안전점검결과", "안전점검결과", "안전등급", "INSP_GRD"],  # A~E
             "height_m": ["교량높이", "높이", "HGHT"],
             "facility_kind": ["시설물종류", "FCLTY_KND", "fcltyKnd"],
+            # ── 아래는 CSV 에 **실측으로 들어 있는데 쓰지 않던** 컬럼들 ──
+            # 추정으로 대체하지 말고 있는 값을 먼저 쓴다(이식성 원칙: 근거 있는 값 우선).
+            "sidewalk_width_m": ["교량보도폭", "보도폭"],      # 차도폭 = 교량폭 − 보도폭
+            "separated": ["상하행선분리여부"],                  # Y 면 폭이 한 방향 것
+            "allow_load_ton": ["허용통행하중"],                # 실제 통행 허용 하중[t]
+            "seismic_applied": ["내진설계적용여부"],
+            "seismic_secured": ["내진성능확보여부"],
+            "inspect_date": ["최종안전점검일자"],
+            "inspect_type": ["최종안전점검유형"],
+            "road_kind": ["도로종류"],                        # 일반국도·지방도… 교통량 추정 단서
+            "road_route": ["도로노선명"],
+            "clearance_m": ["하부통과제한높이"],
+            "repair_history": ["교량보수보강내역"],
+            "repair_cost": ["교량보수보강비용"],
+            "manager": ["관리기관명"],
+            "manager_tel": ["관리기관전화번호"],
+            "sigungu_code": ["시군구코드"],
+            "sido": ["시도명"], "sigungu": ["시군구명"],
+            "address": ["소재지지번주소", "소재지도로명주소"],
+            "data_base_date": ["데이터기준일자"],              # 이 값이 언제 기준인지
         },
     },
     "korex_traffic": {
@@ -67,12 +87,17 @@ _KO_STRUCTURE = [
     ("슬래브", "slab"), ("slab", "slab"),
     ("psci", "psc_girder"), ("psc i", "psc_girder"), ("프리플렉스", "psc_girder"),
     ("preflex", "psc_girder"), ("psc거더", "psc_girder"), ("psc빔", "psc_girder"),
+    ("pci", "psc_girder"), ("pc거더", "psc_girder"), ("pcb", "psc_girder"),
     ("거더", "girder"), ("판형", "girder"), ("i형", "girder"),
 ]
 # 형식명에 PSC/콘크리트/강 표기가 있으면 재료 직접 결정
 _KO_MATERIAL = [
     ("psc", "prestressed_concrete"), ("피에스씨", "prestressed_concrete"),
     ("prestressed", "prestressed_concrete"),
+    # KOTSA 표기는 'PC슬래브교(PCS)'·'PC박스' 처럼 PC 를 쓴다 — psc 다음에 둬야 안전하다.
+    ("pc슬래브", "prestressed_concrete"), ("pc박스", "prestressed_concrete"),
+    ("pc거더", "prestressed_concrete"), ("pcb", "prestressed_concrete"),
+    ("pcs", "prestressed_concrete"), ("pci", "prestressed_concrete"),
     ("rc", "reinforced_concrete"), ("철근콘크리트", "reinforced_concrete"),
     ("콘크리트", "reinforced_concrete"),
     ("강교", "steel"), ("스틸", "steel"), ("steel", "steel"), ("강상", "steel"),
@@ -276,6 +301,13 @@ def bridge_profile_from_record(record: dict) -> BridgeProfile:
     lanes = _num(_pick(record, f["lanes"]))
     if width_m is None and lanes:
         width_m = round(lanes * 3.5 + 1.0, 1)                # 차로수 → 폭 추정
+    # 보도폭은 CSV 에 실측으로 있다. 차도폭 = 교량폭 − 보도폭 — 활하중 차로수를 폭으로
+    # 추정할 때 보도까지 차로로 세면 하중이 과대해진다.
+    sidewalk = _num(_pick(record, f.get("sidewalk_width_m", [])))
+    carriage = (round(width_m - sidewalk, 1)
+                if width_m is not None and sidewalk is not None and width_m > sidewalk
+                else None)
+    separated = (str(_pick(record, f.get("separated", [])) or "").strip().upper() or None)
     span = max_span_estimate(btype, length_m)
     inf = infer_structural_defaults(btype, has_material_tag=mat_ko is not None,
                                     length_m=length_m, max_span_m=span)
@@ -297,6 +329,23 @@ def bridge_profile_from_record(record: dict) -> BridgeProfile:
         #    않게 한다(장대교는 연장에 접속교가 포함돼 추정 오차가 수 배로 커진다).
         extra={"osm_structure": str(struct_raw), "lanes": lanes, "max_span_m": span,
                "max_span_source": "estimate",
+               # ── CSV 실측(있으면 추정보다 우선) ──
+               "sidewalk_width_m": sidewalk,
+               "carriage_width_m": carriage,      # 차도폭 = 교량폭 − 보도폭(보행자 구간 제외)
+               "separated": separated,            # 상하행 분리 — 폭이 한 방향 것인가
+               "allow_load_ton": _num(_pick(record, f.get("allow_load_ton", []))),
+               "seismic_applied": _pick(record, f.get("seismic_applied", [])),
+               "seismic_secured": _pick(record, f.get("seismic_secured", [])),
+               "inspect_date": _pick(record, f.get("inspect_date", [])),
+               "inspect_type": _pick(record, f.get("inspect_type", [])),
+               "road_kind": _pick(record, f.get("road_kind", [])),
+               "road_route": _pick(record, f.get("road_route", [])),
+               "clearance_m": _num(_pick(record, f.get("clearance_m", []))),
+               "repair_history": _pick(record, f.get("repair_history", [])),
+               "manager": _pick(record, f.get("manager", [])),
+               "address": _pick(record, f.get("address", [])),
+               "sigungu_code": _pick(record, f.get("sigungu_code", [])),
+               "data_base_date": _pick(record, f.get("data_base_date", [])),
                "facility_kind": _pick(record, f["facility_kind"]),
                "completion": _pick(record, f["completion"]),
                "grade": normalize_grade(_pick(record, f["grade"])),   # 공식 종별등급

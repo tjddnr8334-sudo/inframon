@@ -90,6 +90,8 @@ def test_run_custom_pinn_end_to_end(tmp_path, monkeypatch):
     # 네트워크 수집을 mock — 사장교 프로파일 + 계절 온도
     import inframon.bridge_info as bi
     import inframon.weather as wx
+    # 리포에 제원 CSV 가 있고 없고에 따라 결과가 달라지면 안 된다 — 이 테스트는 OSM 경로다.
+    monkeypatch.setattr("inframon.bridge_specs_csv.lookup", lambda *a, **k: None)
     monkeypatch.setattr(bi, "fetch_bridge_profile", lambda *a, **k: BridgeProfile(
         name="테스트사장교", bridge_type="cable_stayed", material="steel",
         length_m=400.0, source="osm"))
