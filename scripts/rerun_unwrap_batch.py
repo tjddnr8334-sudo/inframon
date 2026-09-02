@@ -81,7 +81,8 @@ def preflight_env(unwrap: bool) -> None:
 
 def run_stack(name: str, slc_dir: str, out_dir: str, target: tuple[float, float], *,
               unwrap: bool = True, half_km: float = 2.0, count: int | None = None,
-              radius_km: float = 0.5) -> dict:
+              radius_km: float = 0.5, max_temporal_days: float = 72.0,
+              max_perp_m: float = 150.0) -> dict:
     from inframon.insar.snap_backend import run as snap_run
     from inframon.insar.track_preflight import preflight_track_h5
 
@@ -106,9 +107,13 @@ def run_stack(name: str, slc_dir: str, out_dir: str, target: tuple[float, float]
     t0 = time.time()
     # 반경을 좁게 잡는다 — 기본 3km 로 track 을 만들면 교량 위 점이 0.05% 밖에 안 되고
     # 감사가 '광역 필드'로 낮춘다. 언래핑은 ±half_km 를 풀되, track 은 교량 주변만 담는다.
+    # 시간 baseline 창이 좁으면 긴 스택에서 몇 쌍만 쓰인다(청양 34장 → 6쌍). EI 식별은
+    # 시점 수에 달려 있으므로 창을 넓힐 수 있게 뚫어 둔다 — 대신 긴 baseline 은 결맞음이
+    # 떨어져 언래핑이 실패할 수 있고, 그건 쌍 단위 실패로 기록된다.
     res = snap_run(scenes, lat, lon, out_dir=str(out), out_h5=str(h5),
                    era5_master=True, unwrap=unwrap, unwrap_half_km=half_km,
-                   radius_km=radius_km)
+                   radius_km=radius_km, max_temporal_days=max_temporal_days,
+                   max_perp_m=max_perp_m)
     ok = sum(1 for p in res.pairs if p.ok)
     print(f"  쌍 {ok}/{len(res.pairs)} 성공 · N={res.n_points} · {time.time() - t0:.0f}s",
           flush=True)
@@ -139,6 +144,11 @@ def main() -> None:
     ap.add_argument("--half-km", type=float, default=2.0, help="언래핑 범위(반경 km)")
     ap.add_argument("--radius-km", type=float, default=0.5,
                     help="track 에 담을 교량 반경(기본 0.5km) — 넓히면 광역 필드가 된다")
+    ap.add_argument("--max-temporal-days", type=float, default=72.0,
+                    help="master 대비 시간 baseline 상한(기본 72일). 긴 스택에서 시점을 "
+                         "늘리려면 키운다 — 결맞음 저하는 쌍 단위 실패로 드러난다")
+    ap.add_argument("--max-perp-m", type=float, default=150.0,
+                    help="수직 baseline 상한[m] (기본 150)")
     ap.add_argument("--no-unwrap", action="store_true", help="언래핑 없이(비교용)")
     a = ap.parse_args()
 
@@ -175,7 +185,9 @@ def main() -> None:
         try:
             results.append(run_stack(name, slc, out, tgt, unwrap=unwrap,
                                      half_km=a.half_km, count=a.count,
-                                     radius_km=a.radius_km))
+                                     radius_km=a.radius_km,
+                                     max_temporal_days=a.max_temporal_days,
+                                     max_perp_m=a.max_perp_m))
         except SystemExit:
             raise
         except Exception as e:  # noqa: BLE001 — 한 스택 실패가 다음을 막지 않는다

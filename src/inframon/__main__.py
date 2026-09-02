@@ -108,6 +108,17 @@ def main() -> None:
     p.add_argument("--import-track-h5", default=None, help="Track 결과 HDF5를 /insar 계약으로 변환")
     p.add_argument("--check-track", default=None, metavar="TRACK_H5",
                    help="Track 결과 HDF5 투입 전 사전검증(preflight) 후 종료(ready=0/not=1)")
+    p.add_argument("--bmap-sync", action="store_true",
+                   help="⑭ B-Maps 연속 반영 — data/ 아래 산출물을 감사한 뒤 **통과한 것만** "
+                        "플랫폼에 올린다. 바뀐 것만 보내고 결과를 sync_state.json 에 남긴다.")
+    p.add_argument("--bmap-dry-run", action="store_true",
+                   help="--bmap-sync 예행 — 무엇을 올릴지만 보여준다(전송·기록 없음)")
+    p.add_argument("--bmap-root", default="data", help="--bmap-sync 대상 폴더(기본 data)")
+    p.add_argument("--bmap-register", action="store_true",
+                   help="--bmap-sync 시 플랫폼 교량 id 가 없으면 **등록하고** 받은 id 를 "
+                        "bridge_target.json 에 적는다(다음 실행이 재사용)")
+    p.add_argument("--bmap-strict", action="store_true",
+                   help="🟡 조건부도 올리지 않는다(✅ 보고 가능만)")
     p.add_argument("--pontifex-push", default=None, metavar="PROJECT_H5",
                    help="⑭ 산출물을 Pontifex 교량 모니터링 플랫폼에 올린다. "
                         "--pontifex-bridge-id 필수. 감사에서 '보고 불가'면 막는다.")
@@ -1229,6 +1240,22 @@ def main() -> None:
                 print(f"                   {_gr['advice']}")
         print("=" * 56)
         return
+
+    if args.bmap_sync:
+        import sys as _sys
+
+        from .bmap_sync import discover, format_report, sync
+
+        targets = discover(args.bmap_root, registry=args.registry)
+        if not targets:
+            print(f"  대상 산출물이 없습니다: {args.bmap_root}")
+            _sys.exit(1)
+        items = sync(targets, base=args.pontifex_base, token=args.pontifex_token,
+                     dry_run=args.bmap_dry_run,
+                     allow_conditional=not args.bmap_strict,
+                     register=args.bmap_register)
+        print(format_report(items, dry_run=args.bmap_dry_run))
+        _sys.exit(0 if not any(i.action == "failed" for i in items) else 1)
 
     if args.pontifex_push or args.pontifex_register:
         import sys as _sys

@@ -2,17 +2,18 @@
   "_설명": "언래핑 재처리 배치 대상. 이 파일을 rerun_stacks.json 으로 복사해 자기 PC 경로로 고치세요.",
   "_사용": "python scripts/rerun_unwrap_batch.py --stack all",
   "f120": {
-    "name": "정자교 f120",
+    "name": "정자교",
     "slc": "E:/연구중/inframon/jeongjagyo_f120/SLC",
     "out": "data/rerun_f120",
     "lat": 37.3685405,
     "lon": 127.1089983
   },
   "chyg": {
-    "name": "청양교 chyg",
+    "name": "청양교",
     "slc": "E:/연구중/inframon/chyg_pilot/slc",
     "out": "data/rerun_chyg",
-    "lat": 36.4547,
-    "lon": 126.8013
-  }
+    "lat": 36.450655,
+    "lon": 126.80732
+  },
+  "_주의": "좌표는 **교량 데크 위**여야 한다. 표준데이터 좌표는 '교량시작점'이라 장대교는 시점-종점 중간을 쓴다(청양교에서 673m 오차를 겪었다)."
 }
