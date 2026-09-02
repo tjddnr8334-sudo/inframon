@@ -300,6 +300,7 @@ def process_star_network(
     filter_baseline: bool = True, bperp: dict | None = None,
     max_temporal_days: float = 72.0, max_perp_m: float = 150.0,
     max_doppler_hz: float = 500.0, min_keep: int = 3,
+    unwrap: bool = False, unwrap_half_km: float = 2.0,
 ) -> SnapRunResult:
     """스타 네트워크(기준 vs 각 보조) 코레지+간섭도+TC. reference 기본=최이른 날짜.
 
@@ -307,6 +308,10 @@ def process_star_network(
     이미 만든 지오코딩 산출물(.tif)은 gpt 를 다시 돌리지 않고 재사용(멱등 재개).
     filter_baseline 이면 처리 전에 **시공간 baseline·도플러** 초과 slave 를 제거
     (도플러는 SLC 애노테이션 로컬 파싱, B⊥ 는 bperp 주면 사용). min_keep 유지.
+
+    `unwrap=True` 면 쌍마다 **위상 언래핑**(SnaphuExport→snaphu→SnaphuImport)까지 한다.
+    언래핑 없이 나온 LOS 는 ±λ/4 에 갇혀 물리적 의미가 없으므로, 실산출은 이 경로를 쓴다.
+    비용 때문에 교량 ±`unwrap_half_km` 만 잘라 푼다(전 버스트는 3700만 화소).
     """
     scenes = [str(s) for s in scenes]
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -331,13 +336,29 @@ def process_star_network(
             max_doppler_hz=max_doppler_hz, min_keep=min_keep)
         secs = [by_date[d] for d in keep_dates if d != scene_date(ref)]
         res.rejected_slaves = rejected
+    tool = None
+    if unwrap:                       # 도구가 없으면 래핑 산출을 내놓지 말고 여기서 멈춘다
+        from . import snap_unwrap
+        tool = snap_unwrap.find_snaphu()
+        if tool is None:
+            raise SnapError(snap_unwrap.install_hint())
+
     for sec in sorted(secs, key=scene_date):
         rd, sd = scene_date(ref), scene_date(sec)
-        tif = str(out / f"tc_{rd}_{sd}.tif")
-        log = str(out / f"tc_{rd}_{sd}.log")
+        tag = "unw" if unwrap else "tc"
+        tif = str(out / f"{tag}_{rd}_{sd}.tif")
+        log = str(out / f"{tag}_{rd}_{sd}.log")
         try:
             if skip_existing and Path(tif).exists() and Path(tif).stat().st_size > 0:
                 res.pairs.append(SnapPairResult(rd, sd, tif, True, "재사용(skip_existing)"))
+                continue
+            if unwrap:
+                from . import snap_unwrap
+                snap_unwrap.unwrap_pair(gpt, ref, sec, burst, dem, tif,
+                                        target=(lat, lon), half_km=unwrap_half_km,
+                                        work_dir=out / f"snaphu_{rd}_{sd}", tool=tool,
+                                        log_file=log)
+                res.pairs.append(SnapPairResult(rd, sd, tif, True, "언래핑"))
                 continue
             rc = run_pair(gpt, graph, ref, sec, burst, dem, tif, log_file=log)
             ok = rc == 0 and Path(tif).exists()
@@ -345,6 +366,8 @@ def process_star_network(
                                             "" if ok else f"gpt rc={rc}"))
         except (OSError, subprocess.SubprocessError) as e:
             res.pairs.append(SnapPairResult(rd, sd, tif, False, str(e)))
+        except Exception as e:  # noqa: BLE001 — 언래핑 실패도 쌍 단위로 기록하고 계속
+            res.pairs.append(SnapPairResult(rd, sd, tif, False, str(e)[:160]))
     return res
 
 
@@ -922,7 +945,8 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
         graph_dir: str | Path | None = None, gpt: str | None = None,
         era5_master: bool = False, precip_max_mm: float | None = 8.0,
         humidity_max_pct: float | None = None, temp_max_c: float | None = None,
-        temp_min_c: float | None = None) -> SnapRunResult:
+        temp_min_c: float | None = None, unwrap: bool = False,
+        unwrap_half_km: float = 2.0) -> SnapRunResult:
     """전체: 스타 네트워크 처리 → Track H5. 임의 한국 교량 재사용 진입점.
 
     era5_master=True 면 ⑤ ERA5(강수·습도·온도)로 master(reference) 선정 + 악천후 씬 소거
@@ -939,13 +963,15 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
             weather = f"ERA5 master 실패(최이른 폴백): {e}"
 
     res = process_star_network(scenes, lat, lon, out_dir, reference=reference,
-                               dem=dem, graph_dir=graph_dir, gpt=gpt)
+                               dem=dem, graph_dir=graph_dir, gpt=gpt,
+                               unwrap=unwrap, unwrap_half_km=unwrap_half_km)
     res.weather = weather
     ref = str(reference) if reference else min([str(s) for s in scenes], key=scene_date)
     hd = platform_heading(ref, res.burst.subswath)
     out_h5 = str(out_h5) if out_h5 else str(Path(out_dir) / f"track_snap_{res.reference}.h5")
     res.n_points = build_track_h5(res.pairs, res.reference, out_h5, lat=lat, lon=lon,
-                                  coh_min=coh_min, radius_km=radius_km, heading=hd)
+                                  coh_min=coh_min, radius_km=radius_km, heading=hd,
+                                  unwrapped=unwrap)
     res.track_h5 = out_h5
     return res
 

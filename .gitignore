@@ -43,3 +43,6 @@ SAFE_files.txt
 # 파트너 전달본(스마트인사이드에이아이 pontifex) — 남의 코드다. 공개 저장소에 올리지 않는다.
 pontifex-*.tar.gz
 pontifex-*/
+
+# 재처리 대상 스택 — PC 마다 경로가 다르다(.example 만 저장소에)
+configs/rerun_stacks.json

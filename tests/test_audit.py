@@ -11,8 +11,18 @@ import json
 
 import h5py
 import numpy as np
+import pytest
 
 from inframon.audit import COND, NO, OK, audit_artifact, format_table
+
+
+@pytest.fixture(autouse=True)
+def _no_standard_data(monkeypatch):
+    """기본은 '표준데이터 없음' — 리포에 CSV 가 있고 없고에 따라 판정이 흔들리면 안 된다.
+
+    경간 비교를 보는 테스트는 각자 nearest_bridge_profile 을 주입한다.
+    """
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *a, **k: None)
 
 
 def _project(path, *, los=None, lonlat=(127.0, 37.0), n=50, m=5,
@@ -159,3 +169,37 @@ def test_table_marks_every_verdict(tmp_path):
                            target=(37.0, 127.0))]
     md = format_table(rows)
     assert md.count("|") > 10 and "보고 가능" in md and "보고 불가" in md
+
+
+def test_far_standard_data_match_is_not_treated_as_agreement(tmp_path, monkeypatch):
+    """멀리서 매칭된 표준데이터의 '실연장' 은 다른 교량 것이다 — 일치해도 근거가 못 된다.
+
+    정자교 재처리에서 567m 떨어진 금곡교가 매칭돼 경간이 108m vs 108m(×1)로 '일치'
+    했지만, 그 108m 은 금곡교 제원이었다.
+    """
+    class _Prof:
+        name = "금곡교"
+        length_m = 108.0
+        extra = {"match_dist_m": 566.9}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    a = audit_artifact(_project(tmp_path / "p.h5", span_m=108.0), target=(37.0, 127.0))
+    assert a.official_dist_m == 566.9
+    assert a.verdict == COND
+    assert any("떨어진" in r and "금곡교" in r for r in a.reasons)
+
+
+def test_close_standard_data_match_still_checks_span(tmp_path, monkeypatch):
+    """가까이 매칭됐으면 경간 비교는 그대로 유효하다(퇴화 입력 차단이 살아 있어야 한다)."""
+    class _Prof:
+        name = "칠백로"
+        length_m = 50.0
+        extra = {"match_dist_m": 12.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    a = audit_artifact(_project(tmp_path / "p.h5", span_m=16967.7), target=(37.0, 127.0))
+    assert a.verdict == NO and a.span_ratio > 300

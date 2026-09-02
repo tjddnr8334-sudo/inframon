@@ -29,6 +29,7 @@ from .insar.track_preflight import LOS_WRAP_LIMIT_MM
 DECK_RADIUS_M = 30.0
 WIDE_FIELD_FRAC = 0.01          # 교량 30m 내 비율이 이보다 낮으면 광역 필드
 SPAN_RATIO_MAX = 2.0            # PINN 경간이 실연장의 2배를 넘으면 퇴화 입력
+OFFICIAL_MATCH_MAX_M = 150.0    # 표준데이터가 이보다 멀면 다른 교량일 수 있다(⑪ 경고와 같은 기준)
 
 OK, COND, NO = "보고 가능", "조건부", "보고 불가"
 
@@ -53,6 +54,7 @@ class ArtifactAudit:
     official_length_m: float | None = None
     span_ratio: float | None = None
     official_name: str | None = None
+    official_dist_m: float | None = None
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -153,6 +155,7 @@ def _official_span(a: ArtifactAudit, bridge_csv: str | Path | None) -> None:
         return
     a.official_name = getattr(prof, "name", None)
     a.official_length_m = float(prof.length_m)
+    a.official_dist_m = (getattr(prof, "extra", None) or {}).get("match_dist_m")
     if a.pinn_span_m:
         a.span_ratio = round(a.pinn_span_m / a.official_length_m, 2)
 
@@ -197,7 +200,12 @@ def _judge(a: ArtifactAudit) -> None:
     elif a.deck_frac is not None and a.deck_frac < WIDE_FIELD_FRAC:
         soft.append(f"광역 필드 — 30m 내 {a.n_within_deck}/{a.n_points}"
                     f"({a.deck_frac * 100:.2f}%)")
-    if a.span_ratio is not None and a.span_ratio > SPAN_RATIO_MAX:
+    # 표준데이터가 멀리서 매칭됐으면 그 '실연장' 은 다른 교량 것이다 — 비교 자체가 근거가
+    # 못 되므로 판정을 낮춘다(실측: 정자교 재처리에서 567m 떨어진 금곡교가 매칭됐다).
+    if (a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M):
+        soft.append(f"표준데이터 매칭이 {a.official_dist_m:.0f}m 떨어진 "
+                    f"'{a.official_name}' — 다른 교량 제원일 수 있다")
+    elif a.span_ratio is not None and a.span_ratio > SPAN_RATIO_MAX:
         hard.append(f"PINN 경간 {a.pinn_span_m:.0f}m 가 실연장 "
                     f"{a.official_length_m:.0f}m 의 {a.span_ratio:.1f}배")
     if a.target is None:
@@ -221,7 +229,10 @@ def format_table(rows: list[ArtifactAudit]) -> str:
         deck = ("—" if r.n_within_deck is None
                 else f"{r.n_within_deck}/{r.n_points} ({r.deck_frac * 100:.2f}%)")
         if r.pinn_span_m and r.official_length_m:
-            span = f"{r.pinn_span_m:.0f}m vs {r.official_length_m:.0f}m (×{r.span_ratio:g})"
+            far = (f" ⚠️{r.official_dist_m:.0f}m 떨어진 매칭"
+                   if r.official_dist_m and r.official_dist_m > OFFICIAL_MATCH_MAX_M else "")
+            span = (f"{r.pinn_span_m:.0f}m vs {r.official_length_m:.0f}m "
+                    f"(×{r.span_ratio:g}){far}")
         elif r.pinn_span_m:
             span = f"{r.pinn_span_m:.0f}m (실연장 미확인)"
         else:
