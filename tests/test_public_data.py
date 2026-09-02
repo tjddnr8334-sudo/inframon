@@ -13,7 +13,13 @@ def test_parse_structure_ko():
     assert parse_structure_ko("PSC박스거더") == ("box_girder", "prestressed_concrete")
     assert parse_structure_ko("강교 판형교") == ("girder", "steel")
     assert parse_structure_ko("RC라멘교") == ("rahmen", "reinforced_concrete")
-    assert parse_structure_ko("PSC I형 거더") == ("girder", "prestressed_concrete")
+    # PSC I 거더는 프리스트레스 축압축이 지배식에 들어가므로 일반 거더와 다른 형식이다
+    # (실 데이터 8,548건 — 이전에는 전부 girder 로 뭉뚱그려졌다).
+    assert parse_structure_ko("PSC I형 거더") == ("psc_girder", "prestressed_concrete")
+    assert parse_structure_ko("PSCI거더교") == ("psc_girder", "prestressed_concrete")
+    assert parse_structure_ko("RC슬래브교") == ("slab", "reinforced_concrete")
+    assert parse_structure_ko("RC중공슬래브교") == ("slab", "reinforced_concrete")
+    assert parse_structure_ko("프리플렉스거더교") == ("psc_girder", None)
     assert parse_structure_ko("사장교") == ("cable_stayed", None)
     assert parse_structure_ko("") == ("girder", None)
 

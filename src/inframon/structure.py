@@ -14,19 +14,27 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, Field
 
-BRIDGE_TYPES = ("girder", "box_girder", "rahmen", "cable_stayed", "suspension",
-                "arch", "truss", "continuous_girder")
+# 실 전국교량표준데이터 상부구조형식 분포(33,120건)를 반영해 **거동이 다른 것끼리** 나눈다.
+#   라멘교 8,561 · PSCI거더교 8,548 · RC슬래브교 7,278 · 강박스거더교 5,006 ·
+#   프리플렉스거더교 1,642 · PSC박스 679 · RCT거더 676 · PSC슬래브 489 · 강플레이트 419 …
+# 이전에는 슬래브·PSCI·프리플렉스가 전부 'girder' 로 뭉뚱그려져 같은 보 모델로 돌았다.
+BRIDGE_TYPES = ("girder", "psc_girder", "slab", "box_girder", "rahmen",
+                "cable_stayed", "suspension", "arch", "truss", "continuous_girder")
 
 # 형식 → 재료 추론(OSM material 태그 없을 때). PSC box·아치·라멘은 콘크리트가 표준.
 _TYPE_MATERIAL = {
     "box_girder": "prestressed_concrete", "rahmen": "reinforced_concrete",
     "arch": "reinforced_concrete", "truss": "steel",
     "cable_stayed": "steel", "suspension": "steel", "girder": "steel",
+    "psc_girder": "prestressed_concrete",   # PSC I·프리플렉스 — 프리스트레스 도입
+    "slab": "reinforced_concrete",          # RC/PSC 슬래브 — 판 거동, 짧은 경간
 }
 # 형식 → 단면높이/스팬 비(대표). 거더 L/20, box L/18, 트러스 L/10, 아치 L/30, 사장·현수 데크 L/40.
 _TYPE_DEPTH_RATIO = {
     "girder": 1 / 20, "box_girder": 1 / 18, "rahmen": 1 / 22, "truss": 1 / 10,
     "arch": 1 / 30, "cable_stayed": 1 / 40, "suspension": 1 / 45,
+    # PSC I 거더는 표준 거더보다 낮은 형고(L/16~L/18), 슬래브교는 판이라 훨씬 얇다(L/25 내외).
+    "psc_girder": 1 / 17, "slab": 1 / 25,
 }
 
 
@@ -48,7 +56,7 @@ def infer_structural_defaults(bridge_type: str, *, has_material_tag: bool,
         ratio = _TYPE_DEPTH_RATIO.get(bridge_type, 1 / 20)
         out["section_depth_m"] = round(min(max(span * ratio, 0.4), 8.0), 2)
     if bridge_type == "rahmen":
-        out["boundary"] = "fixed"
+        out["boundary"] = "fixed"          # 강결 라멘 — 단부 회전 구속
     elif length_m and max_span_m and max_span_m > 0 and length_m / max_span_m > 1.5:
         out["boundary"] = "continuous"
     else:

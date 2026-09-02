@@ -12,6 +12,7 @@
   ③ 경간 정합 — PINN span_m vs 전국교량표준데이터 실연장
   ④ CRI       — 최악값(참고 지표)
   ⑤ 재현      — 실행 기록(pipeline_report.json·prov_* attrs·track_source)
+  ⑥ PINN 타당 — 식별 EI 가 상한에 붙었는가 · 고유진동수가 교량 규모에서 가능한 값인가
 
 판정은 세 단계다 — **보고 가능 / 조건부 / 보고 불가**. 애매하면 낮춘다.
 """
@@ -30,6 +31,11 @@ DECK_RADIUS_M = 30.0
 WIDE_FIELD_FRAC = 0.01          # 교량 30m 내 비율이 이보다 낮으면 광역 필드
 SPAN_RATIO_MAX = 2.0            # PINN 경간이 실연장의 2배를 넘으면 퇴화 입력
 OFFICIAL_MATCH_MAX_M = 150.0    # 표준데이터가 이보다 멀면 다른 교량일 수 있다(⑪ 경고와 같은 기준)
+# ⑥ PINN 출력 타당성. 실교량 1차 고유진동수는 경간이 길수록 낮다 — 대략 f₁ ≈ 100/L[m]
+# (30m 급 3~5Hz, 100m 급 0.7~1.5Hz). 아래 계수 밖이면 구조 파라미터가 퇴화한 것이다.
+FREQ_COEF_MIN, FREQ_COEF_MAX = 10.0, 600.0     # f₁·L 의 허용 범위[Hz·m]
+EI_SATURATION_FRAC = 0.99       # 이 비율 이상이 상한값에 붙어 있으면 포화
+EI_GEOM_RATIO_MAX = 50.0        # 식별 EI 가 기하학적 EI 의 이 배를 넘으면 비물리적
 
 OK, COND, NO = "보고 가능", "조건부", "보고 불가"
 
@@ -57,6 +63,14 @@ class ArtifactAudit:
     official_dist_m: float | None = None
     target_name: str | None = None
     pinn_profile_source: str | None = None
+    # ⑥ PINN 출력 타당성
+    ei_median: float | None = None
+    ei_saturated_frac: float | None = None
+    ei_geom_ratio: float | None = None
+    natural_freq_hz: float | None = None
+    freq_coef: float | None = None          # f₁ × 경간[m] — 규모 무관 비교용
+    ei_identified: bool | None = None       # 강성 식별이 수렴했는가
+    ei_modal_basis: str | None = None       # 고유진동수를 무엇으로 계산했는가
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -101,6 +115,7 @@ def audit_artifact(path: str | Path, *, target: tuple[float, float] | None = Non
                 inp = _json_attr(f["pinn"], "inputs")
                 a.pinn_span_m = _num(inp.get("total_length_m") or inp.get("span_m"))
                 a.pinn_profile_source = inp.get("profile_source")
+                _pinn_plausibility(a, f, inp)
             a.target = target or _target_from(src, p)
             a.target_name = _target_name(p)
             if a.target and xyz is not None and xyz.shape[1] >= 2:
@@ -177,6 +192,41 @@ def _worst_cri(f) -> float | None:
     return None
 
 
+# ── ⑥ PINN 출력 타당성 ──────────────────────────────────────────────────
+def _pinn_plausibility(a: ArtifactAudit, f, inp: dict) -> None:
+    """식별 EI 와 고유진동수가 물리적으로 가능한 값인지 본다.
+
+    ①~⑤가 전부 통과해도 여기가 깨져 있으면 구조량(EI·고유진동수)과 그것에 의존하는 CRI 는
+    쓸 수 없다. 실제로 청양교 재처리 산출이 ①~⑤ 통과·**f₁=232Hz**·EI 전 점 상한 도달로
+    ✅ 를 받았다 — 90m 거더교의 실제 1차 진동수는 1~3Hz 다.
+    """
+    import numpy as np
+
+    if "pinn/EI" in f:
+        ei = np.asarray(f["pinn/EI"][()], dtype=np.float64).ravel()
+        ei = ei[np.isfinite(ei)]
+        if ei.size:
+            a.ei_median = float(np.median(ei))
+            ceil = _num(inp.get("EI_global"))
+            top = max(ceil or 0.0, float(ei.max()))
+            a.ei_saturated_frac = float(np.mean(ei >= top * (1 - 1e-9)))
+            geom = _num(inp.get("geometric_EI_Nm2"))
+            if geom and geom > 0:
+                a.ei_geom_ratio = round(a.ei_median / geom, 1)
+    a.ei_identified = inp.get("EI_identified")
+    a.ei_modal_basis = inp.get("EI_modal_basis")
+    if "pinn/natural_freq" in f:
+        fr = np.asarray(f["pinn/natural_freq"][()], dtype=np.float64).ravel()
+        fr = fr[np.isfinite(fr) & (fr > 0)]
+        if fr.size:
+            a.natural_freq_hz = float(fr.min())        # 1차 모드
+            # 모달은 **구조 경간**(연속교면 연장/경간수)으로 돈다 — 연장으로 나누면
+            # 다경간 교량이 전부 비물리적으로 보인다.
+            span = _num(inp.get("structural_span_m")) or a.pinn_span_m
+            if span:
+                a.freq_coef = round(a.natural_freq_hz * float(span), 1)
+
+
 # ── ⑤ 재현 기록 ─────────────────────────────────────────────────────────
 def _run_record(p: Path, f, src: dict) -> tuple[bool, str]:
     """어떤 명령·어떤 입력으로 나왔는지 되짚을 수 있는가."""
@@ -233,6 +283,21 @@ def _judge(a: ArtifactAudit) -> None:
         soft.append("대상 좌표 미지정 — 교량 포함 여부 미확인")
     if not a.has_run_record:
         soft.append("실행 기록 없음 — 재현 불가")
+    # ⑥ PINN 출력이 퇴화하면 EI·고유진동수·CRI 를 쓸 수 없다 — 차단이다.
+    if a.ei_identified is False:
+        # 실패를 실패로 적고 설계 제원으로 모달을 돌렸으면 **차단이 아니라 조건부**다.
+        # 변위·CRI 는 관측 기반이라 살아 있고, EI·고유진동수만 설계값 기준이 된다.
+        soft.append("강성(EI) 식별이 수렴하지 않아 고유진동수를 설계 제원 기준으로 냈다 "
+                    "— EI·고유진동수는 관측값이 아니다")
+    elif a.ei_saturated_frac is not None and a.ei_saturated_frac >= EI_SATURATION_FRAC:
+        hard.append(f"식별 EI 가 상한에 붙어 있다({a.ei_saturated_frac * 100:.0f}% 포화) "
+                    f"— 강성 식별이 수렴하지 않았다")
+    elif a.ei_geom_ratio is not None and a.ei_geom_ratio > EI_GEOM_RATIO_MAX:
+        hard.append(f"식별 EI 가 기하학적 EI 의 {a.ei_geom_ratio:g}배 — 비물리적")
+    if a.freq_coef is not None and not (FREQ_COEF_MIN <= a.freq_coef <= FREQ_COEF_MAX):
+        hard.append(f"1차 고유진동수 {a.natural_freq_hz:.1f}Hz 가 경간 "
+                    f"{a.pinn_span_m:.0f}m 에서 불가능하다(f₁·L={a.freq_coef:g}, "
+                    f"정상 {FREQ_COEF_MIN:g}~{FREQ_COEF_MAX:g})")
     a.reasons = hard + soft
     a.verdict = NO if hard else (COND if soft else OK)
 
@@ -263,8 +328,23 @@ def format_table(rows: list[ArtifactAudit]) -> str:
         cri = f"{r.cri_worst:.3f}" if r.cri_worst is not None else "—"
         rec = r.record_note if r.has_run_record else "❌ 없음"
         mark = {OK: "✅", COND: "🟡", NO: "❌"}[r.verdict]
+        if r.natural_freq_hz is None and r.ei_median is None:
+            pl = "—"
+        else:
+            bits = []
+            if r.natural_freq_hz is not None:
+                bits.append(f"f₁ {r.natural_freq_hz:.1f}Hz")
+            if r.ei_identified is False:
+                bits.append(f"EI 미식별({r.ei_modal_basis or '-'} 기준)")
+            elif r.ei_saturated_frac is not None and r.ei_saturated_frac >= EI_SATURATION_FRAC:
+                bits.append("EI 포화")
+            elif r.ei_geom_ratio is not None:
+                bits.append(f"EI×{r.ei_geom_ratio:g}(기하)")
+            bad = any(("고유진동수" in x and "불가능" in x) or "포화" in x or "비물리적" in x
+                      for x in r.reasons)
+            pl = ("❌ " if bad else "✅ ") + " · ".join(bits)
         lines.append(f"| `{Path(r.path).parent.name}/{Path(r.path).name}` | {unw} | {deck} | "
-                     f"{span} | {cri} | {rec} | {mark} {r.verdict} |")
+                     f"{span} | {cri} | {rec} | {pl} | {mark} {r.verdict} |")
     return "\n".join(lines)
 
 

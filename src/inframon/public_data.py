@@ -59,10 +59,15 @@ DATASETS = {
 }
 
 # 한글 상부구조형식 → inframon 형식(bridge_type) 매핑(부분일치)
+# 순서가 곧 우선순위다 — 'PSC박스거더교' 는 박스가, 'RC중공슬래브교' 는 슬래브가 이겨야 한다.
+# 실 데이터의 상위 형식(라멘·PSCI·슬래브·강박스·프리플렉스)이 각자 다른 거동으로 가게 나눈다.
 _KO_STRUCTURE = [
     ("현수", "suspension"), ("사장", "cable_stayed"), ("아치", "arch"), ("트러스", "truss"),
     ("박스", "box_girder"), ("box", "box_girder"), ("라멘", "rahmen"), ("강결", "rahmen"),
-    ("거더", "girder"), ("슬래브", "girder"), ("판형", "girder"), ("i형", "girder"),
+    ("슬래브", "slab"), ("slab", "slab"),
+    ("psci", "psc_girder"), ("psc i", "psc_girder"), ("프리플렉스", "psc_girder"),
+    ("preflex", "psc_girder"), ("psc거더", "psc_girder"), ("psc빔", "psc_girder"),
+    ("거더", "girder"), ("판형", "girder"), ("i형", "girder"),
 ]
 # 형식명에 PSC/콘크리트/강 표기가 있으면 재료 직접 결정
 _KO_MATERIAL = [
