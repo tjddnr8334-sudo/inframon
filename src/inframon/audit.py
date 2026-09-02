@@ -56,6 +56,7 @@ class ArtifactAudit:
     official_name: str | None = None
     official_dist_m: float | None = None
     target_name: str | None = None
+    pinn_profile_source: str | None = None
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -99,6 +100,7 @@ def audit_artifact(path: str | Path, *, target: tuple[float, float] | None = Non
             if "pinn" in f:
                 inp = _json_attr(f["pinn"], "inputs")
                 a.pinn_span_m = _num(inp.get("total_length_m") or inp.get("span_m"))
+                a.pinn_profile_source = inp.get("profile_source")
             a.target = target or _target_from(src, p)
             a.target_name = _target_name(p)
             if a.target and xyz is not None and xyz.shape[1] >= 2:
@@ -204,7 +206,16 @@ def _judge(a: ArtifactAudit) -> None:
                     f"({a.deck_frac * 100:.2f}%)")
     # 표준데이터가 멀리서 매칭됐으면 그 '실연장' 은 다른 교량 것이다 — 비교 자체가 근거가
     # 못 되므로 판정을 낮춘다(실측: 정자교 재처리에서 567m 떨어진 금곡교가 매칭됐다).
-    if (a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M):
+    used_csv = str(a.pinn_profile_source or "").startswith("data_go_kr")
+    if a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M and not used_csv:
+        # PINN 이 그 CSV 기록을 **쓰지 않았다**. 먼 기록과의 비교를 '잘못된 제원'처럼 적으면
+        # 사실과 다르다 — 실제로 무엇을 썼는지(OSM 등)를 말하고, 확인 필요로만 남긴다.
+        _sp = f"(경간 {a.pinn_span_m:.0f}m)" if a.pinn_span_m else ""
+        soft.append(
+            f"표준데이터에 이 교량이 없다(최근접 '{a.official_name}' {a.official_dist_m:.0f}m). "
+            f"PINN 은 {a.pinn_profile_source or '추정'} 제원{_sp}을 썼다 "
+            f"— 실 제원 확인 필요(--bridge-profile)")
+    elif (a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M):
         # 이름이 같으면 '다른 교량'이 아니라 **표준데이터 등록 좌표가 먼** 것이다
         # (CSV 는 교량시작점을 쓴다). 사실이 다르므로 문구도 달라야 한다.
         # 한쪽이 다른 쪽을 품으면 같은 교량이다("청양교 chyg" ↔ "청양교").
@@ -241,8 +252,10 @@ def format_table(rows: list[ArtifactAudit]) -> str:
         if r.pinn_span_m and r.official_length_m:
             far = (f" ⚠️{r.official_dist_m:.0f}m 떨어진 매칭"
                    if r.official_dist_m and r.official_dist_m > OFFICIAL_MATCH_MAX_M else "")
+            src = ("" if str(r.pinn_profile_source or "").startswith("data_go_kr")
+                   else f" [PINN: {r.pinn_profile_source or '추정'}]")
             span = (f"{r.pinn_span_m:.0f}m vs {r.official_length_m:.0f}m "
-                    f"(×{r.span_ratio:g}){far}")
+                    f"(×{r.span_ratio:g}){far}{src}")
         elif r.pinn_span_m:
             span = f"{r.pinn_span_m:.0f}m (실연장 미확인)"
         else:

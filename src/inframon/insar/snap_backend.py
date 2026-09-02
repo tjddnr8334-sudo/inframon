@@ -678,14 +678,14 @@ def find_reference_point(
     if not ok:
         return None
     with rasterio.open(ok[0].product) as ds0:
-        coh_stack = [ds0.read(2).astype(np.float64)]
+        coh_stack = [ds0.read(_band_indices(ok[0].product)["coherence"]).astype(np.float64)]
         H, W = coh_stack[0].shape
         rows, cols = np.mgrid[0:H, 0:W]
         xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
         glon = np.asarray(xs).reshape(H, W); glat = np.asarray(ys).reshape(H, W)
     for p in ok[1:]:
         with rasterio.open(p.product) as ds:
-            coh_stack.append(ds.read(2).astype(np.float64))
+            coh_stack.append(ds.read(_band_indices(p.product)["coherence"]).astype(np.float64))
     coh_mean = np.mean(coh_stack, axis=0)
 
     mask = np.isfinite(coh_mean) & (coh_mean > 0.0)
@@ -742,9 +742,13 @@ def build_bridge_track_ps_ds(
     mlon, Mlon, mlat, Mlat = min(lons), max(lons), min(lats), max(lats)
     marg = buffer_m / 111000.0 * 3 + 0.001    # 데크 bbox + 여유(버퍼계산 대상 축소)
 
+    # 밴드 번호를 외우지 않는다 — 언래핑 레인 산출은 [coh, 위상, 입사각] 순서라
+    # 1=위상/2=coherence 로 읽으면 둘이 조용히 뒤바뀐다.
+    b0 = _band_indices(ok[0].product)
     with rasterio.open(ok[0].product) as ds0:
-        ph0 = ds0.read(1); coh0 = ds0.read(2)
-        inc0 = ds0.read(3) if ds0.count >= 3 else np.full(ph0.shape, np.nan, np.float32)
+        ph0 = ds0.read(b0["phase"]); coh0 = ds0.read(b0["coherence"])
+        inc0 = (ds0.read(b0["incidence"]) if b0["incidence"] and ds0.count >= b0["incidence"]
+                else np.full(ph0.shape, np.nan, np.float32))
         H, W = ph0.shape
         rows, cols = np.mgrid[0:H, 0:W]
         xs, ys = rasterio.transform.xy(ds0.transform, rows.ravel(), cols.ravel())
@@ -760,9 +764,10 @@ def build_bridge_track_ps_ds(
     coh_stack = [coh0.astype(np.float64)]
     ph_list = [ph0.astype(np.float64)]
     for p in ok[1:]:
+        bi = _band_indices(p.product)
         with rasterio.open(p.product) as ds:
-            coh_stack.append(ds.read(2).astype(np.float64))
-            ph_list.append(ds.read(1).astype(np.float64))
+            coh_stack.append(ds.read(bi["coherence"]).astype(np.float64))
+            ph_list.append(ds.read(bi["phase"]).astype(np.float64))
 
     # ── 튀는 슬레이브 자동 제거: master 대비 (데크 근방) 평균 coherence 로버스트 이상치 ──
     # 대기교란·비간섭·궤도이상 등으로 간섭도가 급락한 slave 는 시계열을 오염 → MAD 하한

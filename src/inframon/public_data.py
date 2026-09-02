@@ -197,23 +197,64 @@ def search_bridges_by_name(csv_path, query: str, *, limit: int = 20) -> list[dic
     return out
 
 
-def nearest_bridge_profile(csv_path, lat: float, lon: float, *,
-                           max_km: float = 1.0) -> BridgeProfile | None:
-    """전국교량표준데이터 CSV 에서 (lat,lon) 최근접 교량 → BridgeProfile. 없으면 None."""
+def _segment_distance_m(lat: float, lon: float, a: tuple[float, float],
+                        b: tuple[float, float] | None) -> float:
+    """(lat,lon) → 교량 **시점-종점 선분** 최단거리[m]. 종점이 없으면 시점까지 거리.
+
+    CSV 의 좌표는 '교량시작점'이다. 점 거리만 쓰면 장대교는 중앙·종점을 찍었을 때 자기
+    자신이 안 잡힌다(광안대교 7.4km: 중앙·종점에서 매칭 실패). 선분으로 재면 데크 어디를
+    찍어도 같은 교량이 잡힌다.
+    """
     import math
+    k = math.cos(math.radians(lat))
+    ax, ay = (a[1] - lon) * k, a[0] - lat
+    if b is None:
+        return math.hypot(ax, ay) * 111000.0
+    bx, by = (b[1] - lon) * k, b[0] - lat
+    dx, dy = bx - ax, by - ay
+    seg2 = dx * dx + dy * dy
+    if seg2 <= 0.0:
+        return math.hypot(ax, ay) * 111000.0
+    t = max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))   # 원점(대상)의 선분 투영
+    return math.hypot(ax + t * dx, ay + t * dy) * 111000.0
+
+
+def nearest_bridge_profile(csv_path, lat: float, lon: float, *,
+                           max_km: float = 1.0, name: str | None = None,
+                           name_max_km: float = 5.0) -> BridgeProfile | None:
+    """전국교량표준데이터 CSV 에서 (lat,lon) 최근접 교량 → BridgeProfile. 없으면 None.
+
+    거리는 **시점-종점 선분**까지로 잰다. `name` 을 주면 이름이 일치하는 기록을 우선한다
+    (`name_max_km` 까지) — 표준데이터 등록 좌표가 실제 데크에서 수백 m 떨어져 있는 경우가
+    흔해서, 이름이 맞는데 거리로 탈락하는 일을 막는다. 채택 근거는 extra 에 남긴다.
+    """
     f = DATASETS["national_bridge_standard"]["fields"]
     best, bestd = None, float("inf")
+    named, namedd = None, float("inf")
+    want = (name or "").strip()
     for r in load_bridges_csv(csv_path):
         rlat = _num(_pick(r, f["lat"])); rlon = _num(_pick(r, f["lon"]))
         if rlat is None or rlon is None:
             continue
-        d = math.hypot((rlat - lat), (rlon - lon) * math.cos(math.radians(lat))) * 111000.0
+        elat = _num(_pick(r, f.get("lat_end", []))); elon = _num(_pick(r, f.get("lon_end", [])))
+        end = (elat, elon) if elat is not None and elon is not None else None
+        d = _segment_distance_m(lat, lon, (rlat, rlon), end)
         if d < bestd:
             bestd, best = d, r
+        if want:
+            rname = str(_pick(r, f["name"]) or "").strip()
+            if rname and (rname in want or want in rname) and d < namedd:
+                namedd, named = d, r
+    if named is not None and namedd <= name_max_km * 1000.0:
+        prof = bridge_profile_from_record(named)
+        prof.extra["match_dist_m"] = round(namedd, 1)
+        prof.extra["match_by"] = "name"
+        return prof
     if best is None or bestd > max_km * 1000.0:
         return None
     prof = bridge_profile_from_record(best)
     prof.extra["match_dist_m"] = round(bestd, 1)
+    prof.extra["match_by"] = "distance"
     return prof
 
 

@@ -53,15 +53,23 @@ def _match_warnings(prof, requested_name: str | None, max_km: float) -> list[str
         dist_f = float(dist)
     except (TypeError, ValueError):
         dist_f = None
-    if requested_name and prof.name and str(prof.name).strip() != str(requested_name).strip():
+    _rn, _pn = str(requested_name or "").strip(), str(prof.name or "").strip()
+    if _rn and _pn and _rn != _pn and not (_rn in _pn or _pn in _rn):
         warns.append(
             f"이름 불일치: 요청 '{requested_name}' vs 표준데이터 '{prof.name}' — "
             "표준데이터에 대상 교량이 없어 이웃 교량이 잡혔을 수 있습니다.")
     if dist_f is not None and dist_f > BRIDGE_MATCH_TRUST_M:
-        warns.append(
-            f"매칭 거리 {dist_f:.0f}m > {BRIDGE_MATCH_TRUST_M:.0f}m — 다른 교량의 제원"
-            "(스팬·형식·재료)으로 PINN 이 돌 수 있습니다. "
-            f"--bridge-csv-max-km 를 줄이거나(현재 {max_km}km) 제원을 직접 지정하세요.")
+        if prof.extra.get("match_by") == "name":
+            # 이름으로 찾았으면 '다른 교량'이 아니라 표준데이터 등록 좌표가 먼 것이다
+            # (CSV 는 교량시작점을 쓴다). 사실이 다르니 문구도 달라야 한다.
+            warns.append(
+                f"표준데이터 '{prof.name}' 등록 좌표가 {dist_f:.0f}m 떨어져 있습니다 — "
+                "이름이 일치해 제원을 채택했으나, 다른 지점의 기록일 가능성은 확인하세요.")
+        else:
+            warns.append(
+                f"매칭 거리 {dist_f:.0f}m > {BRIDGE_MATCH_TRUST_M:.0f}m — 다른 교량의 제원"
+                "(스팬·형식·재료)으로 PINN 이 돌 수 있습니다. "
+                f"--bridge-csv-max-km 를 줄이거나(현재 {max_km}km) 제원을 직접 지정하세요.")
     return warns
 
 
@@ -116,7 +124,23 @@ def run_custom_pinn(
             collected["bridge_csv"] = f"사용자 지정 제원({getattr(bridge_profile, 'name', bridge_profile)})"
         elif bridge_csv:
             from .public_data import nearest_bridge_profile
-            prof = nearest_bridge_profile(bridge_csv, lat, lon, max_km=bridge_csv_max_km)
+            prof = nearest_bridge_profile(bridge_csv, lat, lon, max_km=bridge_csv_max_km,
+                                          name=bridge_name)
+            # '최근접'은 '그 교량'이 아니다. 이름이 일치하지 않는데 신뢰 거리 밖이면
+            # **채택하지 않는다** — 경고만 하고 쓰면 다른 교량 제원으로 구조해석이 통째로
+            # 틀린다(정자교 좌표에 567m 떨어진 금곡교 제원이 들어갔다). OSM 폴백으로 간다.
+            if prof is not None and prof.extra.get("match_by") != "name":
+                try:
+                    _d = float(prof.extra.get("match_dist_m"))
+                except (TypeError, ValueError):
+                    _d = None
+                if _d is not None and _d > BRIDGE_MATCH_TRUST_M:
+                    collected["bridge_csv"] = (
+                        f"표준데이터 최근접 {prof.name}(거리 {_d:.0f}m)은 "
+                        f"{BRIDGE_MATCH_TRUST_M:.0f}m 밖이라 **채택하지 않음** → OSM 폴백. "
+                        f"실제 제원을 알면 --bridge-profile 로 지정하세요.")
+                    collected["bridge_match_warnings"] = [collected["bridge_csv"]]
+                    prof = None
             if prof is not None:
                 official_grade = prof.extra.get("grade")     # 공식 시설물종별등급(추정보다 우선)
                 _dl = prof.extra.get("design_load")
@@ -129,7 +153,8 @@ def run_custom_pinn(
                 # 구조 해석이 통째로 틀린다. 이름·거리 불일치를 반드시 표면화한다.
                 collected["bridge_match_warnings"] = _match_warnings(
                     prof, bridge_name, bridge_csv_max_km)
-            else:
+            elif "채택하지 않음" not in str(collected.get("bridge_csv", "")):
+                # 위에서 '멀어서 안 씀' 을 이미 적었으면 그 사유를 덮어쓰지 않는다.
                 collected["bridge_csv"] = f"CSV 내 {bridge_csv_max_km}km 이내 교량 없음 → OSM 폴백"
         if prof is None:
             from .bridge_info import fetch_bridge_profile
