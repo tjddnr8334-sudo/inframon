@@ -50,3 +50,7 @@ configs/rerun_stacks.json
 # 파트너 제공 교량 제원 CSV(스마트인사이드에이아이) — 남의 데이터다
 data/bridges_load.csv
 data/bridges_specs.csv
+
+# 한 번에 시작(start.py)이 만드는 가상환경·데모 산출물
+.venv/
+demo.h5
