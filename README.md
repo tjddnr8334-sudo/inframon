@@ -12,7 +12,30 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
-> **처음이신가요?** 무엇을 받고 어떻게 돌리는지 단계별로: [docs/시작하기.md](docs/시작하기.md)
+## 30초 시작 — 한 파일만 실행하면 됩니다
+
+```bash
+git clone https://github.com/tjddnr8334-sudo/inframon
+cd inframon
+python start.py                 # Windows 는 start.bat 더블클릭도 됩니다
+```
+
+`start.py` 가 파이썬 확인 → 가상환경 → 설치 → **데모 파이프라인 실행**까지 알아서 합니다
+(필요한 건 파이썬 3.11+ 뿐, 다시 실행해도 안전합니다).
+
+```
+[4/4] 데모 실행
+  통합 인프라 모니터링 — 파이프라인 완료 (CV→InSAR→PINN→FRAM)
+  측정점/시점    : N=200, M=36
+  최대 CRI       : 0.653 · 경보 경고
+```
+
+| 더 하고 싶으면 | 명령 |
+|---|---|
+| 화면(대시보드)으로 보기 | `python start.py --dashboard` → http://localhost:8501 |
+| 실데이터용 패키지까지 | `python start.py --full` |
+| 단계별 상세 안내 | [docs/시작하기.md](docs/시작하기.md) |
+
 
 ## 🔄 전체 흐름 · Workflow
 
