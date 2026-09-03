@@ -12,6 +12,8 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
+> **처음이신가요?** 무엇을 받고 어떻게 돌리는지 단계별로: [docs/시작하기.md](docs/시작하기.md)
+
 ## 🔄 전체 흐름 · Workflow
 
 위성 InSAR 관측 → 구조 역산 → 공진 지표 → 잔존수명, 그리고 각 단계를 **독립 데이터로 검증**하는
