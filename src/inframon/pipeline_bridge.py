@@ -442,9 +442,16 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
             if do_adi:                              # 진폭쌍 → ADI(~20분 추가)
                 amps = amplitude_pairs([str(x) for x in Path(ctx["slc_dir"]).glob("*.zip")],
                                        lat, lon, out, reference=res.reference, burst=res.burst)
+            # 버퍼를 30m 로 고정하지 않는다 — 교량 방위·LOS·폭·형하고에 따라 달라진다.
+            # ⑪이 모은 실측 제원을 넘기면 build_bridge_track_ps_ds 가 계산한다.
+            _m = ctx.get("bridge_meta") or {}
+            _csv = ctx.get("bridge_csv_measured") or {}
             r9 = build_bridge_track_ps_ds(res.pairs, res.reference, deck_h5,
-                                          geometry_latlon=geometry, buffer_m=30.0,
+                                          geometry_latlon=geometry, buffer_m=None,
                                           coh_min=0.35, heading=hd, amp_pairs=amps,
+                                          bridge_width_m=_m.get("width_m"),
+                                          bridge_height_m=(_csv.get("height_m")
+                                                           or _m.get("height_m")),
                                           apply_reference=True, roi_bbox=ctx.get("roi_bbox"))
             ctx["ps_ds"] = r9
             _rf = r9.get("reference", {})
@@ -452,9 +459,14 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
                     f"{'✓0.98' if _rf.get('meets_098') else '⚠<0.98'}") if _rf.get("applied") else ""
             _rej = r9.get("rejected_slaves", [])
             _rjt = f" · 튀는 slave {len(_rej)}개 제거" if _rej else ""
+            _sg = r9.get("shift_geometry") or {}
+            _sgt = (f" · 쉬프트 {_sg['shift_m']:.0f}m(횡 {_sg['cross_m']:+.0f}m"
+                    f"{'·검증가능' if _sg.get('shift_observable') else '·종방향'})"
+                    if _sg else "")
             rep.add(StageResult("⑨PS/DS(교량30m)", "done",
                                 f"{r9['n_points']}점(PS {r9['n_ps']}/DS {r9['n_ds']}) · "
-                                f"데크≤{r9['buffer_m']:.0f}m · {r9['class_method']}{_rft}{_rjt}"))
+                                f"데크≤{r9['buffer_m']:.0f}m{_sgt} · "
+                                f"{r9['class_method']}{_rft}{_rjt}"))
         except Exception as e:  # noqa: BLE001
             rep.add(StageResult("⑨PS/DS(교량30m)", "error", str(e)[:90]))
             deck_h5 = eres.track_h5
