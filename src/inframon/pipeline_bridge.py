@@ -276,6 +276,24 @@ def run_bridge_pipeline(
     return rep
 
 
+def _prof_for_twin(ctx: dict):
+    """트윈 고도 계산에 쓸 교량 제원(형하고) — ⑪ 이 모아둔 것을 그대로 본다."""
+    class _P:
+        extra = {}
+    p = _P()
+    meta = ctx.get("bridge_meta") or {}
+    ex = {}
+    for k in ("height_m", "clearance_m"):
+        if meta.get(k) is not None:
+            ex[k] = meta[k]
+    csv = ctx.get("bridge_csv_measured") or {}
+    for k in ("height_m", "clearance_m"):
+        if csv.get(k) is not None:
+            ex.setdefault(k, csv[k])
+    p.extra = ex
+    return p
+
+
 def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
                        bridge_id, twin_value):
     """⑬ 디지털트윈(glTF·3D Tiles) + ⑭ BMAP 레지스트리 등록.
@@ -305,15 +323,25 @@ def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
                 bound = f"부재 결합 {n_bound}/{len(guids)}점 (GlobalId)"
             except Exception as e:  # noqa: BLE001 — 결합 실패해도 트윈은 만든다
                 bound = f"부재 결합 실패({str(e)[:50]}) → 점군 트윈으로 진행"
+        # 고도: IFC 부재 상단 > PSI 잔차높이 > 지면표고+형하고. **flat 은 쓰지 않는다** —
+        # z=0 이면 점군이 교량이 아니라 지면(청양교 기준 93m 아래)에 깔린다.
+        _clear = None
+        try:
+            from .insar.deck_z import clearance_from_profile
+            _clear = clearance_from_profile(_prof_for_twin(ctx))
+        except Exception:  # noqa: BLE001
+            _clear = None
         r = export_insar_gltf(proj, glb, value=twin_value, fram_project=proj,
                               element_guids=guids, element_z=element_z,
-                              z_source="element" if element_z is not None else "flat")
+                              clearance_m=_clear, z_source="deck")
         t = write_3dtiles_tileset(glb)
         ctx["twin"] = {"glb": str(glb), "tileset": t.get("out") or str(out / "tileset.json"),
                        "meta": str(glb) + ".meta.json", "bound": bound,
                        "n_points": r.get("n_points") if isinstance(r, dict) else None}
+        _zsrc = (r.get("georef", {}) if isinstance(r, dict) else {}).get("z_detail")             or (r.get("georef", {}) if isinstance(r, dict) else {}).get("z_source", "-")
+        ctx["twin"]["z"] = _zsrc
         rep.add(StageResult("⑬IFC디지털트윈", "done",
-                            f"{bound} · {glb.name}+3D Tiles"))
+                            f"{bound} · 고도 {_zsrc} · {glb.name}+3D Tiles"))
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑬IFC디지털트윈", "error", str(e)[:100]))
 

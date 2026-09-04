@@ -185,3 +185,37 @@ def test_globalid_binding_via_alignment(tmp_path):
     assert abs(gltf["accessors"][0]["min"][1] - 9.0) < 1e-3       # 전 점 데크 레벨(Y=9m)
     meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
     assert all(f["element_globalid"] == "DECK1" for f in meta["features"])
+
+
+def test_deck_z_source_lifts_points_onto_the_bridge(tmp_path, monkeypatch):
+    """z_source='deck' 는 점을 데크 레벨로 올리고 origin 고도에 실어 보낸다.
+
+    이전 기본값(flat)은 점을 0m 에 깔아 교량보다 수십~수백 m 아래에 놓았다
+    (청양교: 지면 93m, 데크 103m 인데 점군은 0m).
+    """
+
+    from inframon.insar.gltf_export import export_insar_gltf
+
+    h5 = _track(tmp_path)                          # 이 모듈의 기존 헬퍼
+    monkeypatch.setattr("inframon.insar.bridge_meta._fetch_elevation",
+                        lambda lats, lons, **k: [93.0])
+    out = tmp_path / "twin.glb"
+    r = export_insar_gltf(h5, out, z_source="deck", clearance_m=10.0)
+    g = r["georef"]
+    assert g["z_source"] == "dem+clearance"
+    assert g["ground_m"] == 93.0 and g["clearance_m"] == 10.0
+    assert abs(g["deck_z_median_m"] - 103.0) < 0.01     # 지면 93 + 형하고 10
+    assert "교량높이" in g["z_detail"] or "형하고" in g["z_detail"]
+    # 점의 Y 가 절대고도를 담는다 — 기존 dem·element 원천과 같은 규약
+    gltf, _ = _parse_glb(out)
+    assert abs(gltf["accessors"][0]["min"][1] - 103.0) < 0.01
+
+
+def test_flat_z_source_still_reports_zero(tmp_path):
+    """flat 을 명시하면 예전대로 0m — 다만 무엇을 썼는지 남는다."""
+    from inframon.insar.gltf_export import export_insar_gltf
+
+    h5 = _track(tmp_path)
+    r = export_insar_gltf(h5, tmp_path / "flat.glb", z_source="flat")
+    assert r["georef"]["z_source"] == "flat"
+    assert "deck_z_median_m" not in r["georef"]

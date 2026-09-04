@@ -88,7 +88,7 @@ def _placement_xyz(element, scale: float):
     """
     import numpy as np
 
-    pl = getattr(element, "ObjectPlacement", None)
+    pl = _attr(element, "ObjectPlacement", None)
     if pl is None:
         return np.zeros(3, dtype=float)
     try:
@@ -103,21 +103,34 @@ def _placement_xyz(element, scale: float):
             return np.zeros(3, dtype=float)
 
 
+def _attr(el, name: str, default=None):
+    """IFC 엔티티 속성 안전 접근.
+
+    ifcopenshell 은 **스키마에 없는 속성**에 getattr 을 쓰면 기본값을 주는 게 아니라
+    RuntimeError("Index N is out of range")를 던진다. IFC2X3 의 IfcBeam 에는
+    PredefinedType 이 없어(IFC4 에서 추가) 실 IFC 를 읽자마자 이 경로가 죽었다.
+    """
+    try:
+        return getattr(el, name, default)
+    except (RuntimeError, AttributeError, TypeError):
+        return default
+
+
 def _predefined_str(el) -> str:
     """PredefinedType → 대문자 문자열('' 없음). USERDEFINED 면 ObjectType 을 본다."""
-    pd = str(getattr(el, "PredefinedType", "") or "").upper()
+    pd = str(_attr(el, "PredefinedType", "") or "").upper()
     if pd in ("", "NOTDEFINED", "NONE"):
         return ""
     if pd == "USERDEFINED":
-        return str(getattr(el, "ObjectType", "") or "").upper()
+        return str(_attr(el, "ObjectType", "") or "").upper()
     return pd
 
 
 def _spatial_parent(el):
     """공간 계층 부모 1단계 — 포함(IfcRelContainedInSpatialStructure) 우선, 집합(IfcRelAggregates) 폴백."""
-    for rel in getattr(el, "ContainedInStructure", None) or []:
+    for rel in _attr(el, "ContainedInStructure", None) or []:
         return rel.RelatingStructure
-    for rel in getattr(el, "Decomposes", None) or []:
+    for rel in _attr(el, "Decomposes", None) or []:
         return rel.RelatingObject
     return None
 
@@ -167,15 +180,15 @@ def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement
     seen: set[str] = set()
     for t in types:
         for el in f.by_type(t):
-            guid = getattr(el, "GlobalId", None)
+            guid = _attr(el, "GlobalId", None)
             if not guid or guid in seen:
                 continue
             seen.add(guid)
             ifc_type = el.is_a()
-            name = getattr(el, "Name", "") or ""
+            name = _attr(el, "Name", "") or ""
             lo = hi = None
             src = "placement"
-            if geom is not None and getattr(el, "Representation", None) is not None:
+            if geom is not None and _attr(el, "Representation", None) is not None:
                 try:
                     shape = geom.create_shape(settings, el)
                     v = np.asarray(shape.geometry.verts, dtype=float).reshape(-1, 3)
@@ -204,7 +217,7 @@ def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement
 def _drop_pset(f, element, pset_name: str) -> int:
     """부재에 붙은 동명 PropertySet 과 그 관계를 제거한다. 제거한 개수 반환."""
     dropped = 0
-    for rel in list(getattr(element, "IsDefinedBy", ()) or ()):
+    for rel in list(_attr(element, "IsDefinedBy", ()) or ()):
         if not rel.is_a("IfcRelDefinesByProperties"):
             continue
         ps = rel.RelatingPropertyDefinition
@@ -316,7 +329,7 @@ def inspect(ifc_path: str | Path) -> dict:
     n_repr = 0
     for el in f.by_type("IfcElement"):
         types[el.is_a()] = types.get(el.is_a(), 0) + 1
-        if getattr(el, "Representation", None) is not None:
+        if _attr(el, "Representation", None) is not None:
             n_repr += 1
     n_el = sum(types.values())
 
