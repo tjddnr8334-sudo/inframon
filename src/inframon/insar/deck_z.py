@@ -51,17 +51,33 @@ class DeckZ:
 
 def deck_elevation(lonlat, *, element_z=None, psi_elev=None, track_height=None,
                    clearance_m: float | None = None, dem_fn=None,
-                   allow_network: bool = True) -> DeckZ:
+                   allow_network: bool = True,
+                   element_z_datum: float | None = None) -> DeckZ:
     """점별 데크 고도[m]. 좋은 원천부터 시도하고 무엇을 썼는지 남긴다.
 
     lonlat: [N,2] (lon, lat). 나머지는 있으면 쓰고 없으면 다음 후보로 내려간다.
+
+    `element_z` 는 **IFC 로컬 z**(대개 지면 0 기준)다. 절대고도로 쓰려면 그 원점의
+    표고(`element_z_datum`, 보통 IfcMapConversion 의 OrthogonalHeight)를 더해야 한다.
+    안 더하면 점이 다시 지면 아래로 내려간다 — 청양교에서 12.1m(로컬)를 절대고도로 써
+    93m 만큼 어긋났다.
     """
     lonlat = np.asarray(lonlat, dtype=float)
     n = lonlat.shape[0]
 
     if element_z is not None and np.isfinite(np.asarray(element_z, float)).any():
-        z = np.nan_to_num(np.asarray(element_z, float), nan=0.0)
-        return DeckZ(z=z, source="ifc_element_top", detail="IFC 부재 상단")
+        ez = np.asarray(element_z, float)
+        z = np.nan_to_num(ez, nan=float(np.nanmedian(ez)))
+        if element_z_datum is None:
+            # 원점 표고를 모르면 로컬 z 를 절대고도로 쓸 수 없다. 지면 표고를 구해 더한다.
+            g = _ground_elevation(lonlat, dem_fn=dem_fn, allow_network=allow_network)
+            if g is None:
+                return DeckZ(z=z, source="ifc_element_top",
+                             detail="IFC 부재 상단(로컬 z — 원점 표고 미상, 절대고도 아님)")
+            element_z_datum = g
+        z = z + float(element_z_datum)
+        return DeckZ(z=z, source="ifc_element_top", ground_m=float(element_z_datum),
+                     detail=f"IFC 부재 상단 + 원점 표고 {element_z_datum:.0f}m")
 
     if psi_elev is not None and np.isfinite(np.asarray(psi_elev, float)).any():
         z = np.nan_to_num(np.asarray(psi_elev, float), nan=0.0)

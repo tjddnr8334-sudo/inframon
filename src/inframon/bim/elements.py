@@ -119,15 +119,22 @@ def _read_text(p: Path) -> str:
 
 
 def load_elements(path: str | Path) -> list[Element]:
-    """부재 테이블을 JSON 또는 CSV 에서 읽는다(UTF-8/cp949 자동).
+    """부재 목록을 **IFC·JSON·CSV** 에서 읽는다(UTF-8/cp949 자동).
 
+    IFC : `.ifc`/`.ifczip` → `bim.ifc_io.read_elements`(ifcopenshell 필요)
     JSON: `{"elements": [...]}` 또는 리스트. 각 항목은 Element 필드.
     CSV : 헤더 `guid,name,ifc_type,member,xmin,ymin,zmin,xmax,ymax,zmax`
           (member 는 생략 가능 — ifc_type/name 에서 추론).
+
+    ⚠️ 예전에는 `.ifc` 를 CSV 로 읽어 `KeyError: 'guid'` 로 죽었다 — 상위 문서는 IFC 를
+    받는다고 적혀 있었는데 이 함수가 확장자를 보지 않았다. 실 IFC 를 물려서야 드러났다.
     """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"부재 테이블이 없습니다: {p}")
+    if p.suffix.lower() in (".ifc", ".ifczip", ".ifcxml"):
+        from .ifc_io import read_elements
+        return read_elements(p)
     if p.suffix.lower() == ".json":
         raw = json.loads(_read_text(p))
         items = raw.get("elements", raw) if isinstance(raw, dict) else raw

@@ -95,6 +95,7 @@ def align_project_to_bim(
     max_dist_m: float = 5.0,
     tol_m: float = 0.5,
     use_z: bool = False,
+    point_z=None,
     max_rms_m: float = 0.5,
     min_points: int = 3,
     as_of: str | None = None,
@@ -123,7 +124,17 @@ def align_project_to_bim(
         map_conversion.target_crs = target_crs
 
     src_crs = _source_crs(proj["xyz"], source_crs)
-    local, gmeta = to_ifc_local(proj["xyz"], map_conversion, source_crs=src_crs, use_z=use_z)
+    xyz = proj["xyz"]
+    if point_z is not None:
+        # 트랙에 고도가 없으면 project.h5 의 z 가 0 이라, z 정합을 켜면 데크 점이
+        # **상판이 아니라 교각·교대**에 붙는다(실제로 프록시 IFC 결합에서 그렇게 나왔다).
+        # 데크 고도를 밖에서 주입해 그 오해를 없앤다(deck_z.deck_elevation 산출).
+        pz = np.asarray(point_z, dtype=np.float64).ravel()
+        if pz.size != xyz.shape[0]:
+            raise AlignmentError(
+                f"point_z 개수({pz.size})가 점 수({xyz.shape[0]})와 다릅니다.")
+        xyz = np.column_stack([xyz[:, 0], xyz[:, 1], pz])
+    local, gmeta = to_ifc_local(xyz, map_conversion, source_crs=src_crs, use_z=use_z)
 
     alignment = {**map_conversion.to_dict(), **gmeta,
                  "control_points": (str(control_points) if control_points else None)}

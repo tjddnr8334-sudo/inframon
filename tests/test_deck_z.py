@@ -19,9 +19,12 @@ def _dem(_lats, _lons):
 
 
 def test_ifc_element_z_wins():
-    """BIM 이 있으면 그 데크 레벨이 가장 정확하다 — 다른 후보보다 우선."""
-    d = deck_elevation(LONLAT, element_z=[103.2, 103.3, 103.1], psi_elev=[99, 99, 99],
-                       clearance_m=10.0, dem_fn=_dem)
+    """BIM 이 있으면 그 데크 레벨이 가장 정확하다 — 다른 후보보다 우선.
+
+    IFC z 는 로컬(지면 0 기준)이라 원점 표고를 더해 절대고도로 만든다.
+    """
+    d = deck_elevation(LONLAT, element_z=[10.2, 10.3, 10.1], psi_elev=[99, 99, 99],
+                       clearance_m=10.0, dem_fn=_dem, element_z_datum=93.0)
     assert d.source == "ifc_element_top"
     assert np.allclose(d.z, [103.2, 103.3, 103.1])
 
@@ -83,3 +86,26 @@ def test_clearance_rejects_implausible_values():
     assert clearance_from_profile(_Prof(height_m=0.0)) is None
     assert clearance_from_profile(_Prof(height_m=1000.0)) is None
     assert clearance_from_profile(_Prof()) is None
+
+
+def test_ifc_local_z_is_lifted_by_origin_height():
+    """IFC 로컬 z 를 절대고도로 그냥 쓰면 안 된다 — 원점 표고를 더해야 한다.
+
+    청양교에서 실제로 겪었다: 부재 상단 12.1m(로컬)를 절대고도로 써서 93m 어긋났다.
+    """
+    d = deck_elevation(LONLAT, element_z=[12.1] * 3, element_z_datum=93.0)
+    assert d.source == "ifc_element_top" and np.allclose(d.z, 105.1)
+    assert "원점 표고" in d.describe()
+
+
+def test_ifc_local_z_falls_back_to_dem_datum():
+    """원점 표고를 모르면 지면 표고로 채운다."""
+    d = deck_elevation(LONLAT, element_z=[12.1] * 3, dem_fn=_dem)
+    assert np.allclose(d.z, 105.1) and d.ground_m == 93.0
+
+
+def test_ifc_local_z_without_any_datum_says_not_absolute():
+    """지면도 못 구하면 로컬 z 를 그대로 두되 '절대고도 아님'을 밝힌다."""
+    d = deck_elevation(LONLAT, element_z=[12.1] * 3, dem_fn=lambda *a: [],
+                       allow_network=False)
+    assert "절대고도 아님" in d.describe()

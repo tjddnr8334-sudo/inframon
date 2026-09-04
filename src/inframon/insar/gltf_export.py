@@ -331,7 +331,8 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
                       z_exaggerate: float = 0.0, element_map: dict | None = None,
                       element_guids=None, z_source: str = "flat", dem=None,
                       element_z=None, psi_elev=None, track_height=None,
-                      clearance_m: float | None = None) -> dict:
+                      clearance_m: float | None = None,
+                      element_z_datum: float | None = None) -> dict:
     """InSAR/PSI H5 → 웹 트윈용 .glb + .meta.json.
 
     value: 'velocity'(LOS 속도)·'cri'(FRAM CRI 최근접, fram_project 필요)·'cumulative'(누적 LOS).
@@ -389,7 +390,8 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
         # 이게 없으면 점이 z=0 에 깔려 **교량보다 수십~수백 m 아래**에 놓인다.
         from .deck_z import deck_elevation
         d = deck_elevation(lonlat, element_z=element_z, psi_elev=psi_elev,
-                           track_height=track_height, clearance_m=clearance_m)
+                           track_height=track_height, clearance_m=clearance_m,
+                           element_z_datum=element_z_datum)
         z = d.z
         georef["z_source"] = d.source
         georef["z_detail"] = d.describe()
