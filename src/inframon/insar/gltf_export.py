@@ -330,11 +330,13 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
                       fram_project: str | Path | None = None, ifc_crs: str = "EPSG:5186",
                       z_exaggerate: float = 0.0, element_map: dict | None = None,
                       element_guids=None, z_source: str = "flat", dem=None,
-                      element_z=None, psi_elev=None) -> dict:
+                      element_z=None, psi_elev=None, track_height=None,
+                      clearance_m: float | None = None) -> dict:
     """InSAR/PSI H5 → 웹 트윈용 .glb + .meta.json.
 
     value: 'velocity'(LOS 속도)·'cri'(FRAM CRI 최근접, fram_project 필요)·'cumulative'(누적 LOS).
-    z_source(3D 고도): 'flat'(평면)·'value'(값×z_exaggerate 과장)·'dem'(DEM 표고, dem= 래스터/SRTM
+    z_source(3D 고도): 'deck'(**권장** — IFC>PSI>DEM+형하고 순으로 데크 레벨에 얹는다)·
+    'flat'(평면)·'value'(값×z_exaggerate 과장)·'dem'(DEM 표고, dem= 래스터/SRTM
     디렉터리)·'element'(IFC 부재 상단 Z=데크레벨, element_z= 점별 배열 — guid_map_from_alignment 산출).
     dem·element 는 실 미터 고도라 교량/지형 위에 얹힌다.
     결합(택1): element_guids([N] 점별 GlobalId) 우선, 없으면 element_map(point_id→GlobalId).
@@ -382,12 +384,29 @@ def export_insar_gltf(h5: str | Path, out_path: str | Path, *, value: str = "vel
                              "psi_height.estimate_residual_height(ref_dem=)['abs_elev_m'] 를 넘기세요.")
         z = np.nan_to_num(np.asarray(psi_elev, float), nan=0.0)      # 산란체 실고도(DEM+Δh)
         georef["z_source"] = "psi_residual_height"
+    elif z_source == "deck":
+        # IFC 도 B⊥ 도 없는 임의 교량의 기본값 — 지면 표고 + 형하고로 데크 레벨 근사.
+        # 이게 없으면 점이 z=0 에 깔려 **교량보다 수십~수백 m 아래**에 놓인다.
+        from .deck_z import deck_elevation
+        d = deck_elevation(lonlat, element_z=element_z, psi_elev=psi_elev,
+                           track_height=track_height, clearance_m=clearance_m)
+        z = d.z
+        georef["z_source"] = d.source
+        georef["z_detail"] = d.describe()
+        if d.ground_m is not None:
+            georef["ground_m"] = round(d.ground_m, 1)
+        if d.clearance_m is not None:
+            georef["clearance_m"] = round(d.clearance_m, 2)
     elif z_source == "value" or z_exaggerate:
         z = np.nan_to_num(vals, nan=0.0) * (z_exaggerate or 1.0) / 1000.0
         georef["z_source"] = f"value×{z_exaggerate or 1.0}"
     else:
         z = np.zeros(n)
         georef["z_source"] = "flat"
+    # 점의 Y 가 **절대고도(m)** 를 담는다(기존 dem·element 원천과 같은 규약). origin 은
+    # 지오이드 면에 두고 뷰어가 eastNorthUpToFixedFrame 로 배치하므로 결과 고도는 같다.
+    if z.size and np.isfinite(z).any() and georef.get("z_source") not in (None, "flat"):
+        georef["deck_z_median_m"] = round(float(np.nanmedian(z)), 2)
     positions = np.column_stack([east_north[:, 0], z, -east_north[:, 1]]).astype(float)
     _write_glb(positions, colors, out_path)
     # 사이드카: GlobalId 결합 계약 + georef + 점별 원시값
