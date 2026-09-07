@@ -3,8 +3,8 @@
  "source": "read back from jeongjagyo_proxy.ifc",
  "elements": [
   {
-   "guid": "2N46VPGD5VXWSODXYBL_JM",
-   "name": "PierCap#1",
+   "guid": "0P8J9ED_BCUZPRX2B_TXUU",
+   "name": "P1C",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
@@ -22,8 +22,8 @@
    }
   },
   {
-   "guid": "2SVECQBHOV7RE9GUBYTP7Q",
-   "name": "PierCap#2",
+   "guid": "0ES65ZXZYS2EWQX8GHW3UM",
+   "name": "P2C",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
@@ -41,8 +41,8 @@
    }
   },
   {
-   "guid": "3ER066I2F_Q_38FO4JU9L$",
-   "name": "PierCap#3",
+   "guid": "1620$N8NQ56CSORT_L4L3R",
+   "name": "P3C",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
@@ -60,8 +60,8 @@
    }
   },
   {
-   "guid": "27QR4U220B$N_XH9UG_PUQ",
-   "name": "PierCap#4",
+   "guid": "32F3UWVQWEPNY0PTUP10Y0",
+   "name": "P4C",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
@@ -79,8 +79,8 @@
    }
   },
   {
-   "guid": "0P_4RUPSCMX66ZXDQ02V75",
-   "name": "Abutment#1",
+   "guid": "0U3U$Q0H2H0NVJFJZP2UOU",
+   "name": "A1",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "abutment",
    "bbox_min": [
@@ -98,8 +98,8 @@
    }
   },
   {
-   "guid": "1M_GMY1LG_5V0_AZ$Y71_4",
-   "name": "Abutment#2",
+   "guid": "0CP1A2OZZEN37HDZMCD1AT",
+   "name": "A2",
    "ifc_type": "IfcBuildingElementProxy",
    "member": "abutment",
    "bbox_min": [
@@ -117,8 +117,8 @@
    }
   },
   {
-   "guid": "19IZUFXFI541DR3VLDLAM_",
-   "name": "Pier#1",
+   "guid": "0SJTASD3WGKW89SAXH93FD",
+   "name": "P1",
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
@@ -137,8 +137,8 @@
    }
   },
   {
-   "guid": "31JPP0NA2OEJ4563$R_VEB",
-   "name": "Pier#2",
+   "guid": "2HZGDDT96JIOZGQRGN3V1G",
+   "name": "P2",
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
@@ -157,8 +157,8 @@
    }
   },
   {
-   "guid": "08C689KNTOXNK$8GT2TVB8",
-   "name": "Pier#3",
+   "guid": "0_58G0QZ8ZOS0JGM7WSJA5",
+   "name": "P3",
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
@@ -177,8 +177,8 @@
    }
   },
   {
-   "guid": "3GJCT_WSLX88YA4IFOPZBD",
-   "name": "Pier#4",
+   "guid": "28M82APTWVZ1TWJS9YIQSY",
+   "name": "P4",
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
@@ -197,8 +197,8 @@
    }
   },
   {
-   "guid": "0ZPMR2GSCERPWV7EJH1EV$",
-   "name": "Deck#1",
+   "guid": "34BHW6GOZJKAFB2MXD6441",
+   "name": "S1",
    "ifc_type": "IfcSlab",
    "member": "deck",
    "bbox_min": [

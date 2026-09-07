@@ -20,12 +20,16 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from ..contracts.schema import MEMBER_TYPES
+
+# 도면 관례 이름: A1·A2(교대) · P1…Pn·P1C(교각·코핑) · S1(상부구조). 번호 뒤 접미(C 등) 허용.
+_DRAWING_NAME = re.compile(r"^([APSaps])\d+[A-Za-z]?$")
 
 # IFC 엔티티 타입 → inframon 표준 부재 라벨. 부분일치(소문자)로 본다.
 _IFC_TO_MEMBER = [
@@ -82,6 +86,11 @@ def member_from_ifc_type(ifc_type: str | None, name: str | None = None, *,
     pd = (predefined or "").strip().upper()
     if pd in _PREDEFINED_TO_MEMBER:
         return _PREDEFINED_TO_MEMBER[pd]
+    # 국내 교량 도면 관례 — 교대 A1/A2, 교각 P1…Pn(코핑 P1C), 상부구조 S1. 이름이 정확히
+    # 이 꼴이면 타입보다 이 이름을 믿는다(프록시 IFC 는 타입이 Proxy 라 이름이 유일한 단서).
+    m = _DRAWING_NAME.match((name or "").strip())
+    if m:
+        return {"A": "abutment", "P": "pier", "S": "deck"}[m.group(1).upper()]
     hay = f"{ifc_type or ''} {name or ''}".lower()
     for key, member in _IFC_TO_MEMBER:
         if key in hay:

@@ -20,9 +20,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import json
+
 import numpy as np
 
 DEFAULT_BIN_M = 7.5           # 교축 구간 폭(5~10m 권장 — 경간·PS 밀도에 맞춘다)
+
+# ── PS 선별 기준 ─────────────────────────────────────────────────────────
+# 엄격: ADI ≤ 0.25 (고전 PS 기준). 데크 위에는 이 기준을 넘는 점이 거의 없어 결측
+# 구간이 생긴다. 완화: ADI ≤ 0.40 으로 후보를 넓히고 시간 결맞음 γ_temp ≥ 0.60 으로
+# 다시 걸러 노이즈를 걷어낸다. ADI 가 없는 트랙(SARvey 등)은 γ_temp 만 쓴다.
+ADI_STRICT = 0.25
+ADI_RELAXED = 0.40
+COH_MIN = 0.60
+# 노이즈 점 제거 — 같은 구간 이웃 대비 값이 튀는 점(로버스트 z > 3)·시계열 잡음이 이웃
+# 중앙의 3배를 넘는 점. 선별 통과 후에도 남는 '점 하나짜리 이상'을 프로파일에서 뺀다.
+NOISE_Z = 3.0
 MIN_BIN_POINTS = 2            # 구간 대표값을 낼 최소 점수
 
 # ── 프로파일을 "구조로 볼 수 있는가" 게이트 ────────────────────────────────
@@ -122,13 +135,114 @@ def _read_track(track_h5: str | Path) -> dict[str, Any]:
     import h5py
 
     with h5py.File(str(track_h5), "r") as f:
-        out: dict[str, Any] = {"lonlat": np.asarray(f["pixel_lonlat"][()], float)}
-        for k in ("coh", "temp_coh", "amplitude_dispersion", "los_velocity_mm_yr",
-                  "incidenceAngle", "los_mm", "scatterer_class"):
-            if k in f:
-                out[k] = np.asarray(f[k][()])
-        out["attrs"] = {k: v for k, v in f.attrs.items()}
-    return out
+        if "pixel_lonlat" in f:                          # 트랙 h5
+            out: dict[str, Any] = {"lonlat": np.asarray(f["pixel_lonlat"][()], float)}
+            for k in ("coh", "temp_coh", "amplitude_dispersion", "los_velocity_mm_yr",
+                      "incidenceAngle", "los_mm", "scatterer_class"):
+                if k in f:
+                    out[k] = np.asarray(f[k][()])
+            out["attrs"] = {k: v for k, v in f.attrs.items()}
+            return out
+        if "insar/xyz" in f:                             # 프로젝트 h5 (/insar 계약)
+            g = f["insar"]
+            out = {"lonlat": np.asarray(g["xyz"][()], float)[:, :2]}
+            alias = {"coh": ("temporal_coherence", "coherence"),
+                     "amplitude_dispersion": ("amplitude_dispersion",),
+                     "los_velocity_mm_yr": ("velocity_mm_yr",),
+                     "incidenceAngle": ("incidence_deg",), "los_mm": ("los",)}
+            for k, cands in alias.items():
+                for c in cands:
+                    if c in g:
+                        out[k] = np.asarray(g[c][()])
+                        break
+            attrs: dict = {}
+            try:
+                ts = json.loads(str(g.attrs.get("track_source", "{}")))
+                attrs = dict(ts.get("attrs", {}) or {})
+            except Exception:                            # noqa: BLE001
+                pass
+            out["attrs"] = attrs
+            return out
+    raise ValueError(f"{track_h5}: pixel_lonlat(트랙) 도 /insar/xyz(프로젝트) 도 없습니다")
+
+
+def select_points(tr: dict, *, mode: str = "relaxed",
+                  adi_strict: float = ADI_STRICT, adi_relaxed: float = ADI_RELAXED,
+                  coh_min: float = COH_MIN) -> tuple[np.ndarray, str]:
+    """PS 선별 마스크 — `strict`(ADI ≤ 0.25) 또는 `relaxed`(ADI ≤ 0.40 ∧ γ_temp ≥ 0.60).
+
+    반환 (mask[N], 무엇으로 걸렀는지). ADI 가 없으면 γ_temp 만으로 걸러지고 그 사실을
+    문자열에 남긴다 — "ADI 기준을 적용했다"고 잘못 읽히면 안 된다.
+    """
+    n = len(tr["lonlat"])
+    adi = tr.get("amplitude_dispersion")
+    adi = np.asarray(adi, float) if adi is not None else None
+    if adi is not None and not np.isfinite(adi).any():
+        adi = None
+    coh = None
+    for k in ("coh", "temp_coh"):
+        if k in tr:
+            coh = np.asarray(tr[k], float)
+            break
+    if mode == "strict":
+        if adi is None:
+            if coh is None:
+                raise ValueError("선별에 쓸 ADI 도 결맞음도 없습니다.")
+            return (np.isfinite(coh) & (coh >= 0.8)), "γ_temp ≥ 0.80 (ADI 없음 — 대체 엄격)"
+        return (np.isfinite(adi) & (adi <= adi_strict)), f"ADI ≤ {adi_strict:g}"
+    # relaxed
+    mask = np.ones(n, bool)
+    how = []
+    if adi is not None:
+        mask &= np.isfinite(adi) & (adi <= adi_relaxed)
+        how.append(f"ADI ≤ {adi_relaxed:g}")
+    if coh is not None:
+        mask &= np.isfinite(coh) & (coh >= coh_min)
+        how.append(f"γ_temp ≥ {coh_min:g}")
+    if not how:
+        raise ValueError("선별에 쓸 ADI 도 결맞음도 없습니다.")
+    if adi is None:
+        how.append("(ADI 없음)")
+    return mask, " ∧ ".join(how)
+
+
+def remove_noise(sel: np.ndarray, station: np.ndarray, val: np.ndarray,
+                 los: np.ndarray | None, *, bin_m: float, z_max: float = NOISE_Z
+                 ) -> tuple[np.ndarray, np.ndarray]:
+    """선별 통과 점 중 **노이즈 점**을 뺀다. 반환 (정제 mask, 제거된 점 mask).
+
+    ① 값이 같은 교축 구간(±bin_m) 이웃의 중앙값에서 로버스트 z(MAD) 로 z_max 를 넘는 점
+    ② LOS 시계열 잔차 표준편차가 선별 점 중앙값의 3배를 넘는 점
+    이웃이 3점 미만이면 ①은 판단하지 않는다(고립점을 노이즈로 몰지 않는다). 이웃 MAD 는
+    전체 선별 점 MAD 의 절반을 하한으로 둔다 — 이웃 2~3점이 우연히 같은 값이면 MAD≈0 이
+    되어 멀쩡한 점의 z 가 폭발한다(정자교에서 7점 중 3점이 그렇게 빠졌다).
+    """
+    keep = sel.copy()
+    noisy = np.zeros_like(sel)
+    idx = np.where(sel)[0]
+    if idx.size == 0:
+        return keep, noisy
+    # ① 구간 이웃 대비 튀는 값
+    gmed = np.median(val[idx])
+    gmad = np.median(np.abs(val[idx] - gmed)) * 1.4826
+    spread = float(np.percentile(val[idx], 95) - np.percentile(val[idx], 5))
+    floor = max(0.5 * gmad, 0.05 * spread, 1e-6)      # 전역 MAD 도 0 일 수 있다
+    for i in idx:
+        nb = idx[(np.abs(station[idx] - station[i]) <= bin_m) & (idx != i)]
+        if nb.size < 3:
+            continue
+        med = np.median(val[nb])
+        mad = max(np.median(np.abs(val[nb] - med)) * 1.4826, floor)
+        if abs(val[i] - med) / mad > z_max:
+            noisy[i] = True
+    # ② 시계열 잡음
+    if los is not None and np.ndim(los) == 2 and los.shape[0] == sel.size:
+        resid = np.nanstd(np.diff(los, axis=1), axis=1)
+        ref = np.nanmedian(resid[idx])
+        if np.isfinite(ref) and ref > 0:
+            noisy |= sel & (resid > 3.0 * ref)
+    keep &= ~noisy
+    return keep, noisy
 
 
 def _quality(tr: dict) -> tuple[np.ndarray, str]:
@@ -156,7 +270,8 @@ def _velocity(tr: dict) -> np.ndarray:
 
 
 def build_profile(track_h5: str | Path, geometry_latlon, *,
-                  bin_m: float = DEFAULT_BIN_M, min_quality: float = 0.6,
+                  bin_m: float = DEFAULT_BIN_M, min_quality: float | None = None,
+                  mode: str = "relaxed", denoise: bool = True,
                   correct_shift: bool = True, bridge_height_m: float | None = None,
                   bridge_width_m: float | None = None,
                   max_offset_m: float | None = None) -> ChainageProfile:
@@ -168,6 +283,12 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
 
     `max_offset_m` 은 "교량 위"의 정의다 — 주지 않으면 폭의 절반(반폭)을 쓴다. 추출 버퍼가
     폭보다 넓으면 데크 밖 지반 점이 섞여 프로파일이 오염된다(청양교: 버퍼 30m vs 반폭 11m).
+
+    선별: `mode="strict"`(ADI ≤ 0.25) 또는 `"relaxed"`(ADI ≤ 0.40 ∧ γ_temp ≥ 0.60, 기본).
+    `denoise=True` 면 통과 점 중 이웃 대비 튀는 점·시계열 잡음 점을 뺀다(`remove_noise`).
+    `min_quality` 를 주면 예전 방식(단일 품질값 하한)으로 돌아간다 — 호환용.
+
+    입력은 트랙 h5(`pixel_lonlat`) 또는 프로젝트 h5(`/insar/xyz`) 어느 쪽이든 된다.
     """
     from .deck_geometry import project_to_polyline
 
@@ -198,9 +319,18 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
     offset = _signed_offset(ll, geometry_latlon, offset)   # 좌/우를 부호로 — 데크 단면이 보인다
     lim = (float(max_offset_m) if max_offset_m is not None
            else (float(bridge_width_m) / 2.0 if bridge_width_m else None))
-    sel = np.isfinite(qual) & (qual >= float(min_quality)) & np.isfinite(val)
+    if min_quality is not None:                   # 호환: 단일 품질값 하한
+        sel = np.isfinite(qual) & (qual >= float(min_quality))
+        how = f"{qname} ≥ {float(min_quality):g}"
+    else:
+        sel, how = select_points(tr, mode=mode)
+    sel &= np.isfinite(val)
     if lim is not None:
         sel &= np.abs(offset) <= lim              # 데크 폭 밖(지반)은 교량 위가 아니다
+    n_before = int(sel.sum())
+    noisy = np.zeros_like(sel)
+    if denoise:
+        sel, noisy = remove_noise(sel, station, val, tr.get("los_mm"), bin_m=bin_m)
 
     poly = np.asarray(geometry_latlon, float)
     length = float(_polyline_length_m(poly))
@@ -220,7 +350,9 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
     return ChainageProfile(chainage_m=station, offset_m=offset, value=val, selected=sel,
                            quality=qual, bin_center_m=centers, bin_value=bv, bin_sem=bs,
                            bin_n=bn, deck_length_m=length, bin_m=bin_m, shift=shift_meta,
-                           meta={"quality": qname, "min_quality": float(min_quality),
+                           meta={"quality": qname, "selection": how, "mode": mode,
+                                 "n_selected_before_denoise": n_before,
+                                 "n_noise_removed": int(noisy.sum()),
                                  "max_offset_m": lim,
                                  "value": ("LOS 변위속도[mm/yr]"
                                            if tr.get("los_velocity_mm_yr") is not None

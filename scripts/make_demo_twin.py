@@ -197,9 +197,24 @@ def derive_pinn_fram(proj: Path, ej: Path, mc, guids, ginfo) -> None:
     print(f"      CRI 트윈: 점 {r['n_points']} · 결합 {r['bound']} · twin_cri.viewer.html")
 
     figs = _twin_figures(proj)
+    figs.append(_chainage_figure(proj))
     _write_results_md(proj, summ, figs)
     for f in figs + [OUT / "결과.md", proj]:
         print(f"      {Path(f).relative_to(ROOT)}  {Path(f).stat().st_size:,} B")
+
+
+def _chainage_figure(proj: Path) -> Path:
+    """PS 재선별(ADI 0.25→0.40 완화 + γ≥0.60 + 노이즈 제거) → 교축 10 m 구간집계 → 지점별
+    PINN 비교. scripts/make_chainage_figure.py 를 같은 인자로 호출한다."""
+    import subprocess
+
+    out = OUT / "twin_chainage.png"
+    subprocess.run([sys.executable, str(ROOT / "scripts/make_chainage_figure.py"), str(proj),
+                    "--bridge", NAME, "--lat", str(LAT), "--lon", str(LON),
+                    "--height", str(CLEARANCE_M), "--width", str(WIDTH_M), "--bin", "10",
+                    "--offset", "20", "--out", str(out)], check=True,
+                   env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+    return out
 
 
 def _twin_figures(proj: Path) -> list[Path]:
@@ -352,6 +367,20 @@ def _write_results_md(proj: Path, summ: dict, figs: list[Path]) -> None:
 | 응력 최대 | {np.nanmax(np.abs(stress)) / 1e6:.3f} MPa | 콘크리트 30~50 |
 | f₁ | {nf[0]:.2f} Hz (f₁ × 구조경간 {LENGTH_M / N_SPANS:.1f} m = {nf[0] * LENGTH_M / N_SPANS:.0f}) | 10~600 (감사표 ⑥ 기준) |
 | EI | {'식별' if inputs.get('EI_identified') else '설계 제원(기하 EI) 기반 — InSAR 는 상대 변위라 절대 강성 식별 불가'} | ⓘ |
+
+## PS 재선별 → 교축 등간격 프로파일 → 지점별 PINN
+
+![chainage](twin_chainage.png)
+
+| 단계 | 기준 | 결과 |
+|---|---|---|
+| ① 엄격 | ADI ≤ 0.25 (이 트랙은 ADI 없음 → γ_temp ≥ 0.80 대체) | 1점 · 커버리지 0 % |
+| ② 완화+재선별 | ADI ≤ 0.40 ∧ γ_temp ≥ 0.60 → 노이즈 점 제거 | 9 → 8점 |
+| ③ 구간집계 | 교축 10 m 등간격 · 중앙값 ± SE | 12구간 중 3구간에 대표값 · 커버리지 25 % |
+| ④ 지점별 PINN | PS 구간 대표 누적 vs PINN 가상센서 누적 | 3구간 RMS 2.9 mm · **PS 없는 0~30 m 는 PINN 이 요동** |
+
+**각 지점에 PS 가 있어야 그 지점의 가상센싱을 말할 수 있다** — ④가 그것을 보여준다.
+색띠 게이트(커버리지 70 %·σ_b/σ_w 1.5)는 차단이므로 3D 데크에 프로파일을 칠하지 않는다.
 
 ## FRAM (위험도)
 

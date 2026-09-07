@@ -437,6 +437,12 @@ for(const b of BOXES){
  const ed=new THREE.LineSegments(new THREE.EdgesGeometry(geo),new THREE.LineBasicMaterial({color:0x1f2a36}));
  ed.position.copy(m.position);ed.rotation.copy(m.rotation);sc.add(ed);
  m.updateMatrixWorld();bbox.expandByObject(m);
+ // 부재 이름 라벨(A1/P1/S1) — 캔버스 스프라이트, 애드온 없이
+ const cv=document.createElement('canvas');cv.width=160;cv.height=48;const g2=cv.getContext('2d');
+ g2.fillStyle='rgba(20,26,34,.85)';g2.fillRect(0,0,160,48);g2.fillStyle='#e6edf3';g2.font='bold 26px system-ui,sans-serif';
+ g2.textAlign='center';g2.textBaseline='middle';g2.fillText(b.name,80,24);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),depthTest:false,transparent:true}));
+ sp.position.set(b.center[0],b.center[1]+b.size[1]/2+(b.member==='deck'?2.5:1.2),b.center[2]);sp.scale.set(6,1.8,1);sp.renderOrder=20;sc.add(sp);
 }
 const geo=new THREE.BufferGeometry();
 geo.setAttribute('position',new THREE.Float32BufferAttribute(POS.flat(),3));

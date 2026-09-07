@@ -5,7 +5,7 @@
 
 | 파일 | 무엇 |
 |---|---|
-| `jeongjagyo_proxy.ifc` | **IFC4** 프록시 교량 — 부재 11개 + `IfcMapConversion`(EPSG:5186) |
+| `jeongjagyo_proxy.ifc` | **IFC4** 프록시 교량 — 부재 11개(**A1·A2 교대 · P1~P4 교각(+P1C~ 코핑) · S1 상판**) + `IfcMapConversion`(EPSG:5186) |
 | `jeongjagyo_elements.json` | 위 IFC 를 **되읽어** 얻은 부재 AABB·GlobalId |
 | `twin.glb` | InSAR 점 12개, LOS 변위속도 채색, 부재 결합 포함 |
 | `twin.viewer.html` | **더블클릭하면 브라우저에서 3D** — 서버·설치·**인터넷 불필요**(three.js 동봉). IFC 부재 11개가 반투명 박스로, 점은 그 위에. 점 클릭 = 값·부재·GlobalId |
@@ -15,6 +15,7 @@
 | `twin_cri.glb` · `twin_cri.viewer.html` | 같은 점, **CRI(위험도) 채널** 3D |
 | `twin_insar.png` | LOS 시계열 12점 × 201시점 · 점별 속도 |
 | `twin_pinn.png` | 가상센싱 전체 변위장(교축 × 시간) · 성분 분해 · 점별 CRI |
+| `twin_chainage.png` | PS 재선별(엄격→완화+노이즈 제거) → 교축 10 m 구간집계 → 지점별 PINN 비교 |
 | `twin_project.h5` | 위 결과의 프로젝트(12점) — 감사 **보고 가능** · 재현용 |
 
 ## 바로 보기

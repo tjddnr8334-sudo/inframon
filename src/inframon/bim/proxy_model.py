@@ -7,7 +7,10 @@
 
 여기서는 **표준데이터 실측**(연장·경간수·폭·교량높이)으로 부재를 세운다:
 
-    상판 1 · 교각 (경간수−1) · 교각 두부 · 교대 2
+    상판 S1 · 교각 P1…P(n−1) · 교각 코핑 P1C… · 교대 A1·A2
+
+부재 이름은 국내 교량 도면 관례를 따른다 — 교대 A1/A2(시점/종점), 교각 P1부터 시점 쪽에서
+순번, 상부구조 S1. 트윈·프로파일·보고서에서 같은 이름으로 부른다.
 
 정확한 BIM 이 있으면 당연히 그쪽이 낫다(`--ifc`). 이건 IFC 가 없는 임의 교량에서
 **부재 단위 결합을 근거 있게** 하기 위한 대체물이고, 산출물에 그 사실을 남긴다.
@@ -74,20 +77,20 @@ def bridge_elements(*, length_m: float, width_m: float, n_spans: int = 1,
                            extra={"source": "proxy_from_specs"}))
 
     # 상판 — 관측점(데크 PS/DS)이 붙어야 할 부재
-    add("IfcSlab", "Deck#1", "deck", (x0, y0, z_deck_bot), (x1, y1, z_deck_top))
+    add("IfcSlab", "S1", "deck", (x0, y0, z_deck_bot), (x1, y1, z_deck_top))
 
     # 교각 + 두부 (경간 경계마다)
     for i in range(1, n_spans):
         xc = x0 + span * i
-        add("IfcColumn", f"Pier#{i}", "pier",
+        add("IfcColumn", f"P{i}", "pier",
             (xc - PIER_WIDTH_M / 2, y0, 0.0), (xc + PIER_WIDTH_M / 2, y1, z_deck_bot))
-        add("IfcBuildingElementProxy", f"PierCap#{i}", "pier",
+        add("IfcBuildingElementProxy", f"P{i}C", "pier",
             (xc - PIER_WIDTH_M / 2 - CAP_OVERHANG_M, y0, z_deck_bot - 0.6),
             (xc + PIER_WIDTH_M / 2 + CAP_OVERHANG_M, y1, z_deck_bot))
 
     # 교대 2 (양 끝)
     for i, xe in enumerate((x0 - ABUTMENT_LEN_M, x1), start=1):
-        add("IfcBuildingElementProxy", f"Abutment#{i}", "abutment",
+        add("IfcBuildingElementProxy", f"A{i}", "abutment",
             (xe, y0, 0.0), (xe + ABUTMENT_LEN_M, y1, z_deck_bot))
     return els
 

@@ -127,3 +127,76 @@ def test_describe_가_커버리지와_결측을_함께_말한다(tmp_path):
     d = p.describe()
     assert "커버리지" in d and "교축" in d
     assert isinstance(p, ChainageProfile)
+
+
+# ── 2단 선별 + 노이즈 제거 ────────────────────────────────────────────────
+from inframon.insar.chainage import remove_noise, select_points  # noqa: E402
+
+
+def _tr(n=30, seed=0, adi=True):
+    rng = np.random.default_rng(seed)
+    tr = {"lonlat": np.zeros((n, 2)), "coh": rng.uniform(0.3, 0.95, n)}
+    if adi:
+        tr["amplitude_dispersion"] = rng.uniform(0.1, 0.8, n)
+    return tr
+
+
+def test_엄격은_ADI_0_25_완화는_ADI_0_4_와_γ_0_6():
+    tr = _tr()
+    s, how_s = select_points(tr, mode="strict")
+    r, how_r = select_points(tr, mode="relaxed")
+    assert how_s == "ADI ≤ 0.25" and "ADI ≤ 0.4" in how_r and "γ_temp ≥ 0.6" in how_r
+    assert np.array_equal(s, tr["amplitude_dispersion"] <= 0.25)
+    assert np.array_equal(r, (tr["amplitude_dispersion"] <= 0.4) & (tr["coh"] >= 0.6))
+
+
+def test_ADI_없으면_γ만_쓰고_그_사실을_남긴다():
+    tr = _tr(adi=False)
+    r, how = select_points(tr, mode="relaxed")
+    assert "ADI 없음" in how
+    assert np.array_equal(r, tr["coh"] >= 0.6)
+    s, how_s = select_points(tr, mode="strict")
+    assert "ADI 없음" in how_s and np.array_equal(s, tr["coh"] >= 0.8)
+
+
+def test_노이즈_제거는_이웃_대비_튀는_점을_뺀다():
+    st = np.linspace(0, 100, 21)
+    val = np.zeros(21)
+    val[10] = 50.0                     # 이웃은 전부 0인데 혼자 50
+    sel = np.ones(21, bool)
+    keep, noisy = remove_noise(sel, st, val, None, bin_m=10.0)
+    assert noisy[10] and not keep[10]
+    assert keep.sum() == 20
+
+
+def test_노이즈_제거는_고립점을_몰지_않는다():
+    """이웃이 3점 미만이면 판단하지 않는다 — 점 하나뿐인 구간을 노이즈로 몰면 결측만 는다."""
+    st = np.array([0.0, 50.0, 100.0])
+    val = np.array([0.0, 50.0, 0.0])
+    keep, noisy = remove_noise(np.ones(3, bool), st, val, None, bin_m=10.0)
+    assert not noisy.any()
+
+
+def test_노이즈_제거_MAD_하한이_있다():
+    """이웃 값이 우연히 똑같으면 MAD≈0 → 멀쩡한 점의 z 가 폭발한다. 하한으로 막는다."""
+    st = np.linspace(0, 40, 9)
+    val = np.array([1.0, 1.0, 1.0, 1.0, 1.3, 1.0, 1.0, 1.0, 5.0])
+    keep, noisy = remove_noise(np.ones(9, bool), st, val, None, bin_m=10.0)
+    assert not noisy[4], "0.3 차이는 노이즈가 아니다"
+
+
+def test_build_profile_은_프로젝트_h5_도_읽는다(tmp_path):
+    import h5py
+    p = tmp_path / "proj.h5"
+    rng = np.random.default_rng(2)
+    n = 30
+    t = rng.uniform(0, 1, n)
+    with h5py.File(p, "w") as f:
+        g = f.create_group("insar")
+        g["xyz"] = np.column_stack([126.80 + t * 0.001119, np.full(n, 36.45), np.zeros(n)])
+        g["temporal_coherence"] = np.full(n, 0.8)
+        g["velocity_mm_yr"] = rng.normal(0, .1, n)
+        g["incidence_deg"] = np.full(n, 39.0)
+    prof = build_profile(p, DECK, bin_m=20.0, correct_shift=False)
+    assert prof.selected.sum() > 0
+    assert "ADI 없음" in prof.meta["selection"]
