@@ -1,0 +1,41 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>inframon 웹 트윈 — velocity (mm/yr)</title>
+<style>body{margin:0;background:#0b0f14;color:#e6edf3;font:13px/1.5 system-ui,sans-serif;overflow:hidden}
+#hud{position:fixed;top:12px;left:12px;background:rgba(20,26,34,.82);border:1px solid #2b3947;
+border-radius:8px;padding:12px 14px;max-width:320px}#hud h1{font-size:14px;margin:0 0 6px}
+#hud .row{color:#9fb0c0;margin:2px 0}#bar{height:12px;border-radius:3px;margin:6px 0 2px}
+.lbl{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
+#tip{position:fixed;bottom:12px;left:12px;color:#6b7d8f;font-size:11px}</style></head>
+<body><div id="hud"><h1>inframon 웹 트윈 — velocity (mm/yr)</h1>
+<div class="row">점 <b>12</b> · GlobalId 결합 <b>12</b>/12</div>
+<div class="row">georef 37.3684, 127.1089 · EPSG:5186 · 고도 ifc_element_top</div>
+<div class="row">채널 velocity (mm/yr)</div>
+<div id="bar"></div><div class="lbl"><span>-1.40</span><span>0</span><span>1.40</span></div></div>
+<div id="tip">드래그 회전 · 휠 확대 · 정점색 = 값 · glb 인라인(자립형) · Bmaps 는 tileset.json 을 Cesium 에 addTileset</div>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+"three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import*as THREE from'three';import{OrbitControls}from'three/addons/controls/OrbitControls.js';
+import{GLTFLoader}from'three/addons/loaders/GLTFLoader.js';
+const kind="div";
+document.getElementById('bar').style.background=kind==='cri'
+?'linear-gradient(90deg,#2a9d8f,#e9c46a,#f4a261,#c1121f)'
+:'linear-gradient(90deg,#214e89,#f5f5f5,#c1121f)';
+const rn=new THREE.WebGLRenderer({antialias:true});rn.setSize(innerWidth,innerHeight);
+rn.setPixelRatio(devicePixelRatio);document.body.appendChild(rn.domElement);
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x0b0f14);
+const cam=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,1e6);
+const ct=new OrbitControls(cam,rn.domElement);ct.enableDamping=true;
+sc.add(new THREE.GridHelper(4000,20,0x223,0x162));
+function b64toBuf(b){const s=atob(b),a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a.buffer}
+new GLTFLoader().parse(b64toBuf("Z2xURgIAAACAAwAApAIAAEpTT057ImFzc2V0Ijp7InZlcnNpb24iOiIyLjAiLCJnZW5lcmF0b3IiOiJpbmZyYW1vbi5nbHRmX2V4cG9ydCJ9LCJzY2VuZSI6MCwic2NlbmVzIjpbeyJub2RlcyI6WzBdfV0sIm5vZGVzIjpbeyJtZXNoIjowLCJuYW1lIjoiaW5zYXJfcG9pbnRzIn1dLCJtZXNoZXMiOlt7InByaW1pdGl2ZXMiOlt7ImF0dHJpYnV0ZXMiOnsiUE9TSVRJT04iOjAsIkNPTE9SXzAiOjF9LCJtb2RlIjowfV19XSwiYnVmZmVycyI6W3siYnl0ZUxlbmd0aCI6MTkyfV0sImJ1ZmZlclZpZXdzIjpbeyJidWZmZXIiOjAsImJ5dGVPZmZzZXQiOjAsImJ5dGVMZW5ndGgiOjE0NCwidGFyZ2V0IjozNDk2Mn0seyJidWZmZXIiOjAsImJ5dGVPZmZzZXQiOjE0NCwiYnl0ZUxlbmd0aCI6NDgsInRhcmdldCI6MzQ5NjJ9XSwiYWNjZXNzb3JzIjpbeyJidWZmZXJWaWV3IjowLCJjb21wb25lbnRUeXBlIjo1MTI2LCJjb3VudCI6MTIsInR5cGUiOiJWRUMzIiwibWluIjpbLTEzLjg1MzQ3NjUyNDM1MzAyNyw0NC41ODAwMDE4MzEwNTQ2OSwtMy4xODUwNDA0NzM5Mzc5ODgzXSwibWF4IjpbNTIuMzc5ODM3MDM2MTMyODEsNDQuNTgwMDAxODMxMDU0NjksMTQuMTkzNTAwNTE4Nzk4ODI4XX0seyJidWZmZXJWaWV3IjoxLCJjb21wb25lbnRUeXBlIjo1MTIxLCJub3JtYWxpemVkIjp0cnVlLCJjb3VudCI6MTIsInR5cGUiOiJWRUM0In1dfSAgwAAAAEJJTgDythHB7FEyQpQYY0H2fONA7FEyQgphM0EwzSdB7FEyQu6KLEH0hFFC7FEyQmdwYkDXp13B7FEyQmupJj9JaTLB7FEyQv7sZT66KgfB7FEyQurLTr4SOKLA7FEyQk4UIb+/eti/7FEyQvBrvb/F+tc/7FEyQrAc9L8RHKJA7FEyQr5mFcC4GgdB7FEyQrTXS8DovcD/2n6F/7C+0v+No8D/0l5n/8MZJf/flpz/2HV8/8ESH//VaHD/1m52/+Sqrv8="),"",(gltf)=>{
+ let pts;gltf.scene.traverse(o=>{if(o.isPoints||o.isMesh)pts=o});
+ const geo=pts.geometry;const m=new THREE.PointsMaterial({size:6,sizeAttenuation:false,vertexColors:true});
+ const P=new THREE.Points(geo,m);sc.add(P);
+ geo.computeBoundingSphere();const bs=geo.boundingSphere;
+ ct.target.copy(bs.center);cam.position.set(bs.center.x,bs.center.y+bs.radius*.6,bs.center.z+bs.radius*1.6);
+ cam.updateProjectionMatrix();
+},(e)=>{document.getElementById('hud').innerHTML+='<div style="color:#f4a261">로드 실패: '+e+'</div>'});
+addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();rn.setSize(innerWidth,innerHeight)});
+(function loop(){requestAnimationFrame(loop);ct.update();rn.render(sc,cam)})();
+</script></body></html>

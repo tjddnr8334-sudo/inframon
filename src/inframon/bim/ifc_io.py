@@ -4,9 +4,13 @@
 이 모듈만 실제 IFC 를 읽고 쓰며, `ifcopenshell` 이 없으면 **명확한 안내와 함께 실패**한다
 (조용히 폴백하지 않는다 — IFC 를 못 읽었는데 진행하면 빈 결과가 정상처럼 보인다).
 
-⚠️ 현 개발 환경에는 ifcopenshell 이 설치돼 있지 않아 **이 경로는 실 IFC 로 검증되지
-않았다**. 코어 정합·연결·Pset 생성은 검증됐다. 실 IFC 투입 시 먼저
-`--bim-inspect <ifc>` 로 IfcMapConversion·부재 수를 확인할 것.
+실 IFC 로 검증된 경로다 — MIDAS 산출 IFC2X3 설계 모델(691부재: IfcBeam 625 ·
+Proxy 66)을 읽어 결함 5건을 고쳤다. 새 IFC 를 물릴 때는 먼저 `--bim-inspect <ifc>` 로
+스키마·IfcMapConversion·부재 수를 확인할 것.
+
+**스키마 차이 주의**: `IfcMapConversion`·`IfcProjectedCRS` 는 IFC4 부터다. IFC2X3 에
+그것을 물으면 ifcopenshell 은 빈 목록이 아니라 예외를 던지므로 `by_type_safe` 를 쓴다.
+IFC2X3 에 지오참조가 없는 것은 오류가 아니라 **기준점 정합이 정상 경로**라는 뜻이다.
 """
 
 from __future__ import annotations
@@ -38,6 +42,20 @@ def _require():
         raise AlignmentError(_INSTALL_HINT) from exc
 
 
+def by_type_safe(ifc_file, name: str) -> list:
+    """`by_type` 인데 **그 스키마에 없는 엔티티면 빈 목록**을 준다.
+
+    IFC4 에서 생긴 엔티티(`IfcMapConversion`·`IfcProjectedCRS` 등)를 IFC2X3 파일에
+    물으면 ifcopenshell 은 빈 목록이 아니라 `RuntimeError` 를 던진다. 국내 실무 모델은
+    IFC2X3 가 흔해서(MIDAS 산출물 등) 이걸 막지 않으면 **실 IFC 를 아예 못 읽는다**.
+    "그 스키마에 그 개념이 없다"는 오류가 아니라 "없음"이다.
+    """
+    try:
+        return list(ifc_file.by_type(name))
+    except RuntimeError:
+        return []
+
+
 def read_map_conversion(ifc_path: str | Path) -> MapConversion | None:
     """IFC 에서 `IfcMapConversion` 을 읽는다. 없으면 None(→ 기준점 정합으로).
 
@@ -46,7 +64,7 @@ def read_map_conversion(ifc_path: str | Path) -> MapConversion | None:
     """
     ios = _require()
     f = ios.open(str(ifc_path))
-    convs = f.by_type("IfcMapConversion")
+    convs = by_type_safe(f, "IfcMapConversion")
     if not convs:
         return None
     mc = convs[0]
@@ -364,7 +382,8 @@ def inspect(ifc_path: str | Path) -> dict:
         "has_map_conversion": mc is not None,
         "map_conversion": (mc.to_dict() if mc else None),
         "site_georeference": site,
-        "projected_crs": [c for c in (getattr(c, "Name", None) for c in f.by_type("IfcProjectedCRS")) if c],
+        "projected_crs": [c for c in (getattr(c, "Name", None)
+                                      for c in by_type_safe(f, "IfcProjectedCRS")) if c],
         "n_elements": n_el,
         "n_with_geometry": n_repr,
         "n_type_mapped": n_mapped,
