@@ -259,7 +259,7 @@ def import_track_h5(
     `apply_corrections=True` 면 LOS 시계열에 기준점 정합 + 고도상관 성층대기 보정을 적용하고
     (`atmo.correct_los_field`), 보정된 los/longitudinal + /insar/velocity_mm_yr 를 저장한다.
     """
-    from .deck_geometry import deck_station as _deck_station
+    from .deck_geometry import deck_station_checked as _deck_station
     td = read_track_h5(track_h5)
     n_points, _ = td.los.shape
 
@@ -319,7 +319,8 @@ def import_track_h5(
             geoloc_meta = {"applied": True, **gc["meta"]}
     longitudinal = los * np.cos(np.deg2rad(azimuth_angle_deg))
     # 곡선 교량: 호길이 station(데크를 따라 잰 거리). 폴리라인 있으면 투영, 없으면 주곡선.
-    station = _deck_station(td.lonlat, geometry_latlon).astype(np.float32)
+    station, station_meta = _deck_station(td.lonlat, geometry_latlon)
+    station = station.astype(np.float32)
     l_from_fixed = station                                            # 고정단(=station 0)에서 호길이
     member = np.full(n_points, member_default, dtype=np.int8)
 
@@ -345,6 +346,9 @@ def import_track_h5(
             "velocity_ds": "/insar/velocity_mm_yr",
             "corrections": corr_meta,
             "geolocation": geoloc_meta,
+            # station 이 뭉개지면 l_from_fixed 가 상수가 되어 열 분리가 죽는다 —
+            # 무엇을 썼고 왜 그랬는지 산출물에 남긴다(deck_geometry 참조).
+            "deck_station": station_meta,
         },
     )
     return out

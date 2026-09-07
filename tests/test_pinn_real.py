@@ -383,3 +383,49 @@ def test_structural_span_uses_measured_max_span_when_no_count():
     prof.extra = {"max_span_m": 500.0, "max_span_source": "csv"}
     span, n = _structural_span(prof, 8428.6)
     assert n == 17 and abs(span - 8428.6 / 17) < 0.1
+
+
+# ── 곡률·변형률 단위 ──────────────────────────────────────────────────────
+# 신경망 미분은 정규화 좌표 x̂∈[0,1]·정규화 처짐 ŵ 기준이라 물리 단위로 되돌려야 한다:
+#     ∂²w/∂x² = (w_scale_m / L²)·∂²ŵ/∂x̂²
+# 이 환산이 빠지면 곡률이 [mm] 로 남고 strain = −y·κ 가 무차원이 아니게 된다. 실제로
+# 청양교에서 변형률 −0.32(콘크리트 파괴 0.003의 100배)·응력 −8,589 MPa 가 나왔다.
+
+def _strain_stress(tmp_path, *, length_m):
+    """경간 length_m 인 교량으로 PINN 을 돌려 (변형률, 응력) 배열을 낸다."""
+    cfg = PipelineConfig(n_points=30, n_dates=10)
+    cfg.pinn_epochs = 60
+    cfg.bridge_profile = BridgeProfile(length_m=length_m, width_m=10.0)
+    with ProjectStore(tmp_path / f"p{int(length_m)}.h5", mode="w") as store:
+        cv = run_cv(store, cfg)
+        insar = run_insar(store, cv, cfg)
+        out = run_pinn_real(store, insar, cfg)
+        return (np.asarray(store.read_array(out.strain_ds), float),
+                np.asarray(store.read_array(out.stress_ds), float))
+
+
+def test_변형률이_무차원_물리범위_안에_있다(tmp_path):
+    """실교량 변형률은 1e-8~1e-3 규모다. 1 을 넘으면 단위가 틀린 것이다."""
+    strain, _ = _strain_stress(tmp_path, length_m=81.0)
+    peak = float(np.nanmax(np.abs(strain)))
+    assert np.isfinite(strain).all()
+    assert peak < 3.0e-3, f"콘크리트 파괴 변형률(0.003)을 넘었다: {peak:.3e}"
+
+
+def test_응력이_재료_강도_규모를_넘지_않는다(tmp_path):
+    """콘크리트 30~50 MPa · 강재 400 MPa. GPa 가 나오면 곡률 환산이 빠진 것이다."""
+    _, stress = _strain_stress(tmp_path, length_m=81.0)
+    peak_mpa = float(np.nanmax(np.abs(stress))) / 1e6
+    assert peak_mpa < 1.0e3, f"응력 {peak_mpa:.1f} MPa — 재료 강도 규모를 벗어났다"
+
+
+def test_곡률이_경간의_제곱에_반비례한다(tmp_path):
+    """κ = (w_scale/L²)·∂²ŵ/∂x̂². 경간을 2배로 하면 변형률이 뚜렷이 줄어야 한다.
+
+    L² 로 나누는 환산이 빠져 있으면 경간을 바꿔도 변형률이 그대로다.
+    """
+    s1, _ = _strain_stress(tmp_path, length_m=40.0)
+    s2, _ = _strain_stress(tmp_path, length_m=80.0)
+    p1, p2 = float(np.nanmax(np.abs(s1))), float(np.nanmax(np.abs(s2)))
+    assert p1 > 0 and p2 > 0
+    assert p2 < p1 * 0.6, f"경간 2배인데 변형률이 안 줄었다: {p1:.3e} → {p2:.3e}"

@@ -95,8 +95,53 @@ def principal_curve_station(pts: np.ndarray, lat0: float | None = None) -> np.nd
     return station
 
 
+# station 이 "쓸 수 있는가" 기준. 투영 station 의 폭이 점군 자체 폭의 이 비율보다 작으면
+# 폴리라인이 점군과 맞지 않는다고 본다(아래 deck_station_checked 참조).
+MIN_STATION_SPREAD_FRAC = 0.10
+
+
+def deck_station_checked(pts_lonlat: np.ndarray,
+                         geometry_latlon=None) -> tuple[np.ndarray, dict]:
+    """데크 호길이 station[N] + **그 값을 믿어도 되는지**.
+
+    `project_to_polyline` 은 폴리라인 밖으로 벗어난 점을 세그먼트 끝(tt=0 또는 1)으로
+    자른다. 그래서 폴리라인이 점군과 다른 곳에 있으면 **모든 점이 같은 station** 을
+    받고도 조용히 성공한다. 실제로 청양교 산출물이 그랬다 — 48점 전부 106.631 m.
+
+    그 결과가 조용해서 더 나쁘다. station 은 `l_from_fixed`(고정단 거리)가 되고, 그것이
+    상수면 **열팽창을 공간적으로 분리할 수 없다**. 열 성분이 0 으로 죽고 모든 변위가
+    침하·하중·이상으로 몰려, 청양교에서 변형률 −0.32(콘크리트 파괴 0.003의 100배)와
+    응력 −8,589 MPa(콘크리트 강도의 200배)가 나왔다. 어디서도 오류가 나지 않았다.
+
+    여기서는 투영 station 의 폭을 **점군 자체의 주축 폭**과 비교해 판정하고, 못 믿을
+    값이면 주곡선 추정으로 되돌린 뒤 사유를 남긴다.
+    """
+    pts = np.asarray(pts_lonlat, float)
+    if geometry_latlon is None or len(np.asarray(geometry_latlon)) < 2:
+        return principal_curve_station(pts), {
+            "source": "principal_curve", "reason": "데크 폴리라인이 없다"}
+
+    station, offset = project_to_polyline(pts, geometry_latlon)
+    own = principal_curve_station(pts)                 # 점군 자체가 뻗은 길이
+    spread, own_spread = float(np.ptp(station)), float(np.ptp(own))
+    meta = {"source": "polyline", "station_span_m": round(spread, 2),
+            "point_span_m": round(own_spread, 2),
+            "offset_median_m": round(float(np.median(offset)), 2)}
+    if own_spread > 1.0 and spread < own_spread * MIN_STATION_SPREAD_FRAC:
+        meta.update(source="principal_curve", degenerate=True,
+                    reason=(f"폴리라인 투영이 뭉갰다 — station 폭 {spread:.1f} m 가 점군 폭 "
+                            f"{own_spread:.1f} m 의 {spread / own_spread * 100:.0f}% 뿐이다. "
+                            f"데크선이 점군과 다른 곳에 있을 수 있다"
+                            f"(직각거리 중앙 {np.median(offset):.0f} m). 주곡선으로 대체"))
+        return own, meta
+    meta["degenerate"] = False
+    return station, meta
+
+
 def deck_station(pts_lonlat: np.ndarray, geometry_latlon=None) -> np.ndarray:
-    """데크 호길이 station[N] — 폴리라인 있으면 투영, 없으면 주곡선 추정. 곡선 교량 대응."""
-    if geometry_latlon is not None and len(np.asarray(geometry_latlon)) >= 2:
-        return project_to_polyline(pts_lonlat, geometry_latlon)[0]
-    return principal_curve_station(pts_lonlat)
+    """데크 호길이 station[N] — 폴리라인 있으면 투영, 없으면 주곡선 추정. 곡선 교량 대응.
+
+    퇴화(모든 점이 같은 station)면 주곡선으로 되돌린다 — 사유까지 보려면
+    `deck_station_checked` 를 쓴다.
+    """
+    return deck_station_checked(pts_lonlat, geometry_latlon)[0]

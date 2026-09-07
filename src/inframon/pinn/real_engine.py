@@ -434,7 +434,14 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         anom = a_net(feat(grid_x, grid_t)).reshape(N, M).numpy() * los_scale
         thermal = thermal_field().numpy() * los_scale
         settle = (s_rate[:, None] * ty).numpy() * w_scale_used
-        curvature = wxx.reshape(N, M).detach().numpy() * w_scale_used   # ∂²w/∂x²
+        # ∂²w/∂x² **물리 단위[1/m]**. 신경망 미분은 정규화 좌표 x̂∈[0,1]·정규화 처짐 ŵ
+        # 기준이라, `_identify_EI_from_pde` 와 같은 규약으로 되돌려야 한다:
+        #     ∂²w/∂x² = (w_scale_m / L²)·∂²ŵ/∂x̂²      (w_scale_used 는 mm → ×1e-3)
+        # 이 환산이 없으면 곡률이 [mm] 단위로 남아 strain = −y·κ 가 무차원이 아니게 된다.
+        # 실제로 청양교에서 변형률 −0.32(콘크리트 파괴 0.003의 100배)·응력 −8,589 MPa
+        # (강도의 200배)가 나왔다. 아래 kappa·pde_dev 는 비율이라 이 배율에 불변이다.
+        curvature = (wxx.reshape(N, M).detach().numpy()
+                     * (w_scale_used * 1e-3) / (L_m ** 2))
         q_eff, load_basis = _effective_load_for_ei(prof, use_traffic, traffic)
         if use_vertical:
             # 연직 관측이 있으면 **관측 처짐형상을 4차 다항 피팅**해 x⁴ 계수로 EI 를 직접 얻는다
