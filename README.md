@@ -132,6 +132,13 @@ not guessed — OSM's two footway centrelines are 23.5 m apart. · "BIM 에 InSA
 GlobalId 로 부재에 결합. 데크 폭은 추정이 아니라 OSM 양측 보도 간격 23.5 m 에서 온다.
 Regenerate: `python scripts/make_ondeck_figure.py`.*
 
+**Open the twin in 3D / 트윈을 3D 로 열기:** [`docs/twin/`](docs/twin/) — double-click
+`twin.viewer.html`. Built end-to-end from measured specs: proxy members → **IFC4 file**
+(`jeongjagyo_proxy.ifc`, 11 members + `IfcMapConversion`) → read back → 12 InSAR points bound to
+members by GlobalId → `.glb` + self-contained viewer + 3D Tiles. Regenerate:
+`python scripts/make_demo_twin.py`. · 실측 제원에서 IFC4 를 만들고 **되읽어** 결합한 실물.
+IFC 를 되읽지 않고 부재 테이블에서 바로 트윈을 만들면 IFC 는 장식이 된다.
+
 ![Result overview](docs/img/overview.png)
 
 ![Dashboard — FRAM](docs/img/dashboard_fram.png)
