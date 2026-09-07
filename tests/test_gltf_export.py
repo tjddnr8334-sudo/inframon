@@ -177,7 +177,7 @@ def test_web_viewer_draws_ifc_members_in_point_frame(tmp_path):
     v = write_web_viewer(tmp_path / "twin.glb", elements_json=ej, map_conversion=mc)
     html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
     assert v["n_boxes"] == len(els)
-    boxes = json.loads(html.split("BOXES=", 1)[1].split(";", 1)[0])
+    boxes = json.loads(html.split("BOXES=", 1)[1].split(",ST=", 1)[0])
     deck = next(b for b in boxes if b["member"] == "deck")
     # 데크 중심: IFC 로컬 (0,0,z) → 지도 (E0+10, N0−5) → glb 원점 기준 (10, ·, −(−5)=+5)
     assert abs(deck["center"][0] - 10.0) < 1e-6
@@ -264,3 +264,27 @@ def test_flat_z_source_still_reports_zero(tmp_path):
     r = export_insar_gltf(h5, tmp_path / "flat.glb", z_source="flat")
     assert r["georef"]["z_source"] == "flat"
     assert "deck_z_median_m" not in r["georef"]
+
+
+def test_web_viewer_places_chainage_stations_on_deck_axis(tmp_path):
+    """교축 구간집계 스테이션은 점과 같은 프레임의 **데크선 위**에, 결측은 has_value=False 로."""
+    import json
+
+    from inframon.insar.gltf_export import write_web_viewer
+
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
+    g = meta["georef"]
+    sts = [{"chainage_m": 5.0, "lon": g["origin_lon"], "lat": g["origin_lat"], "z": 40.0,
+            "n": 3, "has_value": True, "value": 1.2, "sem": 0.1},
+           {"chainage_m": 15.0, "lon": g["origin_lon"] + 1e-4, "lat": g["origin_lat"],
+            "z": 40.0, "n": 0, "has_value": False, "value": None, "sem": None}]
+    v = write_web_viewer(tmp_path / "twin.glb", stations=sts, bin_m=10.0)
+    html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
+    assert v["n_stations"] == 2
+    st = json.loads(html.split("ST=", 1)[1].split(";", 1)[0])
+    assert abs(st[0]["pos"][0]) < 1e-6 and abs(st[0]["pos"][2]) < 1e-6   # 원점 위
+    assert st[0]["pos"][1] == 40.0
+    assert st[0]["has_value"] and not st[1]["has_value"]
+    assert st[1]["pos"][0] > 5.0                                        # 동쪽으로 이동
+    assert "구간집계" in html
