@@ -11,6 +11,11 @@
 | `twin.viewer.html` | **더블클릭하면 브라우저에서 3D** — 서버·설치·**인터넷 불필요**(three.js 동봉). IFC 부재 11개가 반투명 박스로, 점은 그 위에. 점 클릭 = 값·부재·GlobalId |
 | `tileset.json` | 3D Tiles — Cesium·BMAP 탑재용 |
 | `twin.glb.meta.json` | 점별 값·GlobalId·범례·좌표 근거 |
+| **`결과.md`** | **트윈 점으로 도출한 InSAR · PINN 가상센싱 · CRI** — 수치와 그림 |
+| `twin_cri.glb` · `twin_cri.viewer.html` | 같은 점, **CRI(위험도) 채널** 3D |
+| `twin_insar.png` | LOS 시계열 12점 × 201시점 · 점별 속도 |
+| `twin_pinn.png` | 가상센싱 전체 변위장(교축 × 시간) · 성분 분해 · 점별 CRI |
+| `twin_project.h5` | 위 결과의 프로젝트(12점) — 감사 **보고 가능** · 재현용 |
 
 ## 바로 보기
 

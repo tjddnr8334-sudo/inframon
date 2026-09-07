@@ -9,13 +9,16 @@
   3. 그 IFC 를 **되읽어** 부재 AABB·GlobalId 확보   (ifc_io)  ← 왕복 검증
   4. InSAR 점을 데크 레벨로 올려 부재에 결합        (gltf_export)
   5. .glb + 자립형 웹뷰어 + 3D Tiles
+  6. 그 점으로 **PINN 가상센싱 + FRAM CRI** 를 돌려 트윈 위에 얹는다 — CRI 채널 트윈,
+     가상센싱 전체 변위장 그림, LOS 시계열, 결과 문서(docs/twin/결과.md)
 
 3번이 요점이다. 부재 테이블에서 바로 트윈을 만들면 IFC 는 장식이 된다. IFC 를 다시
 읽어 그 결과로 결합해야 "IFC 로 결합했다"가 참이 된다.
 
     python scripts/make_demo_twin.py
 
-산출: docs/twin/  (jeongjagyo_proxy.ifc · twin.glb · twin.viewer.html · tileset.json)
+산출: docs/twin/  (jeongjagyo_proxy.ifc · twin.glb · twin.viewer.html · tileset.json
+                  · twin_cri.glb · twin_cri.viewer.html · twin_project.h5 · 결과.md · *.png)
 """
 
 from __future__ import annotations
@@ -148,6 +151,10 @@ def prepare_points(geom_latlon) -> Path:
             gi.create_dataset(k, data=(a[m] if a.shape[:1] == (len(m),) else a))
         for k, v in attrs.items():
             gi.attrs[k] = v
+        # 계약 meta 의 n_points 는 부분집합 크기로 — 안 고치면 PINN 요약이 2661 로 나온다
+        meta = json.loads(attrs.get("meta", "{}"))
+        meta["n_points"] = int(m.sum())
+        gi.attrs["meta"] = json.dumps(meta, ensure_ascii=False)
         gi.attrs["geolocation_correction"] = json.dumps({
             "applied": True, "dh_m": CLEARANCE_M, "heading_deg": heading,
             "mean_shift_m": float(np.mean(corr["shift_m"])),
@@ -160,23 +167,230 @@ def prepare_points(geom_latlon) -> Path:
     return out
 
 
+def derive_pinn_fram(proj: Path, ej: Path, mc, guids, ginfo) -> None:
+    """트윈 점으로 PINN(가상센싱) + FRAM(CRI) 을 돌리고 결과를 트윈 위에 얹는다.
+
+    프로젝트는 트윈이 실제로 쓴 12점이다 — 다른 산출물의 값을 가져다 붙이지 않는다.
+    """
+    from inframon.custom_pinn import run_custom_pinn
+    from inframon.structure import BridgeProfile
+
+    # 제원 출처를 사실대로 — 연장·경간수는 파트너 실측 CSV(bridges_specs.csv)에서 좌표
+    # 8 m 매칭으로 찾은 정자교 기록이고, 폭은 OSM 보도 간격이다. 'manual' 로 적으면 감사가
+    # "실 제원 확인 필요"로 낮춘다 — 확인된 제원이므로 그 출처를 그대로 쓴다.
+    prof = BridgeProfile(name=NAME, bridge_type="girder", material="concrete",
+                         length_m=LENGTH_M, width_m=WIDTH_M,
+                         source="specs_csv:bridges_load.csv, bridges_specs.csv",
+                         extra={"n_spans": N_SPANS, "clearance_m": CLEARANCE_M,
+                                "match_dist_m": 8.0,
+                                "note": "파트너 실측 CSV 정자교(좌표 8 m 매칭) + OSM 보도 간격 폭"})
+    summ = run_custom_pinn(proj, LAT, LON, bridge_name=NAME, bridge_profile=prof)
+    print(f"      PINN·FRAM: CRI max {summ['cri_global_max']:.3f} · 경보 {summ['warning_level']}"
+          f" · 점 {summ['n_points']} × {summ['n_dates']}시점")
+
+    # CRI 채널 트윈 — 같은 결합·같은 고도로
+    r = export_insar_gltf(proj, OUT / "twin_cri.glb", value="cri", fram_project=proj,
+                          element_guids=guids, element_z=ginfo["element_z"],
+                          z_source="deck", element_z_datum=GROUND_M)
+    write_web_viewer(OUT / "twin_cri.glb", elements_json=ej, map_conversion=mc, ifc_crs=CRS)
+    write_3dtiles_tileset(OUT / "twin_cri.glb")
+    print(f"      CRI 트윈: 점 {r['n_points']} · 결합 {r['bound']} · twin_cri.viewer.html")
+
+    figs = _twin_figures(proj)
+    _write_results_md(proj, summ, figs)
+    for f in figs + [OUT / "결과.md", proj]:
+        print(f"      {Path(f).relative_to(ROOT)}  {Path(f).stat().st_size:,} B")
+
+
+def _twin_figures(proj: Path) -> list[Path]:
+    """InSAR 시계열 · PINN 가상센싱 변위장 · 성분 분해 · CRI — 트윈 점 기준 그림."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from inframon.insar.chainage import _use_korean_font
+
+    _use_korean_font(plt)
+    out = []
+    with h5py.File(proj, "r") as f:
+        ins, pn, fr = f["insar"], f["pinn"], f["fram"]
+        dates = np.asarray(ins["dates"][()], float)
+        labels = [x.decode() if isinstance(x, bytes) else str(x) for x in ins["date_labels"][()]]
+        los = np.asarray(ins["los"][()], float)
+        vel = np.asarray(ins["velocity_mm_yr"][()], float)
+        st = np.asarray(ins["deck_station"][()], float)
+        vx = np.asarray(pn["vsens_x"][()], float)
+        vtot = np.asarray(pn["vsens_total"][()], float)
+        vdef = np.asarray(pn["vsens_deflection"][()], float)
+        vth = np.asarray(pn["vsens_thermal"][()], float)
+        vse = np.asarray(pn["vsens_settle"][()], float)
+        van = np.asarray(pn["vsens_anomaly"][()], float)
+        cri = np.asarray(fr["CRI"][()], float)
+        nf = np.asarray(pn["natural_freq"][()], float)
+    yrs = dates / 365.25
+    t0, t1 = labels[0], labels[-1]
+
+    # ── 그림 A: InSAR 관측 — 12점 LOS 시계열 + 속도
+    fig, ax = plt.subplots(1, 2, figsize=(13, 4), gridspec_kw={"width_ratios": [2.2, 1]})
+    order = np.argsort(st)
+    cm = plt.get_cmap("viridis")
+    for k, i in enumerate(order):
+        ax[0].plot(yrs, los[i], lw=.9, color=cm(k / max(len(order) - 1, 1)),
+                   label=f"#{i} st {st[i]:.0f} m")
+    ax[0].set_xlabel(f"경과 [년]  ({t0} ~ {t1})")
+    ax[0].set_ylabel("LOS 변위 [mm]")
+    ax[0].set_title(f"InSAR 관측 — 트윈 점 {len(los)}개 × {len(dates)}시점 (SARvey)")
+    ax[0].grid(alpha=.3)
+    ax[0].legend(fontsize=7, ncol=2, loc="upper left")
+    sc = ax[1].scatter(st, vel, c=vel, cmap="RdYlBu_r", ec="k", s=60,
+                       vmin=-np.abs(vel).max(), vmax=np.abs(vel).max())
+    ax[1].axhline(0, color="#7f8c8d", lw=.8, ls="--")
+    ax[1].set_xlabel("교축 거리 [m]")
+    ax[1].set_ylabel("LOS 속도 [mm/yr]")
+    ax[1].set_title("점별 변위 속도")
+    ax[1].grid(alpha=.3)
+    fig.colorbar(sc, ax=ax[1], fraction=.05).set_label("mm/yr")
+    fig.tight_layout()
+    pa = OUT / "twin_insar.png"
+    fig.savefig(pa, dpi=130, facecolor="white")
+    plt.close(fig)
+    out.append(pa)
+
+    # ── 그림 B: PINN 가상센싱 — 전체 변위장(교축 × 시간) + 성분 분해 + 최종 시점 프로파일
+    xm = vx * LENGTH_M if vx.max() <= 1.0 + 1e-6 else vx
+    fig = plt.figure(figsize=(14, 8))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.15, 1], hspace=.38, wspace=.25)
+    ax = fig.add_subplot(gs[0, :])
+    im = ax.imshow(vtot.T, aspect="auto", origin="lower", cmap="magma",
+                   extent=[xm.min(), xm.max(), yrs.min(), yrs.max()])
+    ax.set_xlabel("교축 거리 [m]")
+    ax.set_ylabel("경과 [년]")
+    ax.set_title(f"PINN 가상센싱 — 상부거더 전체 변위량 |u| [mm]  "
+                 f"(가상센서 {len(xm)}점 × {len(dates)}시점, 관측점 {len(los)}개로 학습)")
+    fig.colorbar(im, ax=ax, fraction=.025, pad=.01).set_label("mm")
+    for s_ in st:
+        ax.axvline(s_, color="w", lw=.6, alpha=.5)
+    ax.text(.01, .96, "흰 선 = InSAR 관측점 위치", transform=ax.transAxes, color="w",
+            fontsize=8, va="top")
+
+    ax = fig.add_subplot(gs[1, 0])
+    j = -1
+    ax.plot(xm, vdef[:, j], label="처짐(하중)", lw=1.6)
+    ax.plot(xm, vth[:, j], label="열팽창", lw=1.6)
+    ax.plot(xm, vse[:, j], label="침하", lw=1.6)
+    ax.plot(xm, van[:, j], label="이상", lw=1.6)
+    ax.plot(xm, vtot[:, j], label="합(전체 변위량)", color="k", lw=2.2)
+    ax.set_xlabel("교축 거리 [m]")
+    ax.set_ylabel("[mm]")
+    ax.set_title(f"성분 분해 — 마지막 시점 {t1}")
+    ax.grid(alpha=.3)
+    ax.legend(fontsize=8, ncol=3)
+
+    ax = fig.add_subplot(gs[1, 1])
+    cmax = cri.max(axis=1)
+    sc = ax.scatter(st, cmax, c=cmax, cmap="RdYlGn_r", vmin=0, vmax=1, ec="k", s=70)
+    ax.set_ylim(0, 1.02)
+    ax.set_xlabel("교축 거리 [m]")
+    ax.set_ylabel("CRI (최대)")
+    ax.set_title(f"FRAM 위험도 — 점별 CRI 최대  ·  f₁ = {nf[0]:.2f} Hz")
+    ax.grid(alpha=.3)
+    fig.colorbar(sc, ax=ax, fraction=.05).set_label("CRI")
+    pb = OUT / "twin_pinn.png"
+    fig.savefig(pb, dpi=130, facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    out.append(pb)
+    return out
+
+
+def _write_results_md(proj: Path, summ: dict, figs: list[Path]) -> None:
+    with h5py.File(proj, "r") as f:
+        ins, pn, fr = f["insar"], f["pinn"], f["fram"]
+        n, m = ins["los"].shape
+        labels = [x.decode() if isinstance(x, bytes) else str(x) for x in ins["date_labels"][()]]
+        vel = np.asarray(ins["velocity_mm_yr"][()], float)
+        vtot = np.asarray(pn["vsens_total"][()], float)
+        strain = np.asarray(pn["strain"][()], float)
+        stress = np.asarray(pn["stress"][()], float)
+        th = np.asarray(pn["comp_thermal"][()], float)
+        nf = np.asarray(pn["natural_freq"][()], float)
+        cri = np.asarray(fr["CRI"][()], float)
+        inputs = json.loads(pn.attrs.get("inputs", "{}"))
+        geo = json.loads(ins.attrs.get("geolocation_correction", "{}"))
+        span_yr = float(np.asarray(ins["dates"][()], float)[-1]) / 365.25
+    md = f"""# 트윈에서 도출한 InSAR · PINN · CRI — 정자교
+
+트윈이 실제로 쓴 **같은 12점**으로 돌린 결과다. 다른 산출물의 값을 가져다 붙이지 않았다.
+다시 만들기: `python scripts/make_demo_twin.py` (6단계). 프로젝트: `twin_project.h5`.
+
+## 입력
+
+| | 값 |
+|---|---|
+| 관측 | SARvey PS/DS · {n}점 × {m}시점 · {labels[0]} ~ {labels[-1]} |
+| 선택 | 쉬프트 {geo.get('mean_shift_m', 0):.2f} m 보정(heading {geo.get('heading_deg', 0):.2f}°) 후 {geo.get('selection', '')} |
+| 제원 | 연장 {LENGTH_M:.0f} m · {N_SPANS}경간 · 폭 {WIDTH_M} m · 형하고 {CLEARANCE_M} m (표준데이터 + OSM) |
+| PINN 제원 출처 | {inputs.get('profile_source', '?')} |
+
+## InSAR (관측)
+
+![InSAR](twin_insar.png)
+
+| | 값 |
+|---|---|
+| LOS 속도 | {vel.min():+.2f} ~ {vel.max():+.2f} mm/yr (중앙 {np.median(vel):+.2f}) |
+| 관측 기간 | {m}시점 · {span_yr:.1f}년 |
+
+## PINN (가상센싱)
+
+![PINN](twin_pinn.png)
+
+| | 값 | 물리 기준 |
+|---|---|---|
+| 전체 변위량 |u| 최대 | {np.nanmax(vtot):.2f} mm (가상센서 {vtot.shape[0]}점) | — |
+| 열 성분 최대 | {np.nanmax(np.abs(th)):.2f} mm | 0 이면 분리 실패 |
+| 변형률 최대 | {np.nanmax(np.abs(strain)):.2e} | 파괴 3e−3 |
+| 응력 최대 | {np.nanmax(np.abs(stress)) / 1e6:.3f} MPa | 콘크리트 30~50 |
+| f₁ | {nf[0]:.2f} Hz (f₁ × 구조경간 {LENGTH_M / N_SPANS:.1f} m = {nf[0] * LENGTH_M / N_SPANS:.0f}) | 10~600 (감사표 ⑥ 기준) |
+| EI | {'식별' if inputs.get('EI_identified') else '설계 제원(기하 EI) 기반 — InSAR 는 상대 변위라 절대 강성 식별 불가'} | ⓘ |
+
+## FRAM (위험도)
+
+| | 값 |
+|---|---|
+| CRI 최대 | **{summ['cri_global_max']:.3f}** |
+| 경보 | **{summ['warning_level']}** ({summ.get('warning_basis', '')}) |
+| 점별 CRI 최대 범위 | {cri.max(axis=1).min():.3f} ~ {cri.max(axis=1).max():.3f} |
+
+3D 로 보기: `twin_cri.viewer.html` (CRI 채널) · `twin.viewer.html` (속도 채널)
+
+## 읽을 때 주의
+
+- 12점은 데크 남측 보도·난간 위 산란체로 해석된다(1화소급 잔여 오프셋은 배제 못 함).
+- 관측점은 교축 28~53 m 에 11점, 94 m 에 1점이다. **그 밖(0~28 m · 55~90 m · 95~108 m)의
+  가상센싱 값은 외삽**이라 관측 구간보다 불확실하다. 그림 위 흰 선이 관측점 위치다.
+- EI·f₁ 은 관측이 아니라 설계 제원 기반이다. InSAR 가 주는 것은 변위 속도·이상·위험도다.
+- CRI 는 FRAM 의 상대 지표다. 이 값만으로 구조 안전을 판정하지 않는다.
+"""
+    (OUT / "결과.md").write_text(md, encoding="utf-8")
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    print(f"[1/5] 실측 제원 → 프록시 부재 → IFC4  ({LENGTH_M:.0f} m · {N_SPANS}경간)")
+    print(f"[1/6] 실측 제원 → 프록시 부재 → IFC4  ({LENGTH_M:.0f} m · {N_SPANS}경간)")
     ifc, info = build_ifc()
     print(f"      {ifc.relative_to(ROOT)} · 부재 {info['n_elements']} · "
           f"지오참조 {info['target_crs']}")
 
-    print("[2/5] IFC 되읽기 — 왕복 검증")
+    print("[2/6] IFC 되읽기 — 왕복 검증")
     els, mc, ej = roundtrip(ifc)
     geom_n = sum(1 for e in els if e.extra.get("bbox_source") == "geometry")
     print(f"      부재 {len(els)} · 형상 AABB {geom_n} · "
           f"배치 E={mc.eastings:.1f} N={mc.northings:.1f} 회전 {mc.rotation_deg:.2f}°")
 
-    print("[3/5] InSAR 점 준비")
+    print("[3/6] InSAR 점 준비")
     pts = prepare_points(_deck_geom())
 
-    print("[4/5] 점 → 부재 결합(GlobalId) + 데크 레벨")
+    print("[4/6] 점 → 부재 결합(GlobalId) + 데크 레벨")
     guids, ginfo = guid_map_from_alignment(pts, ej, map_conversion=mc, ifc_crs=CRS,
                                            max_dist_m=30.0)
     r = export_insar_gltf(pts, OUT / "twin.glb", value="velocity",
@@ -186,16 +400,20 @@ def main() -> None:
     print(f"      점 {r['n_points']} · 결합 {r['bound']} · "
           f"고도 {g['z_source']} → {g.get('deck_z_median_m')} m")
 
-    print("[5/5] 웹뷰어 + 3D Tiles")
+    print("[5/6] 웹뷰어 + 3D Tiles")
     v = write_web_viewer(OUT / "twin.glb", elements_json=ej, map_conversion=mc,
                          ifc_crs=CRS)          # 부재 박스까지 — "다리 위"가 보인다
     t = write_3dtiles_tileset(OUT / "twin.glb")
-    pts.unlink(missing_ok=True)                      # 중간 산출물은 남기지 않는다
     for p in (ifc, ej, OUT / "twin.glb", Path(v["viewer"]), Path(t["tileset"])):
         print(f"      {Path(p).relative_to(ROOT)}  {Path(p).stat().st_size:,} B")
     print(f"      뷰어: 부재 박스 {v['n_boxes']} · "
           f"{'오프라인 가능(three.js 동봉)' if v['offline'] else '인터넷 필요(CDN)'}")
-    print(f"\n브라우저로 열기: {(OUT / 'twin.viewer.html')}")
+
+    print("[6/6] PINN 가상센싱 + FRAM CRI → 트윈 위에")
+    proj = OUT / "twin_project.h5"
+    pts.replace(proj)                                # 트윈 프로젝트로 남긴다(12점 × 201시점)
+    derive_pinn_fram(proj, ej, mc, guids, ginfo)
+    print(f"\n브라우저로 열기: {(OUT / 'twin.viewer.html')}  ·  CRI: {(OUT / 'twin_cri.viewer.html')}")
 
 
 if __name__ == "__main__":

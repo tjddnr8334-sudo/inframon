@@ -42,16 +42,16 @@
   "geometricError": 0.0,
   "refine": "ADD",
   "content": {
-   "uri": "twin.glb"
+   "uri": "twin_cri.glb"
   }
  },
  "extras": {
-  "channel": "velocity",
+  "channel": "cri",
   "legend": {
-   "kind": "div",
-   "vmin": -1.4024916529655456,
-   "vmax": 1.4024916529655456,
-   "units": "mm/yr"
+   "kind": "cri",
+   "vmin": 0.0,
+   "vmax": 1.0,
+   "units": "CRI(무차원)"
   },
   "binding_key": "element_globalid"
  }
