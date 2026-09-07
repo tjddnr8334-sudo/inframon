@@ -200,3 +200,49 @@ def test_build_profile_은_프로젝트_h5_도_읽는다(tmp_path):
     prof = build_profile(p, DECK, bin_m=20.0, correct_shift=False)
     assert prof.selected.sum() > 0
     assert "ADI 없음" in prof.meta["selection"]
+
+
+# ── 속도 95% CI · 교대 기준점 ─────────────────────────────────────────────
+from inframon.insar.chainage import (_epoch_days, reference_to_abutment,  # noqa: E402
+                                     velocity_ci)
+
+
+def test_velocity_ci_는_선형_추세와_불확실도를_되찾는다():
+    days = np.arange(0, 365 * 5, 12, dtype=float)
+    rng = np.random.default_rng(0)
+    los = 2.0 * days[None, :] / 365.25 + rng.normal(0, .5, (5, days.size))
+    v, ci = velocity_ci(los, days)
+    assert np.allclose(v, 2.0, atol=.15)
+    assert (ci > 0).all() and (ci < .3).all()
+
+
+def test_시점이_적으면_CI_가_넓다():
+    """25시점/4.8년(청양교)은 201시점/8.8년(정자교)보다 CI 가 훨씬 넓다 — 영상 수 문제."""
+    rng = np.random.default_rng(1)
+    few = np.linspace(0, 4.8 * 365.25, 25)
+    many = np.linspace(0, 8.8 * 365.25, 201)
+    _, ci_few = velocity_ci(rng.normal(0, 5, (1, 25)), few)
+    _, ci_many = velocity_ci(rng.normal(0, 5, (1, 201)), many)
+    assert ci_few[0] > 3 * ci_many[0]
+
+
+def test_epoch_days_는_정수_YYYYMMDD_도_날짜로_푼다():
+    d = _epoch_days({"dates": np.array([20201217, 20180713, 20180911], np.int32)})
+    assert d[1] == 0.0 and d[0] > d[2] > 0        # 첫 시점 기준, 정렬 무관
+
+
+def test_교대_기준점은_양끝_점_중앙값을_뺀다():
+    st = np.array([1.0, 3.0, 50.0, 97.0, 99.0])
+    los = np.ones((5, 4)) * np.array([[1, 2, 3, 4]])   # 모든 점 같은 드리프트
+    los[2] += 10.0                                   # 중앙 점만 +10
+    out, meta = reference_to_abutment(los, st, 100.0, zone_m=8.0)
+    assert meta["applied"] and meta["n_ref"] == 4
+    assert np.allclose(out[0], 0.0) and np.allclose(out[2], 10.0)
+
+
+def test_교대_구역에_점이_없으면_기준점을_안_건드린다():
+    st = np.array([40.0, 50.0, 60.0])
+    los = np.ones((3, 3))
+    out, meta = reference_to_abutment(los, st, 100.0)
+    assert not meta["applied"] and np.array_equal(out, los)
+    assert "2개 미만" in meta["reason"]

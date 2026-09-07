@@ -214,6 +214,7 @@ def derive_pinn_fram(proj: Path, ej: Path, mc, guids, ginfo) -> None:
 
     figs = _twin_figures(proj)
     figs.append(_chainage_figure(proj))
+    figs.append(_brief_figure(proj))
     _write_results_md(proj, summ, figs)
     for f in figs + [OUT / "결과.md", proj]:
         print(f"      {Path(f).relative_to(ROOT)}  {Path(f).stat().st_size:,} B")
@@ -229,6 +230,22 @@ def _chainage_figure(proj: Path) -> Path:
                     "--bridge", NAME, "--lat", str(LAT), "--lon", str(LON),
                     "--height", str(CLEARANCE_M), "--width", str(WIDTH_M), "--bin", "10",
                     "--offset", "20", "--out", str(out)], check=True,
+                   env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+    return out
+
+
+def _brief_figure(proj: Path) -> Path:
+    """건기연 브리프(2026-08-26) 2쪽 형식 — QC 는 속도 95% CI, 교대 기준점, (b) 는 잔차고도
+    없음을 명시. scripts/make_brief_figure.py."""
+    import subprocess
+
+    out = OUT / "twin_brief.png"
+    subprocess.run([sys.executable, str(ROOT / "scripts/make_brief_figure.py"), str(proj),
+                    "--bridge", NAME, "--lat", str(LAT), "--lon", str(LON),
+                    "--height", str(CLEARANCE_M), "--width", str(WIDTH_M), "--bin", "10",
+                    "--offset", "20", "--meta",
+                    f"준공 1993 · 연장 {LENGTH_M:.0f} m · 폭 {WIDTH_M} m · {N_SPANS}경간 (표준데이터+OSM)",
+                    "--out", str(out)], check=True,
                    env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
     return out
 
@@ -397,6 +414,26 @@ def _write_results_md(proj: Path, summ: dict, figs: list[Path]) -> None:
 
 **각 지점에 PS 가 있어야 그 지점의 가상센싱을 말할 수 있다** — ④가 그것을 보여준다.
 색띠 게이트(커버리지 70 %·σ_b/σ_w 1.5)는 차단이므로 3D 데크에 프로파일을 칠하지 않는다.
+
+## 건기연 브리프 형식 (KICT_2PP, 2026-08-26)
+
+![brief](twin_brief.png)
+
+| 브리프 항목 | 적용 | 결과 |
+|---|---|---|
+| QC: 속도 불확실도 95% CI ≤ 1.0 mm/yr ∧ γ ≥ 0.4 | ✅ | 유효 8/12 (201시점이라 CI 반폭 0.2 mm/yr) |
+| 기준점: 교대 위 안정점 0 mm | 🟡 | 양끝 8 m 구역에 점 없음 → 미적용(사유 기록) |
+| (b) DEM 대비 상대고도(잔차고도) | ❌ | PSI 높이 추정(B⊥) 없음 — **다음 단계** |
+| (c) 95% CI 가 0 포함 → 변형 없음 | ✅ | **0/8 — 8점 모두 +0.5~+1.4 mm/yr 로 0 을 벗어남** |
+| (d) 중앙값 시계열 · 추세 | ✅ | 추세 +0.74 mm/yr (LOS, 위성 방향 접근) |
+
+정자교 유효 PS 는 관측기간 8.8년 동안 **일관된 양(+)의 LOS 속도**를 보인다. 남측 보도·난간
+산란체라는 점, 열·계절 성분이 완전히 제거되지 않았을 가능성, 잔차고도 미확인을 감안해
+"구조 변형"으로 단정하지 않는다 — 다만 브리프의 내곡교(추세 0.00)와는 다른 양상이다.
+
+비교: 청양교(`docs/img/brief_chyg.png`)는 25시점/4.8년이라 CI 반폭 중앙 2.5 mm/yr 로
+브리프 기준을 1점만 통과한다. 브리프의 각동교·내곡교는 119~148장이었다 — **시점 수가
+결정적**이며, 청양교는 확보된 SLC 34장 전부를 쓰는 재처리가 다음 단계다.
 
 ## FRAM (위험도)
 

@@ -36,6 +36,13 @@ COH_MIN = 0.60
 # 노이즈 점 제거 — 같은 구간 이웃 대비 값이 튀는 점(로버스트 z > 3)·시계열 잡음이 이웃
 # 중앙의 3배를 넘는 점. 선별 통과 후에도 남는 '점 하나짜리 이상'을 프로파일에서 뺀다.
 NOISE_Z = 3.0
+# 속도 불확실도 QC(건기연 브리프 4단계 — '속도 불확실도·코히어런스·잔차고도로 저품질 제거').
+# 하드 ADI/γ 컷 대신 시계열 선형 적합의 95% CI 반폭으로 거른다. 규칙 격자를 최대한 살리고
+# 신뢰구간을 결과와 함께 낸다 — 청양교에서 γ≥0.6 은 7점, CI≤1.0 ∧ γ≥0.4 는 45점.
+CI95_MAX_MM_YR = 1.0          # 95% CI 반폭 상한[mm/yr]
+COH_LOOSE = 0.40              # CI 모드에서 함께 거는 느슨한 결맞음 하한
+ABUTMENT_ZONE_M = 8.0         # 교대 위 기준점 구역 — 교축 양끝 이 길이 안의 점
+REF_BAND_MM_YR = 0.5          # 참고범위 ±0.5 mm/yr (브리프 (c) 연녹색 띠)
 MIN_BIN_POINTS = 2            # 구간 대표값을 낼 최소 점수
 
 # ── 프로파일을 "구조로 볼 수 있는가" 게이트 ────────────────────────────────
@@ -60,10 +67,21 @@ class ChainageProfile:
     bin_value: np.ndarray         # [B] 구간 대표값(중앙값)
     bin_sem: np.ndarray           # [B] 표준오차
     bin_n: np.ndarray             # [B] 구간 점수
+    ci95: np.ndarray | None = None      # [N] 점별 속도 95% CI 반폭(있을 때)
+    reference: dict | None = None       # 교대 기준점 적용 근거
     deck_length_m: float = 0.0
     bin_m: float = DEFAULT_BIN_M
     shift: dict | None = None     # 적용한 쉬프트 보정 근거
     meta: dict = field(default_factory=dict)
+
+    @property
+    def bin_ci95(self) -> np.ndarray:
+        """구간 대표값의 95% CI 반폭 = 1.96 × SE."""
+        return 1.96 * self.bin_sem
+
+    def no_deformation(self) -> np.ndarray:
+        """구간별 '변형 경향 없음' — 95% CI 가 0 을 포함(브리프 판정 규칙)."""
+        return np.abs(self.bin_value) <= self.bin_ci95
 
     def coverage(self) -> float:
         """점이 있는 구간 비율 — 1.0 이면 결측 구간 없음."""
@@ -141,6 +159,8 @@ def _read_track(track_h5: str | Path) -> dict[str, Any]:
                       "incidenceAngle", "los_mm", "scatterer_class"):
                 if k in f:
                     out[k] = np.asarray(f[k][()])
+            if "epochs" in f:
+                out["dates"] = np.asarray(f["epochs"][()])
             out["attrs"] = {k: v for k, v in f.attrs.items()}
             return out
         if "insar/xyz" in f:                             # 프로젝트 h5 (/insar 계약)
@@ -149,7 +169,8 @@ def _read_track(track_h5: str | Path) -> dict[str, Any]:
             alias = {"coh": ("temporal_coherence", "coherence"),
                      "amplitude_dispersion": ("amplitude_dispersion",),
                      "los_velocity_mm_yr": ("velocity_mm_yr",),
-                     "incidenceAngle": ("incidence_deg",), "los_mm": ("los",)}
+                     "incidenceAngle": ("incidence_deg",), "los_mm": ("los",),
+                     "dates": ("date_labels", "dates")}     # 라벨(YYYYMMDD)이 있으면 우선
             for k, cands in alias.items():
                 for c in cands:
                     if c in g:
@@ -164,6 +185,69 @@ def _read_track(track_h5: str | Path) -> dict[str, Any]:
             out["attrs"] = attrs
             return out
     raise ValueError(f"{track_h5}: pixel_lonlat(트랙) 도 /insar/xyz(프로젝트) 도 없습니다")
+
+
+def velocity_ci(los: np.ndarray, days: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """점별 LOS 시계열 선형 적합 → (속도[mm/yr], 95% CI 반폭[mm/yr]).
+
+    브리프 (c) 의 오차막대가 이것이다. CI 가 0 을 포함하면 "관측기간 중 유의한 변형 경향
+    없음"이다 — 값 자체보다 이 판정이 보고에 쓰인다.
+    """
+    los = np.asarray(los, float)
+    t = np.asarray(days, float) / 365.25
+    n = t.size
+    X = np.column_stack([np.ones(n), t])
+    ok = np.isfinite(los).all(axis=1)
+    vel = np.full(los.shape[0], np.nan)
+    ci = np.full(los.shape[0], np.nan)
+    if n < 3 or not ok.any():
+        return vel, ci
+    beta, *_ = np.linalg.lstsq(X, los[ok].T, rcond=None)
+    r = los[ok].T - X @ beta
+    s2 = (r ** 2).sum(axis=0) / max(n - 2, 1)
+    var_b = s2 / max(((t - t.mean()) ** 2).sum(), 1e-12)
+    vel[ok] = beta[1]
+    ci[ok] = 1.96 * np.sqrt(var_b)
+    return vel, ci
+
+
+def _epoch_days(tr: dict) -> np.ndarray | None:
+    """트랙/프로젝트의 날짜 → 첫 시점 기준 일수."""
+    d = tr.get("dates")
+    if d is None:
+        return None
+    d = np.asarray(d)
+    # 문자열이든 정수든 YYYYMMDD 꼴이면 날짜로 푼다(SNAP 트랙은 int32 YYYYMMDD 에
+    # 기준일이 맨 앞이라 정렬돼 있지 않다). 그 외 숫자는 이미 '일수'로 본다.
+    if d.dtype.kind in "SU" or (d.dtype.kind in "iu" and d.size and int(d.min()) > 19000000):
+        from datetime import datetime
+        dd = [datetime.strptime(x.decode() if isinstance(x, bytes) else str(int(x)), "%Y%m%d")
+              for x in d]
+        t0 = min(dd)
+        return np.array([(x - t0).days for x in dd], float)
+    return np.asarray(d, float)
+
+
+def reference_to_abutment(los: np.ndarray, station: np.ndarray, length_m: float, *,
+                          on_deck: np.ndarray | None = None,
+                          zone_m: float = ABUTMENT_ZONE_M) -> tuple[np.ndarray, dict]:
+    """교대 위 안정점을 0 mm 기준으로 — 시점별로 교대 구역 점들의 중앙값을 뺀다.
+
+    브리프 '기준점 잡기: 교대 위 안정된 점을 0 m 기준으로'. 교대는 지반에 직접 놓여
+    상부구조 거동에서 자유롭다. 교대 구역 점이 2개 미만이면 손대지 않고 사유를 남긴다.
+    """
+    los = np.asarray(los, float)
+    st = np.asarray(station, float)
+    zone = (st <= zone_m) | (st >= length_m - zone_m)
+    if on_deck is not None:
+        zone &= np.asarray(on_deck, bool)
+    n = int(zone.sum())
+    if n < 2:
+        return los, {"applied": False, "n_ref": n,
+                     "reason": f"교대 구역(양끝 {zone_m:g} m) 점이 {n}개 — 2개 미만이라 기준점 미적용"}
+    ref = np.nanmedian(los[zone], axis=0)
+    return los - ref[None, :], {"applied": True, "n_ref": n, "zone_m": zone_m,
+                                "ref_station_m": [float(v) for v in st[zone]]}
 
 
 def select_points(tr: dict, *, mode: str = "relaxed",
@@ -184,6 +268,18 @@ def select_points(tr: dict, *, mode: str = "relaxed",
         if k in tr:
             coh = np.asarray(tr[k], float)
             break
+    if mode == "ci":
+        # 속도 불확실도 QC — los 시계열이 있어야 한다. 느슨한 결맞음만 같이 건다.
+        los, days = tr.get("los_mm"), _epoch_days(tr)
+        if los is None or days is None:
+            raise ValueError("CI 모드는 LOS 시계열과 날짜가 필요합니다.")
+        _, ci = velocity_ci(los, days)
+        mask = np.isfinite(ci) & (ci <= CI95_MAX_MM_YR)
+        how = [f"95%CI ≤ {CI95_MAX_MM_YR:g} mm/yr"]
+        if coh is not None:
+            mask &= np.isfinite(coh) & (coh >= COH_LOOSE)
+            how.append(f"γ_temp ≥ {COH_LOOSE:g}")
+        return mask, " ∧ ".join(how)
     if mode == "strict":
         if adi is None:
             if coh is None:
@@ -272,6 +368,7 @@ def _velocity(tr: dict) -> np.ndarray:
 def build_profile(track_h5: str | Path, geometry_latlon, *,
                   bin_m: float = DEFAULT_BIN_M, min_quality: float | None = None,
                   mode: str = "relaxed", denoise: bool = True,
+                  reference: str | None = None,
                   correct_shift: bool = True, bridge_height_m: float | None = None,
                   bridge_width_m: float | None = None,
                   max_offset_m: float | None = None) -> ChainageProfile:
@@ -284,7 +381,10 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
     `max_offset_m` 은 "교량 위"의 정의다 — 주지 않으면 폭의 절반(반폭)을 쓴다. 추출 버퍼가
     폭보다 넓으면 데크 밖 지반 점이 섞여 프로파일이 오염된다(청양교: 버퍼 30m vs 반폭 11m).
 
-    선별: `mode="strict"`(ADI ≤ 0.25) 또는 `"relaxed"`(ADI ≤ 0.40 ∧ γ_temp ≥ 0.60, 기본).
+    선별: `mode="strict"`(ADI ≤ 0.25) · `"relaxed"`(ADI ≤ 0.40 ∧ γ_temp ≥ 0.60, 기본) ·
+    `"ci"`(속도 95% CI 반폭 ≤ 1.0 mm/yr ∧ γ ≥ 0.40 — 브리프 방식, 규칙 격자를 최대한 살린다).
+    `reference="abutment"` 면 교대 구역 점 중앙값을 시점별로 빼 교대를 0 mm 기준으로 한다.
+    LOS 시계열이 있으면 속도·95% CI 를 그 시계열에서 다시 계산한다(저장 속도와 일관되게).
     `denoise=True` 면 통과 점 중 이웃 대비 튀는 점·시계열 잡음 점을 뺀다(`remove_noise`).
     `min_quality` 를 주면 예전 방식(단일 품질값 하한)으로 돌아간다 — 호환용.
 
@@ -319,6 +419,21 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
     offset = _signed_offset(ll, geometry_latlon, offset)   # 좌/우를 부호로 — 데크 단면이 보인다
     lim = (float(max_offset_m) if max_offset_m is not None
            else (float(bridge_width_m) / 2.0 if bridge_width_m else None))
+    poly0 = np.asarray(geometry_latlon, float)
+    length0 = float(_polyline_length_m(poly0))
+    ref_meta = None
+    ci95 = None
+    los = tr.get("los_mm")
+    days = _epoch_days(tr)
+    if los is not None and np.ndim(los) == 2 and days is not None:
+        los = np.asarray(los, float)
+        if reference == "abutment":
+            on = (np.abs(offset) <= lim) if lim is not None else None
+            los, ref_meta = reference_to_abutment(los, station, length0, on_deck=on)
+            tr = {**tr, "los_mm": los}
+        v_fit, ci95 = velocity_ci(los, days)
+        if np.isfinite(v_fit).any():
+            val = v_fit                                 # 시계열과 일관된 속도
     if min_quality is not None:                   # 호환: 단일 품질값 하한
         sel = np.isfinite(qual) & (qual >= float(min_quality))
         how = f"{qname} ≥ {float(min_quality):g}"
@@ -350,6 +465,7 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
     return ChainageProfile(chainage_m=station, offset_m=offset, value=val, selected=sel,
                            quality=qual, bin_center_m=centers, bin_value=bv, bin_sem=bs,
                            bin_n=bn, deck_length_m=length, bin_m=bin_m, shift=shift_meta,
+                           ci95=ci95, reference=ref_meta,
                            meta={"quality": qname, "selection": how, "mode": mode,
                                  "n_selected_before_denoise": n_before,
                                  "n_noise_removed": int(noisy.sum()),
