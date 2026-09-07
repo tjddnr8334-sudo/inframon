@@ -36,6 +36,11 @@ OFFICIAL_MATCH_MAX_M = 150.0    # 표준데이터가 이보다 멀면 다른 교
 FREQ_COEF_MIN, FREQ_COEF_MAX = 10.0, 600.0     # f₁·L 의 허용 범위[Hz·m]
 EI_SATURATION_FRAC = 0.99       # 이 비율 이상이 상한값에 붙어 있으면 포화
 EI_GEOM_RATIO_MAX = 50.0        # 식별 EI 가 기하학적 EI 의 이 배를 넘으면 비물리적
+# 구조응답 물리 상한. 콘크리트 파괴 변형률 ~0.003, 강재 항복 ~0.002 — 이걸 넘는 변형률은
+# 관측이 아니라 단위 오류다. 응력도 강재 강도(~500 MPa)의 2배를 넘으면 같은 뜻이다.
+# 실제로 곡률 단위 환산이 빠져 변형률 −0.32·응력 −8,589 MPa 가 나온 산출물이 ⑥을 통과했다.
+STRAIN_ABS_MAX = 3.0e-3         # 무차원
+STRESS_ABS_MAX_PA = 1.0e9       # 1 GPa
 
 OK, COND, NO = "보고 가능", "조건부", "보고 불가"
 
@@ -71,6 +76,8 @@ class ArtifactAudit:
     freq_coef: float | None = None          # f₁ × 경간[m] — 규모 무관 비교용
     ei_identified: bool | None = None       # 강성 식별이 수렴했는가
     ei_modal_basis: str | None = None       # 고유진동수를 무엇으로 계산했는가
+    strain_abs_max: float | None = None     # |변형률| 최대(무차원)
+    stress_abs_max_pa: float | None = None  # |응력| 최대[Pa]
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -218,6 +225,12 @@ def _pinn_plausibility(a: ArtifactAudit, f, inp: dict) -> None:
                 a.ei_geom_ratio = round(a.ei_median / geom, 1)
     a.ei_identified = inp.get("EI_identified")
     a.ei_modal_basis = inp.get("EI_modal_basis")
+    for key, attr in (("pinn/strain", "strain_abs_max"), ("pinn/stress", "stress_abs_max_pa")):
+        if key in f:
+            v = np.asarray(f[key][()], dtype=np.float64).ravel()
+            v = v[np.isfinite(v)]
+            if v.size:
+                setattr(a, attr, float(np.abs(v).max()))
     if "pinn/natural_freq" in f:
         fr = np.asarray(f["pinn/natural_freq"][()], dtype=np.float64).ravel()
         fr = fr[np.isfinite(fr) & (fr > 0)]
@@ -323,6 +336,14 @@ def _judge(a: ArtifactAudit) -> None:
                     f"— 강성 식별이 수렴하지 않았다")
     elif a.ei_geom_ratio is not None and a.ei_geom_ratio > EI_GEOM_RATIO_MAX:
         hard.append(f"식별 EI 가 기하학적 EI 의 {a.ei_geom_ratio:g}배 — 비물리적")
+    # 구조응답이 재료 한계를 넘으면 값이 아니라 단위가 틀린 것이다 — 차단.
+    if a.strain_abs_max is not None and a.strain_abs_max > STRAIN_ABS_MAX:
+        hard.append(f"변형률 |ε|max={a.strain_abs_max:.2e} — 콘크리트 파괴 변형률"
+                    f"({STRAIN_ABS_MAX:g})의 {a.strain_abs_max / STRAIN_ABS_MAX:.0f}배. "
+                    "관측이 아니라 단위 오류다(곡률 환산 누락 등)")
+    if a.stress_abs_max_pa is not None and a.stress_abs_max_pa > STRESS_ABS_MAX_PA:
+        hard.append(f"응력 |σ|max={a.stress_abs_max_pa / 1e6:,.0f} MPa — 재료 강도 규모를 벗어났다"
+                    f"(상한 {STRESS_ABS_MAX_PA / 1e6:,.0f} MPa)")
     if a.freq_coef is not None and not (FREQ_COEF_MIN <= a.freq_coef <= FREQ_COEF_MAX):
         hard.append(f"1차 고유진동수 {a.natural_freq_hz:.1f}Hz 가 경간 "
                     f"{a.pinn_span_m:.0f}m 에서 불가능하다(f₁·L={a.freq_coef:g}, "
@@ -369,6 +390,8 @@ def format_table(rows: list[ArtifactAudit]) -> str:
                 bits.append("EI 포화")
             elif r.ei_geom_ratio is not None:
                 bits.append(f"EI×{r.ei_geom_ratio:g}(기하)")
+            if r.strain_abs_max is not None and r.strain_abs_max > STRAIN_ABS_MAX:
+                bits.append(f"ε {r.strain_abs_max:.1e}")
             bad = any(("고유진동수" in x and "불가능" in x) or "포화" in x or "비물리적" in x
                       for x in r.reasons)
             pl = ("❌ " if bad else "✅ ") + " · ".join(bits)

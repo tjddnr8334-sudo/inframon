@@ -450,3 +450,29 @@ def test_partner_specs_csv_disagreement_with_national_is_a_note(tmp_path, monkey
     assert not any("표준데이터에 이 교량이 없다" in r for r in a.reasons)
     assert any("파트너 실측 CSV" in n for n in a.notes)
     assert a.verdict == OK, a.reasons
+
+
+def test_impossible_strain_blocks_reporting(tmp_path):
+    """변형률이 재료 파괴값의 수백 배면 관측이 아니라 단위 오류 — 차단.
+
+    실제로 곡률 단위 환산이 빠져 변형률 −0.32(파괴 0.003의 100배)인 산출물이 ⑥을 통과했다.
+    """
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=True)
+    with h5py.File(p, "a") as f:
+        f["pinn"].create_dataset("strain", data=np.full((6, 4), -0.32, np.float32))
+        f["pinn"].create_dataset("stress", data=np.full((6, 4), -8.6e9, np.float32))
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.verdict == NO
+    assert any("변형률" in r and "단위" in r for r in a.reasons)
+    assert any("응력" in r for r in a.reasons)
+
+
+def test_physical_strain_passes(tmp_path):
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=True)
+    with h5py.File(p, "a") as f:
+        f["pinn"].create_dataset("strain", data=np.full((6, 4), 2.0e-6, np.float32))
+        f["pinn"].create_dataset("stress", data=np.full((6, 4), 6.0e4, np.float32))
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.verdict == OK, a.reasons
