@@ -38,6 +38,26 @@ _IFC_TO_MEMBER = [
     ("ifcdeck", "deck"), ("ifcmember", "deck"),
     ("ifccolumn", "pier"), ("ifcpier", "pier"), ("ifcpile", "pier"),
     ("ifcfooting", "abutment"), ("ifcabutment", "abutment"), ("ifcwall", "abutment"),
+    # 부속물 — 타입이 IfcBuildingElementProxy 라 이름으로만 알 수 있다. 실 프록시 IFC
+    # 12종에서 미매핑 68부재가 전부 이것들이었다(난간 24 · 날개벽 44).
+    # ⚠ 순서 주의: 부분일치라 더 특정적인 것이 앞에 와야 한다. "parapet" 을 먼저 두면
+    # "ParapetWall"(교대 흉벽)까지 데크로 삼킨다.
+    ("wingwall", "abutment"), ("wing_wall", "abutment"), ("parapetwall", "abutment"),
+    ("parapet_wall", "abutment"), ("날개벽", "abutment"), ("흉벽", "abutment"),
+    # 주탑 기초는 하부구조(교각). 앵커리지는 주케이블을 잡는 단부 하부구조라 교대로 본다.
+    ("towerbase", "pier"), ("pylonbase", "pier"), ("주탑기초", "pier"),
+    # 앵커리지는 엄밀히는 교대가 아니지만, 우리 4라벨(deck/pier/abutment/bearing)에서
+    # 가장 가까운 것은 "단부 하부구조"인 교대다. 판단이 들어간 매핑이라 여기 적어 둔다.
+    ("anchorage", "abutment"), ("anchor", "abutment"), ("앵커리지", "abutment"),
+    # 난간·방호벽·보도는 상부구조에 얹혀 데크와 함께 움직인다 — 그리고 **PS 산란체가
+    # 실제로 여기 생긴다**(정자교: 점이 노면이 아니라 보도·난간선을 따라 늘어섰다).
+    ("parapet", "deck"), ("railing", "deck"), ("guardrail", "deck"), ("barrier", "deck"),
+    ("sidewalk", "deck"), ("footway", "deck"), ("난간", "deck"), ("방호벽", "deck"),
+    ("보도", "deck"),
+    # 거더 사이 가로브레이싱·격벽·가로보도 상부구조다(실 MIDAS IFC 미매핑 66부재가
+    # 전부 Brace 였다 — 데크 아래 z −2.5~−0.3 m 에 걸린 거더간 부재).
+    ("bracing", "deck"), ("brace", "deck"), ("diaphragm", "deck"), ("crossbeam", "deck"),
+    ("cross_beam", "deck"), ("가로보", "deck"), ("브레이싱", "deck"), ("격벽", "deck"),
 ]
 
 # IFC4.3 IfcBridgePart/IfcFacilityPart 의 PredefinedType → 부재 라벨.
