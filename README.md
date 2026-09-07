@@ -116,20 +116,19 @@ numbers with that in mind. · 실 결과. 좌: 전체 2,661점과 정자교 위�
 
 *What "InSAR on BIM" actually takes. Geocoded output puts points (a) at **DEM ground level** and
 (b) shifted by δh/tanθ. Both must be undone before a point sits on the deck. **①** shift of 6.8 m
-undone — for this bridge it is almost entirely **along-deck** (deck azimuth 89.6° ≈ LOS, observability
-0.002), so it barely changes which points are on the bridge; the module computes that split per
+undone — mostly **along-deck** (deck azimuth 89.6° vs LOS, observability 0.22; cross-deck −1.5 m),
+which moves 3 more points onto the deck (4 → 7); the module computes that split per
 bridge rather than assuming it. The points line up on the **south footway**, not the roadway — a
 smooth carriageway has few scatterers, parapets and footways have many. **②** the same points lifted
 from ground 37 m to deck 45 m (+7.4 m = clearance + girder depth); piers and abutments are a proxy
 built from measured specs (108 m, 5 spans — data.go.kr 15081953). **③** the twin: 9 points bound to
-members by GlobalId (4 within the deck width, 5 within the pixel-uncertainty buffer). Deck width is
+members by GlobalId (7 within the deck width, 2 within the pixel-uncertainty buffer). Deck width is
 not guessed — OSM's two footway centrelines are 23.5 m apart. · "BIM 에 InSAR 를 올린다"가 실제로
 무엇인지. 지오코딩 산출물은 점을 **DEM 지면**에 놓고 δh/tanθ 만큼 밀어 둔다. 둘 다 되돌려야
-데크 위에 앉는다. **①** 쉬프트 6.8 m 되돌림 — 이 교량은 밀림이 거의 전부 **교축 종방향**이라
-(데크 방위 89.6° ≈ LOS, 관측가능성 0.002) 교량 위 여부가 거의 안 바뀐다. 이 분해를 교량마다
-계산한다. 점은 노면이 아니라 **남측 보도선**을 따라 늘어선다. **②** 지면 37 m → 데크 45 m
+데크 위에 앉는다. **①** 쉬프트 6.8 m 되돌림 — 대부분 **교축 종방향**이고 횡축 −1.5 m(관측가능성 0.22).
+보정으로 데크 폭 안 점이 4 → 7. 이 분해를 교량마다 계산한다. 점은 노면이 아니라 **남측 보도선**을 따라 늘어선다. **②** 지면 37 m → 데크 45 m
 (+7.4 m = 형하고 + 형고). 교각·교대는 표준데이터 실측(108 m·5경간) 프록시. **③** 트윈 — 9점이
-GlobalId 로 부재에 결합. 데크 폭은 추정이 아니라 OSM 양측 보도 간격 23.5 m 에서 온다.
+GlobalId 로 부재에 결합(데크 폭 안 7). 데크 폭은 추정이 아니라 OSM 양측 보도 간격 23.5 m 에서 온다.
 Regenerate: `python scripts/make_ondeck_figure.py`.*
 
 **Open the twin in 3D / 트윈을 3D 로 열기:** [`docs/twin/`](docs/twin/) — double-click

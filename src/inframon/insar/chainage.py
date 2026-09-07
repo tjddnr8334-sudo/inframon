@@ -182,7 +182,9 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
         from .geolocation import apply_correction
 
         inc = np.asarray(tr.get("incidenceAngle", 39.0), float)
-        heading = float(tr["attrs"].get("HEADING", 0.0) or 0.0)
+        from .track_reader import normalize_heading_deg
+        heading = float(normalize_heading_deg(
+            float(tr["attrs"].get("HEADING", 0.0) or 0.0)))     # 라디안 유입 방어
         g = for_bridge(geometry_latlon, heading_deg=heading,
                        incidence_deg=float(np.nanmedian(inc)),
                        dh_m=float(bridge_height_m), width_m=bridge_width_m)

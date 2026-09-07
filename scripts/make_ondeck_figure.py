@@ -49,7 +49,7 @@ OSM_LAT, OSM_LON = 37.36854, 127.10900
 LENGTH_M, N_SPANS, MAX_SPAN_M = 108.0, 5, 27.0
 FOOTWAY_HALF_M = 1.5   # 보도 중심선 → 구조물 외측. 보도 폭 3 m 가정
 CLEARANCE_M = 6.0      # 탄천 위 형하고 — 표준데이터에 교량높이가 없어 가정(그림에 명시)
-HEADING_DEG = -0.2312377226231737
+HEADING_DEG = -13.249       # SARvey 트랙의 −0.2312 는 라디안 — 도로 환산(track_reader.normalize_heading_deg)
 
 C_DECK, C_PIER, C_ABUT = "#4a6b8a", "#8a8f96", "#7a8288"
 

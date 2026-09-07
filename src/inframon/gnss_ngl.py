@@ -363,7 +363,9 @@ def validate_insar_vs_gnss(project_h5, *, incidence_deg: float = 39.0,
         head = heading_deg
         if head is None and "track_source" in g.attrs:
             try:
-                head = float(json.loads(g.attrs["track_source"])["attrs"]["HEADING"])
+                from .insar.track_reader import normalize_heading_deg
+                head = normalize_heading_deg(
+                    float(json.loads(g.attrs["track_source"])["attrs"]["HEADING"]))
             except (KeyError, ValueError, TypeError):
                 head = None
     if head is None:

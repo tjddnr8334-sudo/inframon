@@ -78,6 +78,28 @@ _HEAD_ATTRS = ("heading", "HEADING", "headingAngle", "sat_heading", "ORBIT_HEADI
 _DEMERR_DATASETS = ("dem_error", "demErr", "residual_height", "dem_err", "hgt_error")
 
 
+# |heading| 이 이보다 작으면 라디안으로 본다. 위성 heading 이 도(°)로 이 안에 드는 경우는
+# 정북 비행뿐인데 Sentinel-1 은 asc ≈ −13°, desc ≈ −167° 라 실제로는 없다.
+HEADING_RADIAN_MAX = 7.0
+
+
+def normalize_heading_deg(heading: float | None) -> float | None:
+    """heading 을 도(°)로. **라디안이 섞여 들어오는 것**을 잡는다.
+
+    MintPy/ISCE 계열은 heading 을 라디안으로 쓴다(asc −0.23, desc −2.91). 그 값을 도로
+    읽으면 −0.23° — 거의 정북 — 가 되어 LOS 방향이 13° 틀어진다. 정자교 SARvey 트랙이
+    정확히 그 상태였고, 그 결과 지오로케이션 쉬프트의 교축 직각 성분이 0.01 m 로 계산돼
+    "보정해도 데크 위 점이 안 늘어난다"는 결론이 나왔다. 라디안으로 고치면 직각 성분
+    1.5 m, 데크 안 점 4 → 7 이다. 변환기(58_sarvey_to_inframon)는 이미 이 규칙을 알고
+    있었지만, 옛 어댑터로 만든 트랙은 변환 없이 들어왔다 — 읽는 쪽에서 막아야 한다.
+    """
+    if heading is None or not np.isfinite(heading):
+        return heading
+    if abs(float(heading)) < HEADING_RADIAN_MAX:
+        return float(np.degrees(heading))
+    return float(heading)
+
+
 def _decode_epochs(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     labels = np.asarray(raw).astype(str)
     parsed = [datetime.strptime(label, "%Y%m%d") for label in labels]
@@ -153,6 +175,7 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
         heading = float(np.nanmedian(np.asarray(head_raw, dtype=np.float64)))
     elif head_attr is not None:
         heading = float(head_attr)
+    heading = normalize_heading_deg(heading)
 
     dem_error = None
     if demerr_raw is not None:

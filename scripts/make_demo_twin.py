@@ -51,6 +51,20 @@ CLEARANCE_M = 6.0        # 탄천 위 형하고(표준데이터에 교량높이 
 GROUND_M = 37.2          # DEM 지면 표고
 DECK_AZ_DEG = 0.4        # OSM 차도 방위(동서 방향)
 CRS = "EPSG:5186"
+# SARvey 트랙의 HEADING −0.2312 는 라디안이다(−13.25°). 읽기 경로는 track_reader 가
+# 정규화하지만 여기서는 트랙 attrs 를 직접 쓰므로 같은 함수로 맞춘다.
+DECK_SEL_M = 30.0        # 데크 중심선 ±30 m — 감사표 ②와 같은 기준
+
+
+def _deck_geom():
+    """OSM 차도 중심선 [(lat,lon),...]. make_ondeck_figure 가 캐시한 파일을 재사용한다."""
+    cache = ROOT / "data/jeongjagyo_f120/deck_polyline.json"
+    if cache.exists():
+        d = json.loads(cache.read_text(encoding="utf-8"))
+        return [tuple(p) for p in d["road"]["geometry"]]
+    from inframon.insar.osm_bridge import _overpass_query
+    el = _overpass_query("[out:json][timeout:30];way(51473197);out geom;")["elements"][0]
+    return [(g["lat"], g["lon"]) for g in el["geometry"]]
 
 
 def build_ifc() -> tuple[Path, dict]:
@@ -87,8 +101,18 @@ def roundtrip(ifc: Path) -> tuple[list, MapConversion, Path]:
     return els, mc, ej
 
 
-def prepare_points() -> Path:
-    """④ 실 InSAR 점을 트윈용 프로젝트로 — 교량 주변만, 로컬 좌표 기준."""
+def prepare_points(geom_latlon) -> Path:
+    """④ 실 InSAR 점을 트윈용 프로젝트로 — **쉬프트 보정 후** 데크 ±30 m 안만.
+
+    지오코딩은 DEM(지면)을 쓰므로 데크 위 산란체는 δh/tanθ 만큼 밀려 있다. 보정 없이
+    반경으로 자르면 데크 위 점이 밖으로, 밖 점이 안으로 들어온다. 보정을 먼저 하고
+    데크 중심선 기준 ±30 m(감사표 ② 기준)로 고른다.
+    """
+    from inframon.insar.chainage import _signed_offset
+    from inframon.insar.deck_geometry import project_to_polyline
+    from inframon.insar.geolocation import apply_correction
+    from inframon.insar.track_reader import normalize_heading_deg
+
     if not PROJ.exists():
         raise SystemExit(
             f"실데이터가 없습니다: {PROJ}\n"
@@ -97,29 +121,42 @@ def prepare_points() -> Path:
         g = h["insar"]
         xyz = np.asarray(g["xyz"][()], float)
         vel = np.asarray(g["velocity_mm_yr"][()], float)
+        inc = np.asarray(g["incidence_deg"][()], float)
         keys = [k for k in g.keys() if k != "xyz"]
         data = {k: g[k][()] for k in keys}
         attrs = dict(g.attrs)
-    # 교량 중심 반경 80 m — 트윈은 이 교량 것이다
-    dm = np.hypot((xyz[:, 0] - LON) * np.cos(np.radians(LAT)) * 111_320.0,
-                  (xyz[:, 1] - LAT) * 111_320.0)
-    m = dm <= 80.0
+    ts = json.loads(attrs.get("track_source", "{}"))
+    heading = normalize_heading_deg(float(ts.get("attrs", {}).get("HEADING", 0.0) or 0.0))
+    corr = apply_correction(xyz[:, :2], np.full(len(xyz), CLEARANCE_M), inc, heading,
+                            crs_is_lonlat=True, set_height=False)
+    ll = np.asarray(corr["xyz"], float)[:, :2]
+    st, of = project_to_polyline(ll, geom_latlon)
+    of = _signed_offset(ll, geom_latlon, of)
+    m = (np.abs(of) <= DECK_SEL_M) & (st >= -5.0) & (st <= LENGTH_M + 5.0)
     if m.sum() < 3:
-        raise SystemExit(f"교량 반경 80 m 안 점이 {int(m.sum())}개뿐입니다.")
+        raise SystemExit(f"데크 ±{DECK_SEL_M:.0f} m 안 점이 {int(m.sum())}개뿐입니다.")
+    xyz_c = xyz.copy()
+    xyz_c[:, :2] = ll                                 # 보정 좌표를 싣는다
     out = OUT / "_twin_points.h5"
     with h5py.File(out, "w") as o:
-        # ProjectStore 규약(contracts.io.GROUPS): 네 그룹이 다 있어야 읽기로 열린다
-        for g in ("cv", "pinn", "fram"):
-            o.create_group(g)
+        for grp in ("cv", "pinn", "fram"):            # ProjectStore 규약(GROUPS)
+            o.create_group(grp)
         gi = o.create_group("insar")
-        gi.create_dataset("xyz", data=xyz[m])
+        gi.create_dataset("xyz", data=xyz_c[m])
         for k, v in data.items():
             a = np.asarray(v)
             gi.create_dataset(k, data=(a[m] if a.shape[:1] == (len(m),) else a))
         for k, v in attrs.items():
             gi.attrs[k] = v
-    print(f"  트윈 대상 점 {int(m.sum())} / {len(xyz)} (반경 80 m) · "
-          f"속도 {np.nanmin(vel[m]):+.2f}~{np.nanmax(vel[m]):+.2f} mm/yr")
+        gi.attrs["geolocation_correction"] = json.dumps({
+            "applied": True, "dh_m": CLEARANCE_M, "heading_deg": heading,
+            "mean_shift_m": float(np.mean(corr["shift_m"])),
+            "selection": f"데크 중심선 ±{DECK_SEL_M:.0f} m · 교축 −5~{LENGTH_M + 5:.0f} m"},
+            ensure_ascii=False)
+    n_on = int(((np.abs(of) <= WIDTH_M / 2) & m).sum())
+    print(f"  쉬프트 {np.mean(corr['shift_m']):.2f} m 보정(heading {heading:.2f}°) → "
+          f"데크 ±{DECK_SEL_M:.0f} m 안 {int(m.sum())} / {len(xyz)} 점 "
+          f"(데크 폭 안 {n_on}) · 속도 {np.nanmin(vel[m]):+.2f}~{np.nanmax(vel[m]):+.2f} mm/yr")
     return out
 
 
@@ -137,7 +174,7 @@ def main() -> None:
           f"배치 E={mc.eastings:.1f} N={mc.northings:.1f} 회전 {mc.rotation_deg:.2f}°")
 
     print("[3/5] InSAR 점 준비")
-    pts = prepare_points()
+    pts = prepare_points(_deck_geom())
 
     print("[4/5] 점 → 부재 결합(GlobalId) + 데크 레벨")
     guids, ginfo = guid_map_from_alignment(pts, ej, map_conversion=mc, ifc_crs=CRS,
