@@ -250,10 +250,13 @@ def extruded_aabb(element, scale: float = 1.0):
     떨어졌다. 그러면 부재 결합이 점-대-점 거리로만 이뤄져 데크 위 점이 엉뚱한 부재에
     붙는다. 압출 솔리드(IfcExtrudedAreaSolid)는 단면 × 깊이라 AABB 를 직접 구할 수 있다.
 
-    실제로 겪은 것: Pontifex 프록시 IFC 12종은 `IfcProject` 가 IFC2X3 필수 9속성 중
-    8개뿐이라(UnitsInContext 누락) 단위 해석이 실패하고, 그 한 줄 때문에 **314부재
-    전부**의 형상 생성이 죽었다. 형상엔진이 되는 MIDAS 실설계 IFC(691부재)에서 이
-    계산과 형상엔진 결과는 최대 차이 0.0000 m 로 일치했다 — 그래서 이 값을 믿는다.
+    실제로 겪은 것: Pontifex 프록시 IFC 12종은 `IfcProject` 의 Description 이 **따옴표
+    없는 문자열**이다(`...,'P1',Pontifex_girder_proxy,$,...`). STEP 파서는 그 인자를
+    통째로 버리고, 뒤 5개 속성이 한 칸씩 밀려 RepresentationContexts 자리에 단위가,
+    UnitsInContext 자리에 아무것도 없게 된다. 단위를 못 읽으니 **314부재 전부**의 형상
+    생성이 죽었다 — 따옴표 한 쌍이 파일 전체를 못 쓰게 만든다.
+    형상엔진이 되는 MIDAS 실설계 IFC(691부재)에서 이 계산과 형상엔진 결과는 최대 차이
+    0.0000 m 로 일치했다 — 그래서 이 값을 믿는다.
 
     반환: (lo[3], hi[3]) 또는 None(압출 형상이 없거나 단면을 모를 때).
     """

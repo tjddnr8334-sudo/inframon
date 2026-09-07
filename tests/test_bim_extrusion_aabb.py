@@ -1,17 +1,16 @@
 """형상엔진이 실패해도 **압출 단면에서 AABB 를 직접 구한다**.
 
 실 IFC 두 종을 물려 확인한 것:
-  · Pontifex 프록시 12종(314부재)은 `IfcProject` 가 IFC2X3 필수 9속성 중 8개뿐이다
-    (UnitsInContext 누락). ifcopenshell 은 단위를 못 읽어 **모든 부재**의 형상 생성이
-    죽는다 → 314부재 전부 영(0)크기 AABB 로 떨어졌다. 파일 하나의 헤더 결함이 부재
-    전체를 못 쓰게 만든다.
+  · Pontifex 프록시 12종(314부재)은 `IfcProject` 의 Description 이 **따옴표 없는
+    문자열**이다(`...,'P1',Pontifex_girder_proxy,$,...`). STEP 파서가 그 인자를 버려
+    뒤 5개 속성이 한 칸씩 밀리고, UnitsInContext 가 사라진다. 단위를 못 읽으니 **모든
+    부재**의 형상 생성이 죽어 314부재 전부 영(0)크기 AABB 로 떨어졌다. 따옴표 한 쌍이
+    파일 전체를 못 쓰게 만든다.
   · 형상엔진이 되는 MIDAS 실설계 IFC(691부재)에서 두 방식 AABB 는 **완전히 일치**했다
     (최대 차이 0.0000 m). 그래서 이 폴백값을 믿어도 된다.
 """
 
 from __future__ import annotations
-
-import re
 
 import numpy as np
 import pytest
@@ -26,9 +25,9 @@ def _file_with_beam(tmp_path, *, broken_project: bool = False, origin=(0.0, 0.0,
                     poly=((0., 0.), (90., 0.), (90., .8), (0., .8)), depth=1.5):
     """압출 보 하나짜리 IFC2X3.
 
-    `broken_project=True` 면 실제로 겪은 결함을 재현한다 — IfcProject 에서 마지막
-    속성(UnitsInContext)을 떨어뜨려 8속성으로 만든다. 그러면 ifcopenshell 이 단위를
-    못 읽어 형상 생성이 전부 실패한다.
+    `broken_project=True` 면 실제로 겪은 결함을 재현한다 — IfcProject 의 Description
+    에서 따옴표를 벗긴다. 그러면 STEP 파서가 그 인자를 버려 뒤 속성이 밀리고,
+    UnitsInContext 가 사라져 형상 생성이 전부 실패한다.
     """
     f = ios.file(schema="IFC2X3")
     pts = [f.create_entity("IfcCartesianPoint", Coordinates=p) for p in poly]
@@ -60,13 +59,14 @@ def _file_with_beam(tmp_path, *, broken_project: bool = False, origin=(0.0, 0.0,
     units = f.create_entity("IfcUnitAssignment", Units=[
         f.create_entity("IfcSIUnit", UnitType="LENGTHUNIT", Name="METRE")])
     f.create_entity("IfcProject", GlobalId=ios.guid.new(), Name="P1",
+                    Description="Pontifex_girder_proxy",
                     RepresentationContexts=[ctx], UnitsInContext=units)
     p = tmp_path / ("bad.ifc" if broken_project else "ok.ifc")
     f.write(str(p))
     if broken_project:
-        # IfcProject 의 마지막 속성을 떨어뜨린다 — 실 파일이 정확히 이 상태였다.
+        # Description 의 따옴표를 벗긴다 — 실 파일이 정확히 이 상태였다.
         txt = p.read_text(encoding="utf-8")
-        txt = re.sub(r"(=IFCPROJECT\(.*),#\d+\);", r"\1);", txt)
+        txt = txt.replace("'Pontifex_girder_proxy'", "Pontifex_girder_proxy")
         p.write_text(txt, encoding="utf-8")
     return p, beam
 
