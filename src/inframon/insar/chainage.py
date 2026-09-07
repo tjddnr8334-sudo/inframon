@@ -464,3 +464,40 @@ def plot_profile(strict: ChainageProfile, relaxed: ChainageProfile,
     fig.savefig(out, dpi=140)
     plt.close(fig)
     return str(out)
+
+
+def station_lonlat(geometry_latlon, station_m) -> np.ndarray:
+    """교축 거리(station) → 데크 폴리라인 위 (lon, lat). 구간집계 스테이션을 지도에 놓을 때.
+
+    1D 투영은 횡방향 오프셋을 버리므로, 집계 스테이션은 **데크 중심선 위**에 놓인다 —
+    점이 보도·난간 쪽으로 밀려 있어도 교축 대표값의 위치는 축 위다.
+    """
+    poly = np.asarray(geometry_latlon, float)                  # [[lat,lon],...]
+    lat0 = float(np.median(poly[:, 0]))
+    k = np.cos(np.radians(lat0)) * 111_320.0
+    xy = np.column_stack([poly[:, 1] * k, poly[:, 0] * 111_320.0])
+    seg = np.linalg.norm(np.diff(xy, axis=0), axis=1)
+    cum = np.concatenate([[0.0], np.cumsum(seg)])
+    s = np.atleast_1d(np.asarray(station_m, float))
+    s = np.clip(s, 0.0, cum[-1])
+    x = np.interp(s, cum, xy[:, 0])
+    y = np.interp(s, cum, xy[:, 1])
+    return np.column_stack([x / k, y / 111_320.0])
+
+
+def stations_for_twin(prof: ChainageProfile, geometry_latlon, *, z_m: float) -> list[dict]:
+    """구간집계 결과를 트윈이 그릴 스테이션 목록으로 — 데크 중심선 위, 데크 상단 높이.
+
+    대표값이 없는 구간(n < MIN_BIN_POINTS)도 넣되 `has_value=False` 로 표시한다 —
+    결측 구간을 화면에서 지우면 '점이 없어 모르는 곳'이 사라진다.
+    """
+    ll = station_lonlat(geometry_latlon, prof.bin_center_m)
+    out = []
+    for i, c in enumerate(prof.bin_center_m):
+        n = int(prof.bin_n[i])
+        has = n >= MIN_BIN_POINTS
+        out.append({"chainage_m": float(c), "lon": float(ll[i, 0]), "lat": float(ll[i, 1]),
+                    "z": float(z_m), "n": n, "has_value": has,
+                    "value": (float(prof.bin_value[i]) if has else None),
+                    "sem": (float(prof.bin_sem[i]) if has else None)})
+    return out

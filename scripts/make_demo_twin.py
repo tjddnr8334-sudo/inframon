@@ -57,6 +57,7 @@ CRS = "EPSG:5186"
 # SARvey 트랙의 HEADING −0.2312 는 라디안이다(−13.25°). 읽기 경로는 track_reader 가
 # 정규화하지만 여기서는 트랙 attrs 를 직접 쓰므로 같은 함수로 맞춘다.
 DECK_SEL_M = 30.0        # 데크 중심선 ±30 m — 감사표 ②와 같은 기준
+BIN_M = 10.0             # 교축 구간집계 폭(5~10 m)
 
 
 def _deck_geom():
@@ -167,6 +168,19 @@ def prepare_points(geom_latlon) -> Path:
     return out
 
 
+def chainage_stations(proj: Path, els) -> tuple[list[dict], object]:
+    """트윈 점 → PS 재선별(완화+노이즈 제거) → 교축 BIN_M 구간집계 → 축 위 스테이션."""
+    from inframon.insar.chainage import build_profile, stations_for_twin
+
+    geom = _deck_geom()
+    prof = build_profile(proj, geom, bin_m=BIN_M, mode="relaxed", denoise=True,
+                         correct_shift=False,             # 좌표는 이미 보정돼 있다
+                         bridge_width_m=WIDTH_M, max_offset_m=20.0)
+    deck = next(e for e in els if e.member == "deck")
+    z_top = GROUND_M + deck.bbox_max[2]
+    return stations_for_twin(prof, geom, z_m=z_top), prof
+
+
 def derive_pinn_fram(proj: Path, ej: Path, mc, guids, ginfo) -> None:
     """트윈 점으로 PINN(가상센싱) + FRAM(CRI) 을 돌리고 결과를 트윈 위에 얹는다.
 
@@ -192,7 +206,9 @@ def derive_pinn_fram(proj: Path, ej: Path, mc, guids, ginfo) -> None:
     r = export_insar_gltf(proj, OUT / "twin_cri.glb", value="cri", fram_project=proj,
                           element_guids=guids, element_z=ginfo["element_z"],
                           z_source="deck", element_z_datum=GROUND_M)
-    write_web_viewer(OUT / "twin_cri.glb", elements_json=ej, map_conversion=mc, ifc_crs=CRS)
+    write_web_viewer(OUT / "twin_cri.glb", elements_json=ej, map_conversion=mc, ifc_crs=CRS,
+                     stations=json.loads((OUT / "twin_stations.json").read_text(encoding="utf-8"))["stations"],
+                     bin_m=BIN_M)
     write_3dtiles_tileset(OUT / "twin_cri.glb")
     print(f"      CRI 트윈: 점 {r['n_points']} · 결합 {r['bound']} · twin_cri.viewer.html")
 
@@ -430,8 +446,19 @@ def main() -> None:
           f"고도 {g['z_source']} → {g.get('deck_z_median_m')} m")
 
     print("[5/6] 웹뷰어 + 3D Tiles")
+    # 교축 1D 투영 → 10 m 구간집계 스테이션 — 데크 중심선 위에 놓는다(투영이 횡방향
+    # 오프셋을 버린다). 원 점은 보도·난간 쪽으로 밀려 있어도 대표값의 자리는 축 위다.
+    stations, prof = chainage_stations(pts, els)
     v = write_web_viewer(OUT / "twin.glb", elements_json=ej, map_conversion=mc,
-                         ifc_crs=CRS)          # 부재 박스까지 — "다리 위"가 보인다
+                         ifc_crs=CRS, stations=stations, bin_m=BIN_M)
+    (OUT / "twin_stations.json").write_text(json.dumps({
+        "bridge": NAME, "bin_m": BIN_M, "selection": prof.meta["selection"],
+        "n_selected": int(prof.selected.sum()), "coverage": prof.coverage(),
+        "publishable": prof.is_publishable()[0], "why": prof.is_publishable()[1],
+        "stations": stations}, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"      교축 {BIN_M:g} m 구간집계: {prof.meta['selection']} → 선별 "
+          f"{int(prof.selected.sum())} · 대표값 {int((prof.bin_n >= 2).sum())}/{prof.bin_n.size} 구간 "
+          f"· 커버리지 {prof.coverage() * 100:.0f}%")
     t = write_3dtiles_tileset(OUT / "twin.glb")
     for p in (ifc, ej, OUT / "twin.glb", Path(v["viewer"]), Path(t["tileset"])):
         print(f"      {Path(p).relative_to(ROOT)}  {Path(p).stat().st_size:,} B")

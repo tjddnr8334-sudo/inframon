@@ -336,9 +336,39 @@ def _three_module_inline() -> str | None:
     return "data:text/javascript;base64," + base64.b64encode(vend.read_bytes()).decode("ascii")
 
 
+def _stations_for_viewer(stations: list[dict], georef: dict, ifc_crs: str,
+                         legend: dict) -> list[dict]:
+    """교축 구간집계 스테이션(lon/lat/z/value) → 뷰어 프레임 + 색."""
+    if not stations:
+        return []
+    lonlat = np.array([[st["lon"], st["lat"]] for st in stations], float)
+    try:
+        from pyproj import Transformer
+        tr = Transformer.from_crs("EPSG:4326", ifc_crs, always_xy=True)
+        e0, n0 = tr.transform(georef["origin_lon"], georef["origin_lat"])
+        E, N = tr.transform(lonlat[:, 0], lonlat[:, 1])
+        east, north = np.asarray(E) - e0, np.asarray(N) - n0
+    except Exception:                                   # noqa: BLE001 — 등거리 근사
+        lat0 = georef["origin_lat"]
+        east = (lonlat[:, 0] - georef["origin_lon"]) * np.cos(np.radians(lat0)) * 111320.0
+        north = (lonlat[:, 1] - lat0) * 111320.0
+    vals = np.array([st["value"] if st.get("value") is not None else np.nan
+                     for st in stations], float)
+    rgb, _ = _colors_and_legend(np.nan_to_num(vals, nan=0.0), legend.get("kind", "div"))
+    out = []
+    for i, st in enumerate(stations):
+        out.append({"pos": [float(east[i]), float(st["z"]), float(-north[i])],
+                    "chainage_m": float(st["chainage_m"]), "n": int(st.get("n", 0)),
+                    "has_value": bool(st.get("has_value", st.get("value") is not None)),
+                    "value": st.get("value"), "sem": st.get("sem"),
+                    "color": [round(float(c), 3) for c in rgb[i][:3]]})
+    return out
+
+
 def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None, *,
                      elements_json: str | Path | None = None,
-                     map_conversion=None, ifc_crs: str = "EPSG:5186") -> dict:
+                     map_conversion=None, ifc_crs: str = "EPSG:5186",
+                     stations: list[dict] | None = None, bin_m: float | None = None) -> dict:
     """`.glb`(+사이드카) → **자립형** 웹 뷰어 HTML.
 
     · 점군은 glb 에서 직접 풀어 JSON 으로 싣는다(GLTFLoader 불필요).
@@ -347,6 +377,9 @@ def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None, *
     · `elements_json` + `map_conversion` 을 주면 **IFC 부재를 반투명 박스로** 함께
       그린다 — 점만 띄우면 "다리 위"인지 아무도 알 수 없다.
     · 궤도 조작은 내장(드래그 회전·휠 확대·우클릭 이동). 애드온 의존 없음.
+    · `stations` 를 주면 **교축 구간집계 스테이션**(1D 투영 → 5~10 m 등간격 대표값)을
+      데크 중심선 위에 그린다. 투영이 횡방향 오프셋을 버리므로 스테이션은 축 위에 앉고,
+      원 점은 흐리게 남긴다. 대표값 없는 구간은 빈 마커로 — 결측을 숨기지 않는다.
     """
     glb_path = Path(glb_path)
     meta = json.loads(glb_path.with_suffix(".glb.meta.json").read_text(encoding="utf-8"))
@@ -357,6 +390,7 @@ def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None, *
     bound = sum(1 for f in feats if f.get("element_globalid"))
     boxes = (_elements_for_viewer(elements_json, map_conversion, g, ifc_crs)
              if elements_json else [])
+    sts = _stations_for_viewer(stations or [], g, ifc_crs, lg)
     three_src = _three_module_inline()
     offline = three_src is not None
     if not offline:
@@ -370,6 +404,10 @@ def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None, *
         "__COL__": json.dumps(np.round(col, 3).tolist()),
         "__VALS__": json.dumps(vals), "__GUIDS__": json.dumps(guids),
         "__BOXES__": json.dumps(boxes, ensure_ascii=False),
+        "__STATIONS__": json.dumps(sts, ensure_ascii=False),
+        "__BINM__": (f"{bin_m:g}" if bin_m else "—"),
+        "__NST__": str(sum(1 for st in sts if st["has_value"])),
+        "__NSTALL__": str(len(sts)),
         "__CHANNEL__": str(meta.get("value_channel", "")),
         "__UNITS__": str(lg.get("units", "")),
         "__VMIN__": f"{lg.get('vmin', 0):.2f}", "__VMAX__": f"{lg.get('vmax', 0):.2f}",
@@ -388,7 +426,7 @@ def write_web_viewer(glb_path: str | Path, out_html: str | Path | None = None, *
     out_html = Path(out_html) if out_html else glb_path.with_suffix(".viewer.html")
     out_html.write_text(html, encoding="utf-8")
     return {"viewer": str(out_html), "n_points": int(len(pos)), "bound": bound,
-            "n_boxes": len(boxes), "offline": offline,
+            "n_boxes": len(boxes), "n_stations": len(sts), "offline": offline,
             "size_kb": round(len(html.encode("utf-8")) / 1024, 1)}
 
 
@@ -408,6 +446,7 @@ border-radius:8px;padding:10px 12px;font-size:12px;display:none;max-width:260px}
 <div class="row">점 <b>__NPTS__</b> · GlobalId 결합 <b>__BOUND__</b>/__NPTS__ · IFC 부재 <b>__NBOX__</b></div>
 <div class="row">georef __ORIGIN__ · __PROJ__ · 고도 __ZSRC__</div>
 <div class="row">채널 __CHANNEL__ (__UNITS__)</div>
+<div class="row" id="strow">교축 __BINM__ m 구간집계 <b>__NST__</b>/__NSTALL__ 구간 대표값 · <span style="color:#e74c3c">□</span> 결측</div>
 <div id="bar"></div><div class="lbl"><span>__VMIN__</span><span>0</span><span>__VMAX__</span></div>
 <div class="row" style="margin-top:6px"><span class="leg" style="background:#4a6b8a"></span>deck
 <span class="leg" style="background:#8a8f96;margin-left:8px"></span>pier
@@ -417,7 +456,8 @@ border-radius:8px;padding:10px 12px;font-size:12px;display:none;max-width:260px}
 <script type="importmap">{"imports":{"three":"__THREE_SRC__"}}</script>
 <script type="module">
 import*as THREE from'three';
-const POS=__POS__,COL=__COL__,VALS=__VALS__,GUIDS=__GUIDS__,BOXES=__BOXES__;
+const POS=__POS__,COL=__COL__,VALS=__VALS__,GUIDS=__GUIDS__,BOXES=__BOXES__,ST=__STATIONS__;
+if(!ST.length)document.getElementById('strow').style.display='none';
 const kind="__KIND__";
 document.getElementById('bar').style.background=kind==='cri'
 ?'linear-gradient(90deg,#2a9d8f,#e9c46a,#f4a261,#c1121f)'
@@ -447,12 +487,26 @@ for(const b of BOXES){
 const geo=new THREE.BufferGeometry();
 geo.setAttribute('position',new THREE.Float32BufferAttribute(POS.flat(),3));
 geo.setAttribute('color',new THREE.Float32BufferAttribute(COL.flat(),3));
-const P=new THREE.Points(geo,new THREE.PointsMaterial({size:11,sizeAttenuation:false,vertexColors:true}));
+// 스테이션이 있으면 원 점은 흐리게(작게·반투명) — 축 위의 대표값이 주인공
+const P=new THREE.Points(geo,new THREE.PointsMaterial({size:ST.length?7:11,sizeAttenuation:false,vertexColors:true,transparent:true,opacity:ST.length?.55:1}));
 sc.add(P);geo.computeBoundingBox();bbox.union(geo.boundingBox);
 if(BOXES.some(b=>b.member==='deck')){const top=Math.max(...BOXES.filter(b=>b.member==='deck').map(b=>b.center[1]+b.size[1]/2));
  const lp=[];for(const p of POS){lp.push(p[0],p[1],p[2],p[0],top,p[2])}
  const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3));
  sc.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0xe6edf3,transparent:true,opacity:.35})))}
+// ── 교축 구간집계 스테이션 — 데크 중심선 위 정육면체, 대표값 색. 결측은 빈 마커
+const STM=[];
+for(const st of ST){
+ const sz0=1.6;const g=new THREE.BoxGeometry(sz0,sz0,sz0);
+ let m;
+ if(st.has_value){m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:new THREE.Color(...st.color)}))}
+ else{m=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xe74c3c}))}
+ m.position.set(st.pos[0],st.pos[1]+sz0/2+.2,st.pos[2]);m.userData=st;sc.add(m);STM.push(m);
+ if(st.has_value){const ed=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x111111}));ed.position.copy(m.position);sc.add(ed)}
+}
+if(ST.length>1){const lp=[];for(let i=0;i<ST.length-1;i++){const a=ST[i].pos,b=ST[i+1].pos;lp.push(a[0],a[1]+.3,a[2],b[0],b[1]+.3,b[2])}
+ const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(lp,3));
+ sc.add(new THREE.Line(lg,new THREE.LineBasicMaterial({color:0xe6edf3,transparent:true,opacity:.5})))}
 const c=new THREE.Vector3();bbox.getCenter(c);const sz=new THREE.Vector3();bbox.getSize(sz);
 const grid=new THREE.GridHelper(Math.max(sz.x,sz.z)*3,30,0x223344,0x162030);grid.position.set(c.x,bbox.min.y-.05,c.z);sc.add(grid);
 let target=c.clone(),r=Math.max(sz.length()*1.1,20),theta=-.9,phi=1.05;
@@ -469,7 +523,11 @@ addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=
 el.addEventListener('wheel',e=>{e.preventDefault();r*=Math.exp(e.deltaY*.0012);r=Math.max(r,2);place()},{passive:false});
 const ray=new THREE.Raycaster();ray.params.Points.threshold=Math.max(sz.length()*.012,.6);
 function pick(e){const m=new THREE.Vector2(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(m,cam);
- const hit=ray.intersectObject(P)[0];const box=document.getElementById('pick');
+ const box=document.getElementById('pick');
+ const hs=STM.length?ray.intersectObjects(STM.filter(o=>o.isMesh))[0]:null;
+ if(hs){const st=hs.object.userData;box.style.display='block';
+  box.innerHTML='<b>교축 '+st.chainage_m.toFixed(0)+' m 구간</b><br>대표값 '+(st.value==null?'—':Number(st.value).toFixed(3))+' __UNITS__'+(st.sem!=null?' ± '+Number(st.sem).toFixed(3):'')+'<br>점 '+st.n+'개';return}
+ const hit=ray.intersectObject(P)[0];
  if(!hit){box.style.display='none';return}
  const i=hit.index,v=VALS[i],gd=GUIDS[i];const b=BOXES.find(x=>x.guid===gd);
  box.style.display='block';box.innerHTML='<b>점 #'+i+'</b><br>값 '+(v==null?'—':Number(v).toFixed(3))+' __UNITS__<br>부재 '+(b?b.name+' ('+b.member+')':'(미결합)')+'<br><span style="color:#6b7d8f">'+(gd||'')+'</span>'}
