@@ -13,7 +13,7 @@ import h5py
 import numpy as np
 import pytest
 
-from inframon.audit import COND, NO, OK, audit_artifact, format_table
+from inframon.audit import COND, NO, OK, audit_artifact, format_report, format_table
 
 
 @pytest.fixture(autouse=True)
@@ -343,14 +343,51 @@ def test_saturated_ei_blocks(tmp_path):
     assert any("포화" in r for r in a.reasons)
 
 
-def test_declared_identification_failure_is_conditional_not_blocked(tmp_path):
-    """실패를 실패로 적고 설계 제원으로 모달을 냈으면 조건부다 — 변위·CRI 는 살아 있다."""
+def test_design_basis_ei_with_physical_freq_is_not_deducted(tmp_path):
+    """설계 제원 EI + 물리적 f₁ 이면 **감점하지 않는다** — 표기 사항으로만 남긴다.
+
+    InSAR 는 상대 변위라 절대 강성을 식별할 수 없다(자중 처짐은 관측 전에 이미 들어가
+    있다). 19개 산출물 전부가 EI 포화였다 — 원리다. 못 하는 것을 못 했다고 깎으면
+    InSAR 가 실제로 하는 것(변위·CRI)이 묻힌다.
+    """
     p = _project(tmp_path / "p.h5", span_m=90.0)
     _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=False,
                EI_modal_basis="geometric")
     a = audit_artifact(p, target=(37.0, 127.0))
-    assert a.ei_identified is False and a.verdict == COND
-    assert any("설계 제원 기준" in r for r in a.reasons)
+    assert a.ei_identified is False
+    assert not any("EI" in r for r in a.reasons), "감점 사유에 EI 가 있으면 안 된다"
+    assert any("설계 제원" in n for n in a.notes), "표기 사항으로는 반드시 남아야 한다"
+    assert a.verdict != NO
+
+
+def test_design_basis_note_appears_in_report(tmp_path):
+    """표기 사항은 리포트에 반드시 인쇄된다 — 숨은 가정이 되면 안 된다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=False,
+               EI_modal_basis="geometric")
+    a = audit_artifact(p, target=(37.0, 127.0))
+    rep = format_report([a])
+    assert "ⓘ" in rep and "설계 제원" in rep
+
+
+def test_identification_failure_without_design_basis_is_conditional(tmp_path):
+    """설계 제원 없이 실패했으면 여전히 조건부다 — 대체 근거가 없다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[5.44], EI_identified=False,
+               EI_modal_basis=None)
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.verdict == COND
+    assert any("EI" in r for r in a.reasons)
+
+
+def test_design_basis_with_impossible_freq_is_still_blocked(tmp_path):
+    """설계 제원을 썼어도 f₁ 이 비물리적이면 차단 — 그 제원이 틀린 것이다."""
+    p = _project(tmp_path / "p.h5", span_m=90.0)
+    _with_pinn(p, structural_span_m=45.0, freq=[232.1], EI_identified=False,
+               EI_modal_basis="geometric")
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert a.verdict == NO
+    assert any("불가능" in r for r in a.reasons)
 
 
 def test_span_uses_structural_span_not_total_length(tmp_path):
@@ -391,3 +428,25 @@ def test_distinctive_folder_name_still_finds_its_recipe(tmp_path):
         encoding="utf-8")
     a = audit_artifact(_project(tmp_path / "honam_project.h5", lonlat=(128.9, 35.9)))
     assert a.target == (35.9, 128.9)
+
+
+def test_partner_specs_csv_disagreement_with_national_is_a_note(tmp_path, monkeypatch):
+    """PINN 이 파트너 실측 CSV 를 썼는데 감사의 전국표준데이터 최근접이 다른 교량이면
+    감점이 아니라 표기다 — 두 CSV 의 등록 좌표 차이지 틀린 제원이 아니다(정자교 사례)."""
+    class _Prof:
+        name = "금곡교"
+        length_m = 108.0
+        extra = {"match_dist_m": 565.0}
+
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *_: "x.csv")
+    monkeypatch.setattr("inframon.public_data.nearest_bridge_profile",
+                        lambda *a, **k: _Prof())
+    p = _project(tmp_path / "p.h5", span_m=108.0)
+    with h5py.File(p, "a") as f:
+        f["pinn"].attrs["inputs"] = json.dumps(
+            {"total_length_m": 108.0,
+             "profile_source": "specs_csv:bridges_load.csv, bridges_specs.csv"})
+    a = audit_artifact(p, target=(37.0, 127.0))
+    assert not any("표준데이터에 이 교량이 없다" in r for r in a.reasons)
+    assert any("파트너 실측 CSV" in n for n in a.notes)
+    assert a.verdict == OK, a.reasons
