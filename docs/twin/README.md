@@ -8,13 +8,13 @@
 | `jeongjagyo_proxy.ifc` | **IFC4** 프록시 교량 — 부재 11개 + `IfcMapConversion`(EPSG:5186) |
 | `jeongjagyo_elements.json` | 위 IFC 를 **되읽어** 얻은 부재 AABB·GlobalId |
 | `twin.glb` | InSAR 점 12개, LOS 변위속도 채색, 부재 결합 포함 |
-| `twin.viewer.html` | **더블클릭하면 브라우저에서 3D** — 서버·설치 불필요 |
+| `twin.viewer.html` | **더블클릭하면 브라우저에서 3D** — 서버·설치·**인터넷 불필요**(three.js 동봉). IFC 부재 11개가 반투명 박스로, 점은 그 위에. 점 클릭 = 값·부재·GlobalId |
 | `tileset.json` | 3D Tiles — Cesium·BMAP 탑재용 |
 | `twin.glb.meta.json` | 점별 값·GlobalId·범례·좌표 근거 |
 
 ## 바로 보기
 
-    docs/twin/twin.viewer.html 를 브라우저로 연다
+    docs/twin/twin.viewer.html 를 브라우저로 연다   ← 오프라인에서도 뜬다(헤드리스 Chrome 으로 file:// 확인)
 
 ## 다시 만들기
 

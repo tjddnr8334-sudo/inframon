@@ -62,6 +62,11 @@ inframon = "inframon.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# 웹 트윈 뷰어가 오프라인에서도 열리도록 three.js(MIT)를 동봉한다 — 발표장에 인터넷이
+# 없거나 CDN 이 막히면 빈 화면이 된다. 없으면 CDN 으로 폴백한다(gltf_export 참조).
+"inframon.insar" = ["_vendor/*.js", "_vendor/THREE_LICENSE"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

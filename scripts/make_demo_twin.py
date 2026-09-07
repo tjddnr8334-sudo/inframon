@@ -150,11 +150,14 @@ def main() -> None:
           f"고도 {g['z_source']} → {g.get('deck_z_median_m')} m")
 
     print("[5/5] 웹뷰어 + 3D Tiles")
-    v = write_web_viewer(OUT / "twin.glb")
+    v = write_web_viewer(OUT / "twin.glb", elements_json=ej, map_conversion=mc,
+                         ifc_crs=CRS)          # 부재 박스까지 — "다리 위"가 보인다
     t = write_3dtiles_tileset(OUT / "twin.glb")
     pts.unlink(missing_ok=True)                      # 중간 산출물은 남기지 않는다
     for p in (ifc, ej, OUT / "twin.glb", Path(v["viewer"]), Path(t["tileset"])):
         print(f"      {Path(p).relative_to(ROOT)}  {Path(p).stat().st_size:,} B")
+    print(f"      뷰어: 부재 박스 {v['n_boxes']} · "
+          f"{'오프라인 가능(three.js 동봉)' if v['offline'] else '인터넷 필요(CDN)'}")
     print(f"\n브라우저로 열기: {(OUT / 'twin.viewer.html')}")
 
 
