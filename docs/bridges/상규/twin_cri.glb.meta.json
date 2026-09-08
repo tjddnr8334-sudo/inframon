@@ -10,16 +10,16 @@
   "units": "CRI(무차원)"
  },
  "georef": {
-  "origin_lon": 127.60933582951768,
-  "origin_lat": 38.04991645779438,
+  "origin_lon": 127.60936965003823,
+  "origin_lat": 38.04992275187711,
   "origin_height_m": 0.0,
   "projection": "EPSG:5186",
   "frame": "ENU_meters",
   "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
   "z_source": "ifc_element_top",
-  "z_detail": "ifc_element_top · 지면 163m · z 171~171m (IFC 부재 상단 + 원점 표고 163m)",
+  "z_detail": "ifc_element_top · 지면 163m · z 174~174m (IFC 부재 상단 + 원점 표고 163m)",
   "ground_m": 163.0,
-  "deck_z_median_m": 170.97
+  "deck_z_median_m": 173.97
  },
  "binding": {
   "key": "element_globalid",
@@ -30,25 +30,25 @@
    "index": 0,
    "point_id": 0,
    "element_globalid": "077RC1XM1REE00_FWZENBH",
-   "value": 0.8283462071769203,
-   "lon": 127.60933582951768,
-   "lat": 38.049908828480305
+   "value": 0.8793812567405008,
+   "lon": 127.60936965003823,
+   "lat": 38.049915122603274
   },
   {
    "index": 1,
    "point_id": 1,
    "element_globalid": "077RC1XM1REE00_FWZENBH",
-   "value": 0.8520455825017104,
-   "lon": 127.60937397605794,
-   "lat": 38.04991645779438
+   "value": 0.8743384655540397,
+   "lon": 127.6094077963623,
+   "lat": 38.04992275187711
   },
   {
    "index": 2,
    "point_id": 2,
    "element_globalid": "077RC1XM1REE00_FWZENBH",
-   "value": 0.6591073999640256,
-   "lon": 127.60932057085472,
-   "lat": 38.05003471351355
+   "value": 0.6618119348139153,
+   "lon": 127.60935439143833,
+   "lat": 38.05004100764825
   }
  ]
 }

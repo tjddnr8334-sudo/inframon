@@ -181,6 +181,12 @@ def main() -> None:
     p.add_argument("--earthdata-user", default=None, help="Earthdata 사용자 ID.")
     p.add_argument("--earthdata-pass", default=None, help="Earthdata 비밀번호.")
     p.add_argument("--earthdata-token", default=None, help="Earthdata 토큰(우선). 없으면 user/pass·~/.netrc.")
+    p.add_argument("--pontifex-mock", default=None, type=int, metavar="PORT", nargs="?", const=38000,
+                   help="Pontifex 인제스트 API 모의 서버를 띄운다(기본 38000) — Docker 없이 ⑭ 전송 "
+                        "경로를 실제 HTTP 로 검증. 상태는 data/pontifex_mock_state.json.")
+    p.add_argument("--earthdata-save", default=None, metavar="TOKEN",
+                   help="Earthdata 토큰을 ~/.inframon/earthdata_token 에 저장하고 종료 — 한 번만 하면 "
+                        "이후 SLC 다운로드가 자동 인증된다.")
     p.add_argument("--slc-dir", default=None, metavar="DIR",
                    help="SLC 보관 폴더 지정 후 종료(예: E:\\SLC). 저장되면 이후 취득(--snap-auto 등)이 "
                         "여기 있는 장면을 자동 인식·재사용해 다운로드를 건너뛴다. 환경변수 "
@@ -1117,6 +1123,16 @@ def main() -> None:
         print("=" * 56)
         return
 
+    if args.pontifex_mock is not None:
+        from .pontifex_mock import serve_forever
+        serve_forever(args.pontifex_mock, token=getattr(args, "pontifex_token", None),
+                      state_path="data/pontifex_mock_state.json")
+        return
+    if args.earthdata_save:
+        from .insar.slc_download import save_earthdata_token
+        path = save_earthdata_token(args.earthdata_save)
+        print(f"Earthdata 토큰 저장: {path}  (이후 --pipeline/--snap-auto 가 자동 사용)")
+        return
     if args.doctor is not None:
         from .doctor import format_report, run_doctor
 

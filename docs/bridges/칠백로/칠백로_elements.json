@@ -8,12 +8,12 @@
    "bbox_min": [
     -2.5,
     -4.55,
-    5.4
+    8.3
    ],
    "bbox_max": [
     2.5,
     4.55,
-    6.0
+    8.9
    ],
    "extra": {
     "bbox_source": "geometry"
@@ -32,7 +32,7 @@
    "bbox_max": [
     -25.0,
     4.55,
-    6.0
+    8.9
    ],
    "extra": {
     "bbox_source": "geometry"
@@ -51,7 +51,7 @@
    "bbox_max": [
     29.0,
     4.55,
-    6.0
+    8.9
    ],
    "extra": {
     "bbox_source": "geometry"
@@ -70,7 +70,7 @@
    "bbox_max": [
     1.5,
     4.55,
-    6.0
+    8.9
    ],
    "extra": {
     "bbox_source": "geometry",
@@ -85,12 +85,12 @@
    "bbox_min": [
     -25.0,
     -4.55,
-    6.0
+    8.9
    ],
    "bbox_max": [
     25.0,
     4.55,
-    7.55
+    10.450000000000001
    ],
    "extra": {
     "bbox_source": "geometry",

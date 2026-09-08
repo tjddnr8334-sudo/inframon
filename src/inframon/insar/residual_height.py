@@ -51,7 +51,9 @@ class ResidualHeight:
                 "mean_on_m": ma, "se_on_m": ea, "mean_off_m": mb, "se_off_m": eb,
                 "diff_m": diff, "se_diff_m": se, "z": z,
                 "verdict": ("교면 위 점이 지면 점보다 유의하게 높다(z>2)" if z > 2 else
-                            "고도 차이를 유의하게 확인하지 못함(z≤2) — 감도 부족")}
+                            ("⚠ '교면 위' 점이 지면보다 유의하게 **낮다**(z<−2) — 교면 산란체가 "
+                             "아닐 수 있다(제방·교대 주변 지면). 평면 선택을 다시 볼 것" if z < -2 else
+                             "고도 차이를 유의하게 확인하지 못함(|z|≤2) — 감도 부족 또는 차이 없음"))}
 
 
 def read_bperp_dim(dim_path: str | Path) -> dict:
@@ -168,4 +170,39 @@ def run_snap_star(track_h5: str | Path, proc_dir: str | Path, master: str, *,
     g = rh.group_test(on_deck) if on_deck is not None else None
     write_to_track(track_h5, rh, group_test=g,
                    source=f"SNAP star {master} · {len(bp)}쌍 · {Path(proc_dir)}")
+    return rh, g
+
+
+def run_sarvey(track_h5: str | Path, baselines_json: str | Path, *,
+               on_deck: np.ndarray | None = None) -> tuple[ResidualHeight, dict | None]:
+    """SARvey 트랙 + `ifg_network.h5` 에서 뽑은 기선 JSON → 잔차고도.
+
+    SARvey 는 pbase 를 시점별로 준다(첫 시점 기준). JSON: {dates[YYYY-MM-DD], pbase_m,
+    slant_range_m, loc_inc(rad)}. 트랙 시점과 날짜로 맞춘다 — 순서가 달라도 된다.
+    """
+    import json
+    from datetime import datetime
+
+    import h5py
+
+    bl = json.loads(Path(baselines_json).read_text(encoding="utf-8"))
+    bdates = [d.replace("-", "") for d in bl["dates"]]
+    pb = dict(zip(bdates, bl["pbase_m"]))
+    with h5py.File(str(track_h5), "r") as f:
+        ep = [(x.decode() if isinstance(x, bytes) else str(int(x) if not isinstance(x, str) else x))
+              for x in f["epochs"][()]]
+        los = np.asarray(f["los_mm"][()], float)
+        inc = np.asarray(f["incidenceAngle"][()], float) if "incidenceAngle" in f \
+            else float(np.degrees(bl.get("loc_inc", 0.68)))
+    missing = [e for e in ep if e not in pb]
+    if missing:
+        raise ValueError(f"기선이 없는 시점 {len(missing)}개: {missing[:3]}…")
+    d0 = datetime.strptime(ep[0], "%Y%m%d")
+    days = np.array([(datetime.strptime(e, "%Y%m%d") - d0).days for e in ep], float)
+    bperp = np.array([pb[e] for e in ep], float)
+    bperp = bperp - bperp[0]                      # 첫 시점(기준) 대비
+    rh = estimate_residual_height(los, days, bperp, float(bl["slant_range_m"]), inc)
+    g = rh.group_test(on_deck) if on_deck is not None else None
+    write_to_track(track_h5, rh, group_test=g,
+                   source=f"SARvey pbase · {len(ep)}시점 · {Path(baselines_json).name}")
     return rh, g

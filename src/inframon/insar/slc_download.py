@@ -59,14 +59,45 @@ def scene_names_from_recipe(recipe_dir: str | Path) -> list[str]:
     return names
 
 
+# 한 번 저장해 두면 다음부터 안 물어본다 — 유저가 매번 토큰을 붙여 넣지 않게.
+TOKEN_FILE = Path.home() / ".inframon" / "earthdata_token"
+
+
+def find_earthdata_token() -> tuple[str | None, str]:
+    """토큰 자동 탐색: 환경변수 → ~/.inframon/earthdata_token. (토큰, 출처)."""
+    import os
+    for env in ("EARTHDATA_TOKEN", "INFRAMON_EARTHDATA_TOKEN"):
+        v = os.environ.get(env)
+        if v and v.strip():
+            return v.strip(), f"env {env}"
+    if TOKEN_FILE.exists():
+        v = TOKEN_FILE.read_text(encoding="utf-8").strip()
+        if v:
+            return v, str(TOKEN_FILE)
+    return None, "없음"
+
+
+def save_earthdata_token(token: str) -> Path:
+    """토큰을 ~/.inframon/earthdata_token 에 저장(소유자만 읽기)."""
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_FILE.write_text(token.strip() + "\n", encoding="utf-8")
+    try:
+        TOKEN_FILE.chmod(0o600)
+    except OSError:
+        pass
+    return TOKEN_FILE
+
+
 def build_session(*, username: str | None = None, password: str | None = None,
                   token: str | None = None):
     """Earthdata 인증 ASF 세션 + 사용한 방식 문자열. 자격 없으면 SlcAuthError.
 
-    우선순위: token > (username,password) > ~/.netrc. asf_search 는 지연 import.
+    우선순위: token 인자 > 환경변수/저장파일 토큰 > (username,password) > ~/.netrc.
     """
     import asf_search as asf
 
+    if not token:
+        token, _src = find_earthdata_token()
     if token:
         return asf.ASFSession().auth_with_token(token), "token"
     if username and password:

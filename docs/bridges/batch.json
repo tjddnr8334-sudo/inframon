@@ -13,7 +13,8 @@
   "lat": 37.3685405,
   "lon": 127.1089983,
   "track": "data/sarvey_permissive.h5",
-  "out": "docs/bridges/정자교"
+  "out": "docs/bridges/정자교",
+  "baselines": "data/sarvey_permissive_baselines.json"
  },
  {
   "name": "내곡교",
