@@ -120,8 +120,23 @@ def estimate(lonlat: np.ndarray, roads: list, *, center_lat: float, center_lon: 
     if n < MIN_POINTS:
         return GroundOffset(0.0, 0.0, float("nan"), n, len(roads), {}, significant=False,
                             meta={"reason": f"도로 {ROAD_HALF_WIDTH_M:g} m 안 지면 점 {n} 부족"})
-    dx, dy = float(V[:, 0].mean()), float(V[:, 1].mean())
-    se = float(math.hypot(V[:, 0].std() / math.sqrt(n), V[:, 1].std() / math.sqrt(n)))
+    # 수직 오프셋은 **도로 법선 성분만** 본다 — 동서 도로 위 점은 남북 성분만, 남북 도로 위
+    # 점은 동서 성분만 준다. 전부 평균하면 각 성분이 절반으로 희석된다. 법선 방향으로
+    # 가중 최소제곱: 각 점이 v·n̂ = B·n̂ 라는 한 식을 준다 → 2×2 정규방정식.
+    nrm = np.linalg.norm(V, axis=1) + 1e-9
+    N = V / nrm[:, None]                                   # 단위 법선(점→도로 방향)
+    proj = (V * N).sum(1)                                   # = |v| (부호는 N 에 들어 있음)
+    ATA = N.T @ N
+    ATb = N.T @ proj
+    try:
+        sol = np.linalg.solve(ATA + 1e-9 * np.eye(2), ATb)
+    except np.linalg.LinAlgError:
+        sol = V.mean(axis=0)
+    dx, dy = float(sol[0]), float(sol[1])
+    resid = proj - N @ sol
+    s2 = float((resid ** 2).sum() / max(n - 2, 1))
+    cov = s2 * np.linalg.inv(ATA + 1e-9 * np.eye(2))
+    se = float(math.sqrt(max(cov[0, 0], 0) + max(cov[1, 1], 0)))
     ang = np.degrees(np.arctan2(V[:, 1], V[:, 0])) % 360
     h, _ = np.histogram(ang, bins=8, range=(0, 360))
     counts = dict(zip(("E", "NE", "N", "NW", "W", "SW", "S", "SE"), h.tolist()))
