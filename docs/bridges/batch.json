@@ -1,0 +1,47 @@
+[
+ {
+  "name": "청양교",
+  "lat": 36.450655,
+  "lon": 126.80732,
+  "track": "data/rerun_chyg/track_deck2.h5",
+  "proc": "data/rerun_chyg",
+  "master": "20201217",
+  "out": "docs/bridges/청양교"
+ },
+ {
+  "name": "정자교",
+  "lat": 37.3685405,
+  "lon": 127.1089983,
+  "track": "data/sarvey_permissive.h5",
+  "out": "docs/bridges/정자교",
+  "baselines": "data/sarvey_permissive_baselines.json"
+ },
+ {
+  "name": "내곡교",
+  "lat": 37.746953,
+  "lon": 128.887733,
+  "track": "data/naegok_track_asc.h5",
+  "out": "docs/bridges/내곡교"
+ },
+ {
+  "name": "칠백로",
+  "lat": 35.903424,
+  "lon": 128.926739,
+  "track": "data/honam_track_asc.h5",
+  "out": "docs/bridges/칠백로"
+ },
+ {
+  "name": "상규",
+  "lat": 38.04977,
+  "lon": 127.609515,
+  "track": "data/sanggyu_track_asc.h5",
+  "out": "docs/bridges/상규"
+ },
+ {
+  "name": "동수원",
+  "lat": 37.27754,
+  "lon": 127.02956,
+  "track": "data/dongsuwon_track.h5",
+  "out": "docs/bridges/동수원"
+ }
+]

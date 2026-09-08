@@ -1,0 +1,41 @@
+{
+ "name": "청양교",
+ "lat": 36.450655,
+ "lon": 126.80732,
+ "track": "data/rerun_chyg/track_deck2.h5",
+ "proc": "data/rerun_chyg",
+ "master": "20201217",
+ "baselines": null,
+ "out": "docs/bridges/청양교",
+ "length_m": 90.0,
+ "n_spans": 3,
+ "width_m": 22.0,
+ "clearance_m": 12.484426691900254,
+ "ground_m": 93.0,
+ "deck_az_deg": -174.87045133171492,
+ "bridge_type": "slab",
+ "material": "reinforced_concrete",
+ "n_epochs": 25,
+ "geometry": [
+  [
+   36.4506705,
+   126.8076666
+  ],
+  [
+   36.4506055,
+   126.8067664
+  ]
+ ],
+ "notes": [
+  "경간수 없음 → 30 m 규칙으로 3 가정"
+ ],
+ "sources": {
+  "specs": "파트너 실측 CSV '청양교' (43 m)",
+  "bridge_type": "CSV 'RC슬래브교' → slab",
+  "clearance": "잔차고도 집단평균 +12.5±6.4 m (z=1.96)",
+  "deck_match": "CSV 연장 90 m 에 맞는 way 선택(2후보 중)",
+  "deck": "OSM '청양교' 81 m · 방위 -174.9°",
+  "ground": "Open-Meteo DEM",
+  "points": "쉬프트 12.4 m(heading 0.0°) 보정 후 데크 ±30 m 안 44/48"
+ }
+}

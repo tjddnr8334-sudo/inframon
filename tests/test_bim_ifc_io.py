@@ -57,3 +57,38 @@ def test_write_psets_refuses_to_overwrite_source(tmp_path):
     f.write_text("", encoding="utf-8")
     with pytest.raises(AlignmentError, match="덮어쓸 수 없습니다"):
         ifc_io.write_psets(str(f), {}, str(f))
+
+
+# ── IFC2X3: IFC4 전용 엔티티를 물으면 예외가 아니라 "없음"이어야 한다 ──
+# 국내 실무 모델(MIDAS 산출물 등)이 IFC2X3 라, by_type 이 RuntimeError 를 던지면
+# 실 IFC 를 아예 못 읽는다. 실제로 691부재짜리 설계 IFC 에서 이 경로가 죽었다.
+
+def test_by_type_safe_는_스키마에_없는_엔티티에_빈_목록을_준다():
+    ios = pytest.importorskip("ifcopenshell")
+    from inframon.bim.ifc_io import by_type_safe
+
+    f = ios.file(schema="IFC2X3")
+    assert by_type_safe(f, "IfcMapConversion") == []
+    assert by_type_safe(f, "IfcProjectedCRS") == []
+
+
+def test_IFC2X3_는_지오참조_없음으로_읽힌다(tmp_path):
+    ios = pytest.importorskip("ifcopenshell")
+    from inframon.bim.ifc_io import read_map_conversion
+
+    p = tmp_path / "old.ifc"
+    ios.file(schema="IFC2X3").write(str(p))
+    assert read_map_conversion(p) is None      # 예외가 아니라 None
+
+
+def test_IFC2X3_inspect_가_사유를_남기고_끝난다(tmp_path):
+    ios = pytest.importorskip("ifcopenshell")
+    from inframon.bim.ifc_io import inspect
+
+    p = tmp_path / "old.ifc"
+    ios.file(schema="IFC2X3").write(str(p))
+    r = inspect(p)
+    assert r["schema"] == "IFC2X3"
+    assert r["has_map_conversion"] is False
+    assert r["projected_crs"] == []
+    assert any("IFC2X3" in n for n in r["notes"])

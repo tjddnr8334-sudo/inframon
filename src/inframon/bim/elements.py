@@ -20,12 +20,16 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from ..contracts.schema import MEMBER_TYPES
+
+# 도면 관례 이름: A1·A2(교대) · P1…Pn·P1C(교각·코핑) · S1(상부구조). 번호 뒤 접미(C 등) 허용.
+_DRAWING_NAME = re.compile(r"^([APSaps])\d+[A-Za-z]?$")
 
 # IFC 엔티티 타입 → inframon 표준 부재 라벨. 부분일치(소문자)로 본다.
 _IFC_TO_MEMBER = [
@@ -38,6 +42,26 @@ _IFC_TO_MEMBER = [
     ("ifcdeck", "deck"), ("ifcmember", "deck"),
     ("ifccolumn", "pier"), ("ifcpier", "pier"), ("ifcpile", "pier"),
     ("ifcfooting", "abutment"), ("ifcabutment", "abutment"), ("ifcwall", "abutment"),
+    # 부속물 — 타입이 IfcBuildingElementProxy 라 이름으로만 알 수 있다. 실 프록시 IFC
+    # 12종에서 미매핑 68부재가 전부 이것들이었다(난간 24 · 날개벽 44).
+    # ⚠ 순서 주의: 부분일치라 더 특정적인 것이 앞에 와야 한다. "parapet" 을 먼저 두면
+    # "ParapetWall"(교대 흉벽)까지 데크로 삼킨다.
+    ("wingwall", "abutment"), ("wing_wall", "abutment"), ("parapetwall", "abutment"),
+    ("parapet_wall", "abutment"), ("날개벽", "abutment"), ("흉벽", "abutment"),
+    # 주탑 기초는 하부구조(교각). 앵커리지는 주케이블을 잡는 단부 하부구조라 교대로 본다.
+    ("towerbase", "pier"), ("pylonbase", "pier"), ("주탑기초", "pier"),
+    # 앵커리지는 엄밀히는 교대가 아니지만, 우리 4라벨(deck/pier/abutment/bearing)에서
+    # 가장 가까운 것은 "단부 하부구조"인 교대다. 판단이 들어간 매핑이라 여기 적어 둔다.
+    ("anchorage", "abutment"), ("anchor", "abutment"), ("앵커리지", "abutment"),
+    # 난간·방호벽·보도는 상부구조에 얹혀 데크와 함께 움직인다 — 그리고 **PS 산란체가
+    # 실제로 여기 생긴다**(정자교: 점이 노면이 아니라 보도·난간선을 따라 늘어섰다).
+    ("parapet", "deck"), ("railing", "deck"), ("guardrail", "deck"), ("barrier", "deck"),
+    ("sidewalk", "deck"), ("footway", "deck"), ("난간", "deck"), ("방호벽", "deck"),
+    ("보도", "deck"),
+    # 거더 사이 가로브레이싱·격벽·가로보도 상부구조다(실 MIDAS IFC 미매핑 66부재가
+    # 전부 Brace 였다 — 데크 아래 z −2.5~−0.3 m 에 걸린 거더간 부재).
+    ("bracing", "deck"), ("brace", "deck"), ("diaphragm", "deck"), ("crossbeam", "deck"),
+    ("cross_beam", "deck"), ("가로보", "deck"), ("브레이싱", "deck"), ("격벽", "deck"),
 ]
 
 # IFC4.3 IfcBridgePart/IfcFacilityPart 의 PredefinedType → 부재 라벨.
@@ -62,6 +86,11 @@ def member_from_ifc_type(ifc_type: str | None, name: str | None = None, *,
     pd = (predefined or "").strip().upper()
     if pd in _PREDEFINED_TO_MEMBER:
         return _PREDEFINED_TO_MEMBER[pd]
+    # 국내 교량 도면 관례 — 교대 A1/A2, 교각 P1…Pn(코핑 P1C), 상부구조 S1. 이름이 정확히
+    # 이 꼴이면 타입보다 이 이름을 믿는다(프록시 IFC 는 타입이 Proxy 라 이름이 유일한 단서).
+    m = _DRAWING_NAME.match((name or "").strip())
+    if m:
+        return {"A": "abutment", "P": "pier", "S": "deck"}[m.group(1).upper()]
     hay = f"{ifc_type or ''} {name or ''}".lower()
     for key, member in _IFC_TO_MEMBER:
         if key in hay:

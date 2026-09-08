@@ -43,6 +43,7 @@ class DoctorReport:
     data: dict[str, Any] | None = None       # 인벤토리 요약(선택)
     track: dict[str, Any] | None = None       # preflight 요약(선택)
     notes: list[str] = field(default_factory=list)
+    tools: dict = field(default_factory=dict)  # 외부 도구·자격(_external_tools)
 
     @property
     def core_ok(self) -> bool:
@@ -85,7 +86,18 @@ def run_doctor(path: str | Path | None = None) -> DoctorReport:
         "dashboard": have["streamlit"],
     }
 
+    # 외부 도구·자격 — 프로그램이 대신 못 하는 것들. 뭐가 없는지, 어떻게 넣는지를 말한다.
+    tools = _external_tools()
+    capabilities["slc_download"] = capabilities["slc_search"] and tools["earthdata"]["ok"]
+    capabilities["insar_snap"] = tools["snap_gpt"]["ok"]
+    capabilities["unwrap_snaphu"] = tools["snaphu"]["ok"]
+    capabilities["full_pipeline"] = (capabilities["slc_download"] and capabilities["insar_snap"]
+                                     and capabilities["unwrap_snaphu"] and have["torch"])
+
     notes: list[str] = []
+    for k in ("earthdata", "snap_gpt", "snaphu"):
+        if not tools[k]["ok"]:
+            notes.append(tools[k]["hint"])
     if not capabilities["pinn_real"]:
         notes.append("PINN real 미가용 → pinn=stub 로만 실행 가능(torch 설치 필요).")
     if not capabilities["crs_reprojection"]:
@@ -106,7 +118,40 @@ def run_doctor(path: str | Path | None = None) -> DoctorReport:
         else:
             notes.append(f"점검 대상이 디렉터리도 .h5 도 아닙니다: {p}")
 
-    return DoctorReport(deps=deps, capabilities=capabilities, data=data, track=track, notes=notes)
+    return DoctorReport(deps=deps, capabilities=capabilities, data=data, track=track,
+                        notes=notes, tools=tools)
+
+
+def _external_tools() -> dict[str, dict]:
+    """Earthdata 토큰 · SNAP gpt · snaphu — 있으면 어디에, 없으면 어떻게."""
+    out: dict[str, dict] = {}
+    try:
+        from .insar.slc_download import find_earthdata_token
+        tok, src = find_earthdata_token()
+        out["earthdata"] = {"ok": bool(tok), "where": src,
+                            "hint": ("Earthdata 토큰 없음 → SLC 다운로드 불가. "
+                                     "urs.earthdata.nasa.gov 에서 토큰 발급 후 "
+                                     "`python -m inframon --earthdata-save <토큰>`")}
+    except Exception as e:                       # noqa: BLE001
+        out["earthdata"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "asf_search 설치 필요"}
+    try:
+        from .insar.snap_backend import find_gpt
+        g = find_gpt()
+        out["snap_gpt"] = {"ok": bool(g), "where": g or "없음",
+                           "hint": ("SNAP gpt 없음 → InSAR 처리 불가. "
+                                    "https://step.esa.int/main/download/snap-download/ 설치 후 "
+                                    "PATH 또는 SNAP_HOME 지정")}
+    except Exception as e:                       # noqa: BLE001
+        out["snap_gpt"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "SNAP 설치 필요"}
+    try:
+        from .insar.snap_unwrap import find_snaphu, install_hint
+        t = find_snaphu()
+        out["snaphu"] = {"ok": t is not None,
+                         "where": (f"{t.kind}:{t.path}" if t else "없음"),
+                         "hint": "snaphu 없음 → 언래핑 불가. " + install_hint()}
+    except Exception as e:                       # noqa: BLE001
+        out["snaphu"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "snaphu 설치 필요"}
+    return out
 
 
 def _inventory_summary(root: Path, notes: list[str]) -> dict[str, Any]:
@@ -152,6 +197,13 @@ def format_report(rep: DoctorReport) -> str:
         lines.append(f"    {mark} {d.name:<13} ({tag}) — {d.enables}")
         if not d.present:
             lines.append(f"        설치: {d.install}")
+    if rep.tools:
+        lines.append("  [외부 도구·자격 — 프로그램이 대신 못 하는 것]")
+        for k, lab in (("earthdata", "Earthdata 토큰"), ("snap_gpt", "SNAP gpt"),
+                       ("snaphu", "snaphu")):
+            t = rep.tools.get(k)
+            if t:
+                lines.append(f"    {'✅' if t['ok'] else '❌'} {lab:<14} {t['where']}")
     lines.append("  [가능한 기능]")
     for cap, ok in rep.capabilities.items():
         lines.append(f"    {'✅' if ok else '⚪'} {cap}")

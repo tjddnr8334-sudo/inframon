@@ -1,0 +1,220 @@
+{
+ "schema": "inframon.bim.elements/1",
+ "source": "read back from jeongjagyo_proxy.ifc",
+ "elements": [
+  {
+   "guid": "0P8J9ED_BCUZPRX2B_TXUU",
+   "name": "P1C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    -34.9,
+    -13.25,
+    5.4
+   ],
+   "bbox_max": [
+    -29.9,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0ES65ZXZYS2EWQX8GHW3UM",
+   "name": "P2C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    -13.299999999999997,
+    -13.25,
+    5.4
+   ],
+   "bbox_max": [
+    -8.299999999999997,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1620$N8NQ56CSORT_L4L3R",
+   "name": "P3C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    8.300000000000011,
+    -13.25,
+    5.4
+   ],
+   "bbox_max": [
+    13.300000000000011,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "32F3UWVQWEPNY0PTUP10Y0",
+   "name": "P4C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    29.900000000000006,
+    -13.25,
+    5.4
+   ],
+   "bbox_max": [
+    34.900000000000006,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0U3U$Q0H2H0NVJFJZP2UOU",
+   "name": "A1",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    -58.0,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    -54.0,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0CP1A2OZZEN37HDZMCD1AT",
+   "name": "A2",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    54.0,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    58.0,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0SJTASD3WGKW89SAXH93FD",
+   "name": "P1",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    -33.9,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    -30.9,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "2HZGDDT96JIOZGQRGN3V1G",
+   "name": "P2",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    -12.299999999999997,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    -9.299999999999997,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "0_58G0QZ8ZOS0JGM7WSJA5",
+   "name": "P3",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    9.300000000000011,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    12.300000000000011,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "28M82APTWVZ1TWJS9YIQSY",
+   "name": "P4",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    30.900000000000006,
+    -13.25,
+    0.0
+   ],
+   "bbox_max": [
+    33.900000000000006,
+    13.25,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "34BHW6GOZJKAFB2MXD6441",
+   "name": "S1",
+   "ifc_type": "IfcSlab",
+   "member": "deck",
+   "bbox_min": [
+    -54.0,
+    -13.25,
+    6.0
+   ],
+   "bbox_max": [
+    54.0,
+    13.25,
+    7.38
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "FLOOR"
+   }
+  }
+ ]
+}

@@ -110,6 +110,36 @@ numbers with that in mind. · 실 결과. 좌: 전체 2,661점과 정자교 위�
 **2,661점 중 데크 50m 이내는 12점뿐**이고 449점은 주변 블록에 있다. 매끈한 데크엔 자연 산란체가
 적어 코너리플렉터/고해상도 SAR 가 필요하다.*
 
+**On the bridge, in 3D (Jeongja Br.) / 교량 위에 올린 결과 (정자교):**
+
+![InSAR points placed on the bridge deck](docs/img/ondeck_jeongjagyo.png)
+
+*What "InSAR on BIM" actually takes. Geocoded output puts points (a) at **DEM ground level** and
+(b) shifted by δh/tanθ. Both must be undone before a point sits on the deck. **①** shift of 6.8 m
+undone — mostly **along-deck** (deck azimuth 89.6° vs LOS, observability 0.22; cross-deck −1.5 m),
+which moves 3 more points onto the deck (4 → 7); the module computes that split per
+bridge rather than assuming it. The points line up on the **south footway**, not the roadway — a
+smooth carriageway has few scatterers, parapets and footways have many. **②** the same points lifted
+from ground 37 m to deck 45 m (+7.4 m = clearance + girder depth); piers and abutments are a proxy
+built from measured specs (108 m, 5 spans — data.go.kr 15081953). **③** the twin: 9 points bound to
+members by GlobalId (7 within the deck width, 2 within the pixel-uncertainty buffer). Deck width is
+not guessed — OSM's two footway centrelines are 23.5 m apart. · "BIM 에 InSAR 를 올린다"가 실제로
+무엇인지. 지오코딩 산출물은 점을 **DEM 지면**에 놓고 δh/tanθ 만큼 밀어 둔다. 둘 다 되돌려야
+데크 위에 앉는다. **①** 쉬프트 6.8 m 되돌림 — 대부분 **교축 종방향**이고 횡축 −1.5 m(관측가능성 0.22).
+보정으로 데크 폭 안 점이 4 → 7. 이 분해를 교량마다 계산한다. 점은 노면이 아니라 **남측 보도선**을 따라 늘어선다. **②** 지면 37 m → 데크 45 m
+(+7.4 m = 형하고 + 형고). 교각·교대는 표준데이터 실측(108 m·5경간) 프록시. **③** 트윈 — 9점이
+GlobalId 로 부재에 결합(데크 폭 안 7). 데크 폭은 추정이 아니라 OSM 양측 보도 간격 23.5 m 에서 온다.
+Regenerate: `python scripts/make_ondeck_figure.py`.*
+
+**Open the twin in 3D / 트윈을 3D 로 열기:** [`docs/twin/`](docs/twin/) — double-click
+`twin.viewer.html`. Built end-to-end from measured specs: proxy members → **IFC4 file**
+(`jeongjagyo_proxy.ifc`, 11 members + `IfcMapConversion`) → read back → 12 InSAR points bound to
+members by GlobalId → `.glb` + self-contained viewer + 3D Tiles. **The same 12 points then go through
+PINN virtual sensing and FRAM CRI** — see [`docs/twin/결과.md`](docs/twin/결과.md) and
+`twin_cri.viewer.html` (risk channel). Regenerate:
+`python scripts/make_demo_twin.py`. · 실측 제원에서 IFC4 를 만들고 **되읽어** 결합한 실물.
+IFC 를 되읽지 않고 부재 테이블에서 바로 트윈을 만들면 IFC 는 장식이 된다.
+
 ![Result overview](docs/img/overview.png)
 
 ![Dashboard — FRAM](docs/img/dashboard_fram.png)

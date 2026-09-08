@@ -99,9 +99,38 @@ def parse_snaphu_command(conf: str | Path) -> list[str]:
         f"확인하세요(파일 목록: {[p.name for p in Path(conf).parent.iterdir()][:8]}).")
 
 
+# 실패 시 되풀이할 파라미터 사다리. 실제로 겪은 실패 순서대로 — ① 그대로 ② 타일링
+# (메모리·max-flow 오버플로) ③ 초기화를 MCF 로 ④ 코스트 모드 SMOOTH(DEFO 가 교량 위
+# 급변 위상에서 발산할 때). 각 단계는 snaphu.conf 를 **덮어쓰지 않고** 임시 conf 로 돈다.
+UNWRAP_LADDER: tuple[dict, ...] = (
+    {},
+    {"NTILEROW": 2, "NTILECOL": 2, "ROWOVRLP": 100, "COLOVRLP": 100},
+    {"NTILEROW": 2, "NTILECOL": 2, "ROWOVRLP": 100, "COLOVRLP": 100, "INITMETHOD": "MCF"},
+    {"NTILEROW": 3, "NTILECOL": 3, "ROWOVRLP": 100, "COLOVRLP": 100, "INITMETHOD": "MCF",
+     "STATCOSTMODE": "SMOOTH"},
+)
+
+
+def _write_retry_conf(export_dir: Path, overrides: dict) -> Path:
+    """원 snaphu.conf 에 파라미터를 덧붙인 임시 conf. 헤더 명령줄은 그대로 둔다."""
+    src = (export_dir / "snaphu.conf").read_text(encoding="utf-8", errors="replace")
+    lines = [ln for ln in src.splitlines()
+             if not any(ln.strip().upper().startswith(k) for k in overrides)]
+    lines += [f"{k}\t{v}" for k, v in overrides.items()]
+    out = export_dir / "snaphu.retry.conf"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
 def run_snaphu(export_dir: str | Path, *, tool: SnaphuTool | None = None,
-               timeout: int = 7200, log_file: str | Path | None = None) -> Path:
-    """내보낸 폴더에서 snaphu 를 돌려 언래핑 위상(.hdr)을 만든다. 산출 .hdr 경로 반환."""
+               timeout: int = 7200, log_file: str | Path | None = None,
+               retry: bool = True) -> Path:
+    """내보낸 폴더에서 snaphu 를 돌려 언래핑 위상(.hdr)을 만든다. 산출 .hdr 경로 반환.
+
+    `retry=True` 면 실패할 때 `UNWRAP_LADDER` 순서로 파라미터를 바꿔 다시 돈다. 어느
+    단계에서 됐는지 `<export_dir>/unwrap_retry.json` 에 남긴다 — 자동 복구가 결과를
+    조용히 바꾸면 안 되기 때문이다.
+    """
     export_dir = Path(export_dir)
     conf = export_dir / "snaphu.conf"
     if not conf.exists():
@@ -110,7 +139,31 @@ def run_snaphu(export_dir: str | Path, *, tool: SnaphuTool | None = None,
     if tool is None:
         raise UnwrapError(install_hint())
 
+    ladder = UNWRAP_LADDER if retry else (UNWRAP_LADDER[0],)
+    errors: list[str] = []
+    for step, overrides in enumerate(ladder):
+        try:
+            hdr = _run_snaphu_once(export_dir, tool, timeout, log_file, overrides)
+        except UnwrapError as e:
+            errors.append(f"[{step}] {overrides or '기본'}: {str(e)[:160]}")
+            continue
+        import json
+        (export_dir / "unwrap_retry.json").write_text(json.dumps({
+            "succeeded_step": step, "overrides": overrides, "attempts": errors},
+            ensure_ascii=False, indent=1), encoding="utf-8")
+        return hdr
+    raise UnwrapError("snaphu 가 사다리 " + str(len(ladder)) + "단계 전부 실패:\n  "
+                      + "\n  ".join(errors))
+
+
+def _run_snaphu_once(export_dir: Path, tool: SnaphuTool, timeout: int,
+                     log_file, overrides: dict) -> Path:
+    conf = export_dir / "snaphu.conf"
     cmd = parse_snaphu_command(conf)
+    if overrides:
+        rconf = _write_retry_conf(export_dir, overrides)
+        # 명령줄의 `-f snaphu.conf` 를 임시 conf 로 바꾼다
+        cmd = [rconf.name if (i > 0 and cmd[i - 1] == "-f") else a for i, a in enumerate(cmd)]
     if tool.kind == "wsl":
         inner = " ".join(["cd", _sh_quote(to_wsl_path(export_dir)), "&&", *cmd])
         args = ["wsl"] + (["-d", tool.distro] if tool.distro else []) + ["--", "bash", "-lc", inner]
@@ -119,7 +172,9 @@ def run_snaphu(export_dir: str | Path, *, tool: SnaphuTool | None = None,
         args, cwd = cmd, str(export_dir)
 
     if log_file:
-        with open(log_file, "w", encoding="utf-8") as lf:
+        with open(log_file, "a", encoding="utf-8") as lf:
+            lf.write(f"\n===== snaphu 시도 overrides={overrides or '기본'} =====\n")
+            lf.flush()
             r = subprocess.run(args, cwd=cwd, stdout=lf, stderr=subprocess.STDOUT,
                                timeout=timeout)
         rc, tail = r.returncode, f"로그: {log_file}"

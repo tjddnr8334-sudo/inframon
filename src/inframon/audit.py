@@ -36,6 +36,11 @@ OFFICIAL_MATCH_MAX_M = 150.0    # 표준데이터가 이보다 멀면 다른 교
 FREQ_COEF_MIN, FREQ_COEF_MAX = 10.0, 600.0     # f₁·L 의 허용 범위[Hz·m]
 EI_SATURATION_FRAC = 0.99       # 이 비율 이상이 상한값에 붙어 있으면 포화
 EI_GEOM_RATIO_MAX = 50.0        # 식별 EI 가 기하학적 EI 의 이 배를 넘으면 비물리적
+# 구조응답 물리 상한. 콘크리트 파괴 변형률 ~0.003, 강재 항복 ~0.002 — 이걸 넘는 변형률은
+# 관측이 아니라 단위 오류다. 응력도 강재 강도(~500 MPa)의 2배를 넘으면 같은 뜻이다.
+# 실제로 곡률 단위 환산이 빠져 변형률 −0.32·응력 −8,589 MPa 가 나온 산출물이 ⑥을 통과했다.
+STRAIN_ABS_MAX = 3.0e-3         # 무차원
+STRESS_ABS_MAX_PA = 1.0e9       # 1 GPa
 
 OK, COND, NO = "보고 가능", "조건부", "보고 불가"
 
@@ -71,6 +76,9 @@ class ArtifactAudit:
     freq_coef: float | None = None          # f₁ × 경간[m] — 규모 무관 비교용
     ei_identified: bool | None = None       # 강성 식별이 수렴했는가
     ei_modal_basis: str | None = None       # 고유진동수를 무엇으로 계산했는가
+    strain_abs_max: float | None = None     # |변형률| 최대(무차원)
+    known_event_unseen: bool = False        # 알려진 사고가 관측 기간 안인데 시계열에 안 보임
+    stress_abs_max_pa: float | None = None  # |응력| 최대[Pa]
     # ④ CRI
     cri_worst: float | None = None
     # ⑤ 재현
@@ -79,6 +87,9 @@ class ArtifactAudit:
     # 판정
     verdict: str = COND
     reasons: list[str] = field(default_factory=list)
+    # 감점 아닌 **표기 사항** — 읽는 사람이 반드시 알아야 하지만 산출물의 흠은 아닌 것.
+    # (예: EI·고유진동수가 설계 제원 기반이라는 사실)
+    notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -215,6 +226,12 @@ def _pinn_plausibility(a: ArtifactAudit, f, inp: dict) -> None:
                 a.ei_geom_ratio = round(a.ei_median / geom, 1)
     a.ei_identified = inp.get("EI_identified")
     a.ei_modal_basis = inp.get("EI_modal_basis")
+    for key, attr in (("pinn/strain", "strain_abs_max"), ("pinn/stress", "stress_abs_max_pa")):
+        if key in f:
+            v = np.asarray(f[key][()], dtype=np.float64).ravel()
+            v = v[np.isfinite(v)]
+            if v.size:
+                setattr(a, attr, float(np.abs(v).max()))
     if "pinn/natural_freq" in f:
         fr = np.asarray(f["pinn/natural_freq"][()], dtype=np.float64).ravel()
         fr = fr[np.isfinite(fr) & (fr > 0)]
@@ -256,8 +273,19 @@ def _judge(a: ArtifactAudit) -> None:
                     f"({a.deck_frac * 100:.2f}%)")
     # 표준데이터가 멀리서 매칭됐으면 그 '실연장' 은 다른 교량 것이다 — 비교 자체가 근거가
     # 못 되므로 판정을 낮춘다(실측: 정자교 재처리에서 567m 떨어진 금곡교가 매칭됐다).
-    used_csv = str(a.pinn_profile_source or "").startswith("data_go_kr")
-    if a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M and not used_csv:
+    src = str(a.pinn_profile_source or "")
+    used_csv = src.startswith("data_go_kr")
+    # 파트너 실측 CSV(KOTSA specs)는 자체 좌표 매칭을 거친 **별도의 실측 출처**다. 감사의
+    # 전국표준데이터 조회가 다른 교량을 최근접으로 잡아도, 그건 두 CSV 의 등록 좌표 차이지
+    # PINN 이 틀린 제원을 쓴 게 아니다(정자교: 표준데이터 최근접 금곡교 565m vs 파트너
+    # CSV 정자교 8m). 경간 비교(span_ratio)는 따로 보므로 여기서는 표기만 남긴다.
+    used_specs_csv = src.startswith("specs_csv")
+    if used_specs_csv and a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M:
+        a.notes.append(
+            f"PINN 제원은 파트너 실측 CSV({src.split(':', 1)[-1].strip()}) 기준 — "
+            f"감사의 전국표준데이터 최근접은 '{a.official_name}' {a.official_dist_m:.0f}m 로 "
+            f"다르다(등록 좌표 차이) — 그 기록과의 경간 비교는 의미가 없어 생략")
+    elif a.official_dist_m is not None and a.official_dist_m > OFFICIAL_MATCH_MAX_M and not used_csv:
         # PINN 이 그 CSV 기록을 **쓰지 않았다**. 먼 기록과의 비교를 '잘못된 제원'처럼 적으면
         # 사실과 다르다 — 실제로 무엇을 썼는지(OSM 등)를 말하고, 확인 필요로만 남긴다.
         _sp = f"(경간 {a.pinn_span_m:.0f}m)" if a.pinn_span_m else ""
@@ -284,16 +312,39 @@ def _judge(a: ArtifactAudit) -> None:
     if not a.has_run_record:
         soft.append("실행 기록 없음 — 재현 불가")
     # ⑥ PINN 출력이 퇴화하면 EI·고유진동수·CRI 를 쓸 수 없다 — 차단이다.
+    freq_ok = (a.freq_coef is not None
+               and FREQ_COEF_MIN <= a.freq_coef <= FREQ_COEF_MAX)
     if a.ei_identified is False:
-        # 실패를 실패로 적고 설계 제원으로 모달을 돌렸으면 **차단이 아니라 조건부**다.
-        # 변위·CRI 는 관측 기반이라 살아 있고, EI·고유진동수만 설계값 기준이 된다.
-        soft.append("강성(EI) 식별이 수렴하지 않아 고유진동수를 설계 제원 기준으로 냈다 "
-                    "— EI·고유진동수는 관측값이 아니다")
+        if a.ei_modal_basis == "geometric" and freq_ok:
+            # **감점하지 않는다.** InSAR 로 EI 를 식별하는 것은 원리상 안 된다:
+            # EI = qL⁴/(w·d4) 는 w 가 하중 q 하의 **절대 처짐**일 때 성립하는데, InSAR 가
+            # 주는 것은 관측 기간의 **상대 변위**다. 자중 처짐(청양교 이론 345mm)은 위성이
+            # 보기 전에 이미 들어가 있어 관측 처짐(0.85mm)의 400배다. 그래서 식별 EI 는
+            # 언제나 상한에 붙는다 — 19개 산출물 전부가 그랬다. 못 하는 것을 못 했다고
+            # 깎으면 InSAR 가 실제로 하는 것(변위 속도·이상·위험도)이 묻힌다.
+            # 대신 설계 제원 기반이라는 사실을 **표기 사항**으로 남긴다 — 읽는 사람이
+            # EI·f₁ 을 관측값으로 오해하면 안 된다.
+            a.notes.append("EI·고유진동수는 관측값이 아니라 **설계 제원(기하 EI) 기반** — "
+                           "InSAR 는 상대 변위라 절대 강성을 식별할 수 없다"
+                           f"(f₁ {a.natural_freq_hz:.2f}Hz 는 물리 범위 안)")
+        else:
+            # 설계 제원 없이 실패했거나 그 결과 진동수가 비물리적이면 조건부다.
+            soft.append("강성(EI) 식별이 수렴하지 않았고 대체 근거"
+                        f"({a.ei_modal_basis or '없음'})로 낸 고유진동수도 확인되지 않는다"
+                        " — EI·고유진동수는 관측값이 아니다")
     elif a.ei_saturated_frac is not None and a.ei_saturated_frac >= EI_SATURATION_FRAC:
         hard.append(f"식별 EI 가 상한에 붙어 있다({a.ei_saturated_frac * 100:.0f}% 포화) "
                     f"— 강성 식별이 수렴하지 않았다")
     elif a.ei_geom_ratio is not None and a.ei_geom_ratio > EI_GEOM_RATIO_MAX:
         hard.append(f"식별 EI 가 기하학적 EI 의 {a.ei_geom_ratio:g}배 — 비물리적")
+    # 구조응답이 재료 한계를 넘으면 값이 아니라 단위가 틀린 것이다 — 차단.
+    if a.strain_abs_max is not None and a.strain_abs_max > STRAIN_ABS_MAX:
+        hard.append(f"변형률 |ε|max={a.strain_abs_max:.2e} — 콘크리트 파괴 변형률"
+                    f"({STRAIN_ABS_MAX:g})의 {a.strain_abs_max / STRAIN_ABS_MAX:.0f}배. "
+                    "관측이 아니라 단위 오류다(곡률 환산 누락 등)")
+    if a.stress_abs_max_pa is not None and a.stress_abs_max_pa > STRESS_ABS_MAX_PA:
+        hard.append(f"응력 |σ|max={a.stress_abs_max_pa / 1e6:,.0f} MPa — 재료 강도 규모를 벗어났다"
+                    f"(상한 {STRESS_ABS_MAX_PA / 1e6:,.0f} MPa)")
     if a.freq_coef is not None and not (FREQ_COEF_MIN <= a.freq_coef <= FREQ_COEF_MAX):
         hard.append(f"1차 고유진동수 {a.natural_freq_hz:.1f}Hz 가 경간 "
                     f"{a.pinn_span_m:.0f}m 에서 불가능하다(f₁·L={a.freq_coef:g}, "
@@ -340,6 +391,8 @@ def format_table(rows: list[ArtifactAudit]) -> str:
                 bits.append("EI 포화")
             elif r.ei_geom_ratio is not None:
                 bits.append(f"EI×{r.ei_geom_ratio:g}(기하)")
+            if r.strain_abs_max is not None and r.strain_abs_max > STRAIN_ABS_MAX:
+                bits.append(f"ε {r.strain_abs_max:.1e}")
             bad = any(("고유진동수" in x and "불가능" in x) or "포화" in x or "비물리적" in x
                       for x in r.reasons)
             pl = ("❌ " if bad else "✅ ") + " · ".join(bits)
@@ -354,6 +407,8 @@ def format_report(rows: list[ArtifactAudit]) -> str:
     for r in rows:
         if r.reasons:
             out.append(f"- `{Path(r.path).name}` — " + " · ".join(r.reasons))
+        if r.notes:                  # 감점 아닌 표기 — 그래도 반드시 보여야 한다
+            out.append(f"- `{Path(r.path).name}` ⓘ " + " · ".join(r.notes))
     n = {v: sum(1 for r in rows if r.verdict == v) for v in (OK, COND, NO)}
     out += ["", f"합계: {OK} {n[OK]} · {COND} {n[COND]} · {NO} {n[NO]} (총 {len(rows)})"]
     return "\n".join(out)

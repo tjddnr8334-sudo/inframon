@@ -1,5 +1,7 @@
 # Pontifex 연동 검토 — 스마트인사이드에이아이 전달본 `pontifex-1.0`
 
+> **회신 초안: [`docs/Pontifex_회신_초안.md`](Pontifex_회신_초안.md)** — 아직 보내지 않았다.
+
 > 받은 것: 전국 교량 33,120개 모니터링 웹 플랫폼(GeoDjango + PostGIS + Docker). inframon
 > 산출을 JSON API 로 받는다. **우리 목표 체인의 마지막 고리(⑭ BMAP 등록)가 실제로 닿는
 > 첫 상대 시스템**이다.

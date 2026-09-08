@@ -131,17 +131,62 @@ def test_3dtiles_tileset_places_on_globe(tmp_path):
 
 
 def test_web_viewer_is_self_contained(tmp_path):
-    """glb → 자립형 뷰어 HTML: glb 인라인(base64)·three.js·HUD(범례·georef·결합수)."""
+    """glb → 자립형 뷰어: 점군 JSON 인라인 · three.js 동봉(data:) · 로더 없음 · HUD.
+
+    발표장에 인터넷이 없거나 CDN 이 막히면 빈 화면이다 — 그래서 three.js 를 동봉하고
+    GLTFLoader(상대 import 라 인라인 불가)를 없앴다. 파일만 더블클릭하면 떠야 한다.
+    """
     from inframon.insar.gltf_export import write_web_viewer
     export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity",
                       element_map={0: "GUID-A"})
     v = write_web_viewer(tmp_path / "twin.glb")
     html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
-    assert "atob(" in html and "GLTFLoader" in html          # glb 인라인 디코드
-    assert "three.module.js" in html                         # three.js ES 모듈
-    assert "__B64__" not in html and "__NPTS__" not in html  # 플레이스홀더 치환 완료
-    assert "GlobalId 결합" in html and "georef" in html      # HUD
-    assert v["bound"] == 1 and v["inlined_kb"] > 0
+    assert "GLTFLoader" not in html and "unpkg.com" not in html   # 외부 의존 없음
+    assert "data:text/javascript;base64," in html                # three.js 동봉
+    assert "const POS=[[" in html                                 # 점군 인라인
+    assert "__POS__" not in html and "__NPTS__" not in html      # 치환 완료
+    assert "GlobalId 결합" in html and "georef" in html          # HUD
+    assert v["bound"] == 1 and v["offline"] is True and v["n_boxes"] == 0
+
+
+def test_web_viewer_draws_ifc_members_in_point_frame(tmp_path):
+    """부재 JSON + MapConversion 을 주면 부재 박스가 **점과 같은 프레임**에 들어간다.
+
+    점만 띄우면 "다리 위"인지 아무도 모른다. 박스 중심은 glb 원점 기준 ENU 미터,
+    y 는 절대고도(원점 표고 + 로컬 z)여야 점과 같은 높이에 놓인다.
+    """
+    import json
+    import math
+
+    from inframon.bim.georef import MapConversion
+    from inframon.bim.proxy_model import bridge_elements, save_elements_json
+    from inframon.insar.gltf_export import write_web_viewer
+
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
+    g = meta["georef"]
+    from pyproj import Transformer
+    e0, n0 = Transformer.from_crs("EPSG:4326", "EPSG:5186", always_xy=True).transform(
+        g["origin_lon"], g["origin_lat"])
+    az = math.radians(30.0)
+    mc = MapConversion(eastings=e0 + 10.0, northings=n0 - 5.0, orthogonal_height=40.0,
+                       x_axis_abscissa=math.cos(az), x_axis_ordinate=math.sin(az),
+                       target_crs="EPSG:5186")
+    els = bridge_elements(length_m=60.0, width_m=12.0, n_spans=2, clearance_m=6.0)
+    ej = save_elements_json(els, tmp_path / "els.json")
+    v = write_web_viewer(tmp_path / "twin.glb", elements_json=ej, map_conversion=mc)
+    html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
+    assert v["n_boxes"] == len(els)
+    boxes = json.loads(html.split("BOXES=", 1)[1].split(",ST=", 1)[0])
+    deck = next(b for b in boxes if b["member"] == "deck")
+    # 데크 중심: IFC 로컬 (0,0,z) → 지도 (E0+10, N0−5) → glb 원점 기준 (10, ·, −(−5)=+5)
+    assert abs(deck["center"][0] - 10.0) < 1e-6
+    assert abs(deck["center"][2] - 5.0) < 1e-6
+    # y = 원점 표고 40 + 로컬 데크 중심 z
+    z_mid = (els[0].bbox_min[2] + els[0].bbox_max[2]) / 2
+    assert abs(deck["center"][1] - (40.0 + z_mid)) < 1e-6
+    assert abs(deck["rotY"] - az) < 1e-9
+    assert deck["size"] == [60.0, els[0].bbox_max[2] - els[0].bbox_min[2], 12.0]
 
 
 def test_globalid_binding_via_alignment(tmp_path):
@@ -219,3 +264,27 @@ def test_flat_z_source_still_reports_zero(tmp_path):
     r = export_insar_gltf(h5, tmp_path / "flat.glb", z_source="flat")
     assert r["georef"]["z_source"] == "flat"
     assert "deck_z_median_m" not in r["georef"]
+
+
+def test_web_viewer_places_chainage_stations_on_deck_axis(tmp_path):
+    """교축 구간집계 스테이션은 점과 같은 프레임의 **데크선 위**에, 결측은 has_value=False 로."""
+    import json
+
+    from inframon.insar.gltf_export import write_web_viewer
+
+    export_insar_gltf(_track(tmp_path), tmp_path / "twin.glb", value="velocity")
+    meta = json.loads((tmp_path / "twin.glb.meta.json").read_text(encoding="utf-8"))
+    g = meta["georef"]
+    sts = [{"chainage_m": 5.0, "lon": g["origin_lon"], "lat": g["origin_lat"], "z": 40.0,
+            "n": 3, "has_value": True, "value": 1.2, "sem": 0.1},
+           {"chainage_m": 15.0, "lon": g["origin_lon"] + 1e-4, "lat": g["origin_lat"],
+            "z": 40.0, "n": 0, "has_value": False, "value": None, "sem": None}]
+    v = write_web_viewer(tmp_path / "twin.glb", stations=sts, bin_m=10.0)
+    html = (tmp_path / "twin.viewer.html").read_text(encoding="utf-8")
+    assert v["n_stations"] == 2
+    st = json.loads(html.split("ST=", 1)[1].split(";", 1)[0])
+    assert abs(st[0]["pos"][0]) < 1e-6 and abs(st[0]["pos"][2]) < 1e-6   # 원점 위
+    assert st[0]["pos"][1] == 40.0
+    assert st[0]["has_value"] and not st[1]["has_value"]
+    assert st[1]["pos"][0] > 5.0                                        # 동쪽으로 이동
+    assert "구간집계" in html

@@ -4,9 +4,13 @@
 이 모듈만 실제 IFC 를 읽고 쓰며, `ifcopenshell` 이 없으면 **명확한 안내와 함께 실패**한다
 (조용히 폴백하지 않는다 — IFC 를 못 읽었는데 진행하면 빈 결과가 정상처럼 보인다).
 
-⚠️ 현 개발 환경에는 ifcopenshell 이 설치돼 있지 않아 **이 경로는 실 IFC 로 검증되지
-않았다**. 코어 정합·연결·Pset 생성은 검증됐다. 실 IFC 투입 시 먼저
-`--bim-inspect <ifc>` 로 IfcMapConversion·부재 수를 확인할 것.
+실 IFC 로 검증된 경로다 — MIDAS 산출 IFC2X3 설계 모델(691부재: IfcBeam 625 ·
+Proxy 66)을 읽어 결함 5건을 고쳤다. 새 IFC 를 물릴 때는 먼저 `--bim-inspect <ifc>` 로
+스키마·IfcMapConversion·부재 수를 확인할 것.
+
+**스키마 차이 주의**: `IfcMapConversion`·`IfcProjectedCRS` 는 IFC4 부터다. IFC2X3 에
+그것을 물으면 ifcopenshell 은 빈 목록이 아니라 예외를 던지므로 `by_type_safe` 를 쓴다.
+IFC2X3 에 지오참조가 없는 것은 오류가 아니라 **기준점 정합이 정상 경로**라는 뜻이다.
 """
 
 from __future__ import annotations
@@ -38,6 +42,20 @@ def _require():
         raise AlignmentError(_INSTALL_HINT) from exc
 
 
+def by_type_safe(ifc_file, name: str) -> list:
+    """`by_type` 인데 **그 스키마에 없는 엔티티면 빈 목록**을 준다.
+
+    IFC4 에서 생긴 엔티티(`IfcMapConversion`·`IfcProjectedCRS` 등)를 IFC2X3 파일에
+    물으면 ifcopenshell 은 빈 목록이 아니라 `RuntimeError` 를 던진다. 국내 실무 모델은
+    IFC2X3 가 흔해서(MIDAS 산출물 등) 이걸 막지 않으면 **실 IFC 를 아예 못 읽는다**.
+    "그 스키마에 그 개념이 없다"는 오류가 아니라 "없음"이다.
+    """
+    try:
+        return list(ifc_file.by_type(name))
+    except RuntimeError:
+        return []
+
+
 def read_map_conversion(ifc_path: str | Path) -> MapConversion | None:
     """IFC 에서 `IfcMapConversion` 을 읽는다. 없으면 None(→ 기준점 정합으로).
 
@@ -46,7 +64,7 @@ def read_map_conversion(ifc_path: str | Path) -> MapConversion | None:
     """
     ios = _require()
     f = ios.open(str(ifc_path))
-    convs = f.by_type("IfcMapConversion")
+    convs = by_type_safe(f, "IfcMapConversion")
     if not convs:
         return None
     mc = convs[0]
@@ -156,6 +174,145 @@ def _container_member(el, max_up: int = 4) -> str | None:
     return None
 
 
+def _axis_matrix(place):
+    """`IfcAxis2Placement3D` → 4×4. **RefDirection 이 없어도 견딘다.**
+
+    IFC 규칙(WR2)은 Axis 와 RefDirection 이 둘 다 있거나 둘 다 없기를 요구하는데,
+    한쪽만 있는 파일이 실제로 나온다(Pontifex 프록시 314부재 전부). 여기서는 빠진 축을
+    IFC 기본값 규약대로(Axis 에 직교하는 X) 채운다 — Axis=(0,0,1) 이면 항등이 되어
+    원래 의도와 같다. 규칙 위반 파일에서 배치가 통째로 어긋나는 것을 막는다.
+    """
+    import numpy as np
+
+    m = np.eye(4)
+    if place is None:
+        return m
+    loc = _attr(place, "Location", None)
+    if loc is not None:
+        c = [float(v) for v in (_attr(loc, "Coordinates", ()) or ())]
+        m[:3, 3] = (c + [0.0, 0.0, 0.0])[:3]
+    ax = _attr(place, "Axis", None)
+    rd = _attr(place, "RefDirection", None)
+    z = np.array([float(v) for v in _attr(ax, "DirectionRatios", (0, 0, 1))], float) \
+        if ax is not None else np.array([0.0, 0.0, 1.0])
+    z = z / (np.linalg.norm(z) or 1.0)
+    if rd is not None:
+        x = np.array([float(v) for v in _attr(rd, "DirectionRatios", (1, 0, 0))], float)
+    else:
+        # 빠진 X축: Z 와 가장 덜 나란한 기본축에서 만든다(Z=(0,0,1) 이면 X=(1,0,0))
+        seed = np.array([1.0, 0.0, 0.0])
+        if abs(float(np.dot(seed, z))) > 0.9:
+            seed = np.array([0.0, 1.0, 0.0])
+        x = seed
+    x = x - z * float(np.dot(x, z))
+    n = np.linalg.norm(x)
+    x = (x / n) if n > 1e-12 else np.array([1.0, 0.0, 0.0])
+    m[:3, 0], m[:3, 1], m[:3, 2] = x, np.cross(z, x), z
+    return m
+
+
+def _profile_points_2d(profile):
+    """단면 정의 → 외곽 2D 점들. 모르는 단면이면 None."""
+    import numpy as np
+
+    if profile is None:
+        return None
+    t = profile.is_a()
+    if t == "IfcArbitraryClosedProfileDef":
+        curve = _attr(profile, "OuterCurve", None)
+        pts = _attr(curve, "Points", None) if curve is not None else None
+        if not pts:
+            return None
+        return np.array([[float(c) for c in (_attr(p, "Coordinates", (0, 0)) or (0, 0))[:2]]
+                         for p in pts], float)
+    if t in ("IfcRectangleProfileDef", "IfcRectangleHollowProfileDef"):
+        dx = float(_attr(profile, "XDim", 0.0) or 0.0) / 2
+        dy = float(_attr(profile, "YDim", 0.0) or 0.0) / 2
+        base = np.array([[-dx, -dy], [dx, -dy], [dx, dy], [-dx, dy]], float)
+    elif t == "IfcCircleProfileDef":
+        r = float(_attr(profile, "Radius", 0.0) or 0.0)
+        base = np.array([[-r, -r], [r, -r], [r, r], [-r, r]], float)   # AABB 목적상 외접 사각
+    else:
+        return None
+    pos = _attr(profile, "Position", None)                            # IfcAxis2Placement2D
+    if pos is not None:
+        loc = _attr(pos, "Location", None)
+        off = [float(v) for v in (_attr(loc, "Coordinates", (0, 0)) or (0, 0))[:2]] \
+            if loc is not None else [0.0, 0.0]
+        base = base + np.asarray(off, float)
+    return base
+
+
+def extruded_aabb(element, scale: float = 1.0):
+    """부재의 **압출 형상에서 AABB 를 직접 계산**한다 — 형상엔진이 실패할 때의 구제책.
+
+    `geom.create_shape` 가 죽으면 지금까지는 배치 원점만 아는 **영(0)크기 AABB** 로
+    떨어졌다. 그러면 부재 결합이 점-대-점 거리로만 이뤄져 데크 위 점이 엉뚱한 부재에
+    붙는다. 압출 솔리드(IfcExtrudedAreaSolid)는 단면 × 깊이라 AABB 를 직접 구할 수 있다.
+
+    실제로 겪은 것: Pontifex 프록시 IFC 12종은 `IfcProject` 의 Description 이 **따옴표
+    없는 문자열**이다(`...,'P1',Pontifex_girder_proxy,$,...`). STEP 파서는 그 인자를
+    통째로 버리고, 뒤 5개 속성이 한 칸씩 밀려 RepresentationContexts 자리에 단위가,
+    UnitsInContext 자리에 아무것도 없게 된다. 단위를 못 읽으니 **314부재 전부**의 형상
+    생성이 죽었다 — 따옴표 한 쌍이 파일 전체를 못 쓰게 만든다.
+    형상엔진이 되는 MIDAS 실설계 IFC(691부재)에서 이 계산과 형상엔진 결과는 최대 차이
+    0.0000 m 로 일치했다 — 그래서 이 값을 믿는다.
+
+    반환: (lo[3], hi[3]) 또는 None(압출 형상이 없거나 단면을 모를 때).
+    """
+    import numpy as np
+
+    rep = _attr(element, "Representation", None)
+    if rep is None:
+        return None
+    corners = []
+    for sr in (_attr(rep, "Representations", ()) or ()):
+        for item in (_attr(sr, "Items", ()) or ()):
+            if not item.is_a("IfcExtrudedAreaSolid"):
+                continue
+            pts2 = _profile_points_2d(_attr(item, "SweptArea", None))
+            if pts2 is None or not len(pts2):
+                continue
+            depth = float(_attr(item, "Depth", 0.0) or 0.0)
+            d = _attr(item, "ExtrudedDirection", None)
+            vec = np.array([float(v) for v in _attr(d, "DirectionRatios", (0, 0, 1))],
+                           float) if d is not None else np.array([0.0, 0.0, 1.0])
+            p3 = np.column_stack([pts2, np.zeros(len(pts2))])
+            both = np.vstack([p3, p3 + vec * depth])                  # 아랫면 + 윗면
+            m = _axis_matrix(_attr(item, "Position", None))           # 솔리드 배치
+            corners.append((m[:3, :3] @ both.T).T + m[:3, 3])
+    if not corners:
+        return None
+    v = np.vstack(corners)
+    world = _placement_matrix(element)                                # 부재 배치 체인
+    v = (world[:3, :3] @ v.T).T + world[:3, 3]
+    return v.min(axis=0) * scale, v.max(axis=0) * scale
+
+
+def _placement_matrix(element):
+    """부재 배치 체인 4×4. util 이 실패하면 우리 관용 행렬로 직접 합성한다."""
+    import numpy as np
+
+    pl = _attr(element, "ObjectPlacement", None)
+    if pl is None:
+        return np.eye(4)
+    try:
+        import ifcopenshell.util.placement as upl
+        return np.asarray(upl.get_local_placement(pl), float)
+    except Exception:  # noqa: BLE001 — 관용 경로로
+        m = np.eye(4)
+        chain = []
+        cur = pl
+        for _ in range(16):                       # 순환 방어
+            if cur is None:
+                break
+            chain.append(_attr(cur, "RelativePlacement", None))
+            cur = _attr(cur, "PlacementRelTo", None)
+        for rp in reversed(chain):                # 루트부터 곱한다
+            m = m @ _axis_matrix(rp)
+        return m
+
+
 def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement",),
                   max_elements: int = 20000) -> list[Element]:
     """IFC 부재 → `Element` 테이블(로컬 좌표 AABB).
@@ -196,6 +353,10 @@ def read_elements(ifc_path: str | Path, *, types: tuple[str, ...] = ("IfcElement
                         lo, hi, src = v.min(axis=0), v.max(axis=0), "geometry"
                 except Exception:  # noqa: BLE001 — 형상 실패 부재는 건너뛰고 배치로
                     lo = hi = None
+            if lo is None:
+                got = extruded_aabb(el, scale)          # 압출 단면을 직접 계산
+                if got is not None:
+                    lo, hi, src = got[0], got[1], "extrusion"
             if lo is None:
                 lo = hi = _placement_xyz(el, scale)
                 src = "placement"
@@ -364,7 +525,8 @@ def inspect(ifc_path: str | Path) -> dict:
         "has_map_conversion": mc is not None,
         "map_conversion": (mc.to_dict() if mc else None),
         "site_georeference": site,
-        "projected_crs": [c for c in (getattr(c, "Name", None) for c in f.by_type("IfcProjectedCRS")) if c],
+        "projected_crs": [c for c in (getattr(c, "Name", None)
+                                      for c in by_type_safe(f, "IfcProjectedCRS")) if c],
         "n_elements": n_el,
         "n_with_geometry": n_repr,
         "n_type_mapped": n_mapped,

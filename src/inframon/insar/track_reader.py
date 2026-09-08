@@ -78,6 +78,28 @@ _HEAD_ATTRS = ("heading", "HEADING", "headingAngle", "sat_heading", "ORBIT_HEADI
 _DEMERR_DATASETS = ("dem_error", "demErr", "residual_height", "dem_err", "hgt_error")
 
 
+# |heading| 이 이보다 작으면 라디안으로 본다. 위성 heading 이 도(°)로 이 안에 드는 경우는
+# 정북 비행뿐인데 Sentinel-1 은 asc ≈ −13°, desc ≈ −167° 라 실제로는 없다.
+HEADING_RADIAN_MAX = 7.0
+
+
+def normalize_heading_deg(heading: float | None) -> float | None:
+    """heading 을 도(°)로. **라디안이 섞여 들어오는 것**을 잡는다.
+
+    MintPy/ISCE 계열은 heading 을 라디안으로 쓴다(asc −0.23, desc −2.91). 그 값을 도로
+    읽으면 −0.23° — 거의 정북 — 가 되어 LOS 방향이 13° 틀어진다. 정자교 SARvey 트랙이
+    정확히 그 상태였고, 그 결과 지오로케이션 쉬프트의 교축 직각 성분이 0.01 m 로 계산돼
+    "보정해도 데크 위 점이 안 늘어난다"는 결론이 나왔다. 라디안으로 고치면 직각 성분
+    1.5 m, 데크 안 점 4 → 7 이다. 변환기(58_sarvey_to_inframon)는 이미 이 규칙을 알고
+    있었지만, 옛 어댑터로 만든 트랙은 변환 없이 들어왔다 — 읽는 쪽에서 막아야 한다.
+    """
+    if heading is None or not np.isfinite(heading):
+        return heading
+    if abs(float(heading)) < HEADING_RADIAN_MAX:
+        return float(np.degrees(heading))
+    return float(heading)
+
+
 def _decode_epochs(raw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     labels = np.asarray(raw).astype(str)
     parsed = [datetime.strptime(label, "%Y%m%d") for label in labels]
@@ -153,6 +175,7 @@ def read_track_h5(track_h5: str | Path) -> TrackData:
         heading = float(np.nanmedian(np.asarray(head_raw, dtype=np.float64)))
     elif head_attr is not None:
         heading = float(head_attr)
+    heading = normalize_heading_deg(heading)
 
     dem_error = None
     if demerr_raw is not None:
@@ -259,7 +282,7 @@ def import_track_h5(
     `apply_corrections=True` 면 LOS 시계열에 기준점 정합 + 고도상관 성층대기 보정을 적용하고
     (`atmo.correct_los_field`), 보정된 los/longitudinal + /insar/velocity_mm_yr 를 저장한다.
     """
-    from .deck_geometry import deck_station as _deck_station
+    from .deck_geometry import deck_station_checked as _deck_station
     td = read_track_h5(track_h5)
     n_points, _ = td.los.shape
 
@@ -319,7 +342,8 @@ def import_track_h5(
             geoloc_meta = {"applied": True, **gc["meta"]}
     longitudinal = los * np.cos(np.deg2rad(azimuth_angle_deg))
     # 곡선 교량: 호길이 station(데크를 따라 잰 거리). 폴리라인 있으면 투영, 없으면 주곡선.
-    station = _deck_station(td.lonlat, geometry_latlon).astype(np.float32)
+    station, station_meta = _deck_station(td.lonlat, geometry_latlon)
+    station = station.astype(np.float32)
     l_from_fixed = station                                            # 고정단(=station 0)에서 호길이
     member = np.full(n_points, member_default, dtype=np.int8)
 
@@ -345,6 +369,9 @@ def import_track_h5(
             "velocity_ds": "/insar/velocity_mm_yr",
             "corrections": corr_meta,
             "geolocation": geoloc_meta,
+            # station 이 뭉개지면 l_from_fixed 가 상수가 되어 열 분리가 죽는다 —
+            # 무엇을 썼고 왜 그랬는지 산출물에 남긴다(deck_geometry 참조).
+            "deck_station": station_meta,
         },
     )
     return out

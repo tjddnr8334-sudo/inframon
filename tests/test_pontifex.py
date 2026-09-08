@@ -175,3 +175,46 @@ def test_unreachable_platform_explains_next_step(tmp_path):
     p = _project(tmp_path / "p.h5")
     with pytest.raises(PontifexError, match="docker compose ps"):
         push(p, 1, base="http://127.0.0.1:9", target=(37.0, 127.0))
+
+
+# ── ⑭ 실전송: 모의 서버로 HTTP 왕복 ──────────────────────────────────────
+def test_push_round_trips_through_mock_server(tmp_path):
+    """Docker 없이도 register → push 가 실제 HTTP 로 서버까지 간다 — 계약 검증."""
+    import threading
+
+    from inframon.pontifex import push, register_bridge
+    from inframon.pontifex_mock import serve
+
+    srv = serve(0, token="t0k", state_path=tmp_path / "state.json")
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        reg = register_bridge("테스트교", 37.0, 127.0, base=base, token="t0k")
+        assert reg["id"] >= 40001 and reg["detail_url"].startswith("/bridge/")
+        proj = _project(tmp_path / "p.h5")
+        res = push(proj, reg["id"], base=base, token="t0k", allow_unreportable=True)
+        assert not res.dry_run and res.summary_n >= 1
+        state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
+        assert str(reg["id"]) in state["sensing"] or reg["id"] in state["sensing"]
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_mock_server_rejects_bad_token(tmp_path):
+    import threading
+
+    from inframon.pontifex import PontifexError, register_bridge
+    from inframon.pontifex_mock import serve
+
+    srv = serve(0, token="right")
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        import pytest
+        with pytest.raises(PontifexError):
+            register_bridge("x", 37.0, 127.0, base=base, token="wrong")
+    finally:
+        srv.shutdown()
+        srv.server_close()

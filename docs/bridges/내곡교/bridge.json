@@ -1,0 +1,42 @@
+{
+ "name": "내곡교",
+ "lat": 37.746953,
+ "lon": 128.887733,
+ "track": "data/naegok_track_asc.h5",
+ "proc": null,
+ "master": null,
+ "baselines": null,
+ "out": "docs/bridges/내곡교",
+ "length_m": 162.0,
+ "n_spans": 5,
+ "width_m": 25.0,
+ "clearance_m": 7.5,
+ "ground_m": 13.0,
+ "deck_az_deg": -78.27664421574433,
+ "bridge_type": "slab",
+ "material": "reinforced_concrete",
+ "n_epochs": 19,
+ "geometry": [
+  [
+   37.7481204,
+   128.8874054
+  ],
+  [
+   37.7467216,
+   128.8877725
+  ]
+ ],
+ "notes": [
+  "경간수 없음 → 30 m 규칙으로 5 가정",
+  "SNAP star 처리 폴더도 SARvey 기선 JSON 도 없음 → 잔차고도 불가(브리프 (b) 비움)"
+ ],
+ "sources": {
+  "specs": "파트너 실측 CSV '내곡교' (0 m)",
+  "bridge_type": "CSV 'RC슬래브교' → slab",
+  "clearance": "전국교량표준데이터 교량높이 7.5 m",
+  "deck_match": "CSV 연장 162 m 에 맞는 way 선택(2후보 중)",
+  "deck": "OSM 'way/185200716' 159 m · 방위 -78.3°",
+  "ground": "Open-Meteo DEM",
+  "points": "쉬프트 8.8 m(heading -13.3°) 보정 후 데크 ±30 m 안 34/52886"
+ }
+}

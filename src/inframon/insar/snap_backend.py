@@ -714,7 +714,9 @@ def find_reference_point(
 
 def build_bridge_track_ps_ds(
     pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
-    *, geometry_latlon: list, buffer_m: float = 30.0, coh_min: float = 0.35,
+    *, geometry_latlon: list, buffer_m: float | None = None, coh_min: float = 0.35,
+    bridge_width_m: float | None = None, bridge_height_m: float | None = None,
+    incidence_hint=None,
     ps_coh: float = 0.7, heading: float | None = None,
     adi_tif: str | Path | None = None, adi_max: float = 0.25,
     amp_pairs: list | None = None,
@@ -724,6 +726,10 @@ def build_bridge_track_ps_ds(
     coh_floor: float = 0.2, min_keep: int = 3,
 ) -> dict:
     """**교량 데크(폴리라인) buffer_m 이내**의 PS/DS 점 선별 → Track H5.
+
+    `buffer_m` 를 주지 않으면 **그 교량에 맞게 계산**한다(deck_geometry): 반폭 +
+    지오코딩 쉬프트의 데크 횡방향 성분 + 픽셀 여유. 고정 30m 는 폭 22m 교량에서 점 절반이
+    데크 밖 지반이 되고(청양교 실측: 횡방향 산포 ±30m), 좁은 교량에서는 반대로 데크를 자른다.
 
     각 쌍 tif band1=phase·2=coherence·3=incidence. 데크 30m 버퍼 안에서 시간평균
     시간평균 코히런스(temporal coherence 근사)로 응집산란체를 고르고, γ̄≥ps_coh 는 PS,
@@ -740,6 +746,21 @@ def build_bridge_track_ps_ds(
     geom = [(float(lon), float(lat)) for lat, lon in geometry_latlon]   # (lon,lat)
     lons = [g[0] for g in geom]; lats = [g[1] for g in geom]
     mlon, Mlon, mlat, Mlat = min(lons), max(lons), min(lats), max(lats)
+
+    # 버퍼는 **교량마다 다르다** — 반폭 + 쉬프트의 데크 횡방향 성분 + 픽셀 여유.
+    # 고정 30m 는 폭 22m 교량에서 점 절반이 데크 밖이 되고, 좁은 교량은 데크를 자른다.
+    shift_geo = None
+    if buffer_m is None:
+        try:
+            from .deck_shift import for_bridge
+            _inc = float(np.nanmedian(np.asarray(incidence_hint, float)))                 if incidence_hint is not None else 39.0
+            shift_geo = for_bridge(geometry_latlon, heading_deg=(heading or 0.0),
+                                   incidence_deg=_inc,
+                                   dh_m=float(bridge_height_m or 5.0),
+                                   width_m=bridge_width_m)
+            buffer_m = shift_geo.buffer_m
+        except Exception:  # noqa: BLE001 — 기하 계산 실패해도 추출은 계속(보수적 기본)
+            buffer_m = 30.0
     marg = buffer_m / 111000.0 * 3 + 0.001    # 데크 bbox + 여유(버퍼계산 대상 축소)
 
     # 밴드 번호를 외우지 않는다 — 언래핑 레인 산출은 [coh, 위상, 입사각] 순서라
@@ -910,6 +931,7 @@ def build_bridge_track_ps_ds(
     n_ps = int((scatter_class == 1).sum())
     return {"n_points": N, "n_ps": n_ps, "n_ds": N - n_ps,
             "buffer_m": buffer_m, "deck_dist_max_m": float(deck_dist_m.max()),
+            "shift_geometry": shift_geo.as_dict() if shift_geo else None,
             "coh_mean": float(gbar.mean()), "class_method": adi_method,
             "adi_median": (float(np.nanmedian(adi_pt)) if np.isfinite(adi_pt).any() else None),
             "reference": ref_meta, "n_epochs_used": len(ok),

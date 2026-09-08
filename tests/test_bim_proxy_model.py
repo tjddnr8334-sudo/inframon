@@ -18,14 +18,14 @@ from inframon.bim.proxy_model import bridge_elements, elements_from_profile, sav
 def test_members_follow_measured_specs():
     els = bridge_elements(length_m=90.0, width_m=22.0, n_spans=2, clearance_m=10.0)
     kinds = {e.name: e for e in els}
-    assert set(kinds) == {"Deck#1", "Pier#1", "PierCap#1", "Abutment#1", "Abutment#2"}
-    deck = kinds["Deck#1"]
+    assert set(kinds) == {"S1", "P1", "P1C", "A1", "A2"}       # 도면 관례 A/P/S
+    deck = kinds["S1"]
     assert deck.member == "deck"
     assert deck.bbox_min[2] == 10.0                    # 형하고 = 상판 아래
     assert deck.bbox_max[0] - deck.bbox_min[0] == 90.0  # 연장
     assert deck.bbox_max[1] - deck.bbox_min[1] == 22.0  # 폭
     # 교각은 경간 경계(중앙)에 하나 — 2경간이므로
-    assert kinds["Pier#1"].bbox_min[2] == 0.0 and kinds["Pier#1"].bbox_max[2] == 10.0
+    assert kinds["P1"].bbox_min[2] == 0.0 and kinds["P1"].bbox_max[2] == 10.0
 
 
 def test_span_count_drives_pier_count():
@@ -75,3 +75,14 @@ def test_json_roundtrip_is_readable_by_align_path(tmp_path):
     assert {e.guid for e in back} == {e.guid for e in els}
     doc = json.loads(open(p, encoding="utf-8").read())
     assert "실 IFC 가 아니다" in doc["note"]            # 출처를 숨기지 않는다
+
+
+def test_drawing_convention_names_map_to_members():
+    """도면 관례 A1/P1/S1 은 타입이 Proxy 여도 이름만으로 부재가 정해진다."""
+    from inframon.bim.elements import member_from_ifc_type as m
+    assert m("IfcBuildingElementProxy", "A1") == "abutment"
+    assert m("IfcBuildingElementProxy", "A2") == "abutment"
+    assert m("IfcBuildingElementProxy", "P3") == "pier"
+    assert m("IfcBuildingElementProxy", "P3C") == "pier"      # 코핑
+    assert m("IfcBuildingElementProxy", "S1") == "deck"
+    assert m("IfcBuildingElementProxy", "PS-1") is None        # 관례 꼴이 아니면 그대로

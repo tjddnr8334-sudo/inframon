@@ -14,7 +14,7 @@
 
 옵션:
     python start.py --dashboard   설치 후 대시보드까지 띄운다(브라우저 자동 열림)
-    python start.py --full        실데이터용 추가 패키지까지(대시보드·위성조회·PINN)
+    python start.py --full        실 교량 시연·실데이터용 패키지까지(대시보드·위성조회·PINN·트윈·그림)
     python start.py --no-demo     설치만 하고 데모는 건너뛴다
 
 표준 라이브러리만 쓴다 — 이 파일을 돌리는 데 필요한 건 파이썬뿐이다.
@@ -153,7 +153,7 @@ def main() -> None:
     py = ensure_venv()
 
     step(3, total, "inframon 설치")
-    extras = "dashboard,search,pinn" if a.full else ("dashboard" if a.dashboard else None)
+    extras = "dashboard,search,demo" if a.full else ("dashboard" if a.dashboard else None)
     install(py, extras)
 
     ran = False
