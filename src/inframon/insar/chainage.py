@@ -366,6 +366,52 @@ def _velocity(tr: dict) -> np.ndarray:
     return (los[:, -1] - los[:, 0])          # 관측기간 총 변위(속도 아님 — meta 에 표기)
 
 
+def resolve_shift_dh(tr: dict, station0: np.ndarray, offset0: np.ndarray, length_m: float,
+                     *, fallback_m: float | None, half_width_m: float | None,
+                     min_z: float = 1.0) -> tuple[float | None, dict]:
+    """쉬프트 크기 δh — **잔차고도 집단평균이 있으면 그것, 없으면 형하고 가정**.
+
+    쉬프트 = δh/tanθ 인데 δh 를 지금까지 형하고로 가정했다. 트랙에 잔차고도(PSI 높이)가
+    있으면 교면 위 점과 밖 점의 가중평균 차이를 δh 로 쓴다 — 가정이 관측으로 바뀐다.
+
+    점별 잔차고도는 쓰지 않는다. σ 가 20 m 급이라 점별로 적용하면 쉬프트 잡음이 σ/tanθ ≈
+    27 m 로 화소(11 m)보다 커져 배치가 망가진다. 집단 차이가 z < min_z 면 관측이 가정보다
+    나을 근거가 없으므로 가정을 유지하고 그 사실을 남긴다.
+    교면 위 판정은 보정 **전** 좌표로 하되 반폭+화소/2 로 넉넉히 잡는다(보정으로 안팎이
+    바뀌는 점을 한쪽으로 몰지 않기 위해).
+    """
+    rh = tr.get("residual_height_m")
+    rs = tr.get("residual_height_sigma_m")
+    meta = {"dh_source": "형하고 가정", "dh_m": fallback_m}
+    if rh is None or rs is None or half_width_m is None:
+        return fallback_m, meta
+    rh, rs = np.asarray(rh, float), np.asarray(rs, float)
+    ok = np.isfinite(rh) & np.isfinite(rs) & (rs > 0)
+    if ok.sum() < 4:
+        return fallback_m, meta
+    from .deck_shift import PIXEL_M
+    on = ok & (np.abs(offset0) <= half_width_m + PIXEL_M / 2) & (station0 >= -2) \
+        & (station0 <= length_m + 2)
+    off = ok & ~on
+    if on.sum() < 2 or off.sum() < 2:
+        meta["reason"] = f"교면 위 {int(on.sum())} · 밖 {int(off.sum())} — 집단평균 불가"
+        return fallback_m, meta
+    wa, wb = 1.0 / rs[on] ** 2, 1.0 / rs[off] ** 2
+    ma, mb = float(np.sum(wa * rh[on]) / wa.sum()), float(np.sum(wb * rh[off]) / wb.sum())
+    se = float(np.hypot(1.0 / np.sqrt(wa.sum()), 1.0 / np.sqrt(wb.sum())))
+    diff = ma - mb
+    z = diff / se if se > 0 else 0.0
+    info = {"residual_diff_m": diff, "residual_se_m": se, "z": z,
+            "n_on": int(on.sum()), "n_off": int(off.sum())}
+    if diff <= 0 or z < min_z:
+        meta.update(info, reason=f"잔차고도 차이 {diff:+.1f}±{se:.1f} m (z={z:.2f}) — "
+                                 f"가정({fallback_m}) 유지")
+        return fallback_m, meta
+    meta.update(info, dh_source="잔차고도 집단평균(교면 위 − 밖)", dh_m=float(diff),
+                fallback_m=fallback_m)
+    return float(diff), meta
+
+
 def build_profile(track_h5: str | Path, geometry_latlon, *,
                   bin_m: float = DEFAULT_BIN_M, min_quality: float | None = None,
                   mode: str = "relaxed", denoise: bool = True,
@@ -407,14 +453,20 @@ def build_profile(track_h5: str | Path, geometry_latlon, *,
         from .track_reader import normalize_heading_deg
         heading = float(normalize_heading_deg(
             float(tr["attrs"].get("HEADING", 0.0) or 0.0)))     # 라디안 유입 방어
+        # δh: 잔차고도 집단평균이 있으면 관측값, 없으면 형하고 가정
+        st0, of0 = project_to_polyline(ll, geometry_latlon)
+        dh, dh_meta = resolve_shift_dh(
+            tr, st0, of0, float(_polyline_length_m(np.asarray(geometry_latlon, float))),
+            fallback_m=float(bridge_height_m),
+            half_width_m=(float(bridge_width_m) / 2.0 if bridge_width_m else None))
         g = for_bridge(geometry_latlon, heading_deg=heading,
                        incidence_deg=float(np.nanmedian(inc)),
-                       dh_m=float(bridge_height_m), width_m=bridge_width_m)
-        r = apply_correction(ll, np.full(ll.shape[0], float(bridge_height_m)), inc,
+                       dh_m=float(dh), width_m=bridge_width_m)
+        r = apply_correction(ll, np.full(ll.shape[0], float(dh)), inc,
                              heading, crs_is_lonlat=True, set_height=False)
         ll = np.asarray(r["xyz"], float)[:, :2]
         shift_meta = {**g.as_dict(), "applied": True,
-                      "mean_abs_m": float(np.mean(r["shift_m"]))}
+                      "mean_abs_m": float(np.mean(r["shift_m"])), **dh_meta}
 
     station, offset = project_to_polyline(ll, geometry_latlon)
     offset = _signed_offset(ll, geometry_latlon, offset)   # 좌/우를 부호로 — 데크 단면이 보인다

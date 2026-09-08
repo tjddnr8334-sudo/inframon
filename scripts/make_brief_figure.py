@@ -233,6 +233,9 @@ def main() -> None:
     axx.grid(alpha=.25)
 
     head = a.meta or f"연장 {L:.0f} m · 폭 {a.width:g} m · 형하고 {a.height:g} m"
+    if prof.shift and prof.shift.get("applied"):
+        head += (f" · 쉬프트 {prof.shift['mean_abs_m']:.1f} m "
+                 f"(δh {prof.shift['dh_m']:.1f} m — {prof.shift['dh_source']})")
     fig.suptitle(f"{a.bridge} — 중소형 교량 InSAR 시계열 변위 분석 (건기연 브리프 형식)\n"
                  f"{head} · 시점 {los.shape[1]} · {t0}~{t1} · 유효 PS {int(sel.sum())}",
                  fontsize=12, y=1.0)

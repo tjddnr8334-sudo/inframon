@@ -246,3 +246,41 @@ def test_교대_구역에_점이_없으면_기준점을_안_건드린다():
     out, meta = reference_to_abutment(los, st, 100.0)
     assert not meta["applied"] and np.array_equal(out, los)
     assert "2개 미만" in meta["reason"]
+
+
+# ── 쉬프트 δh: 잔차고도 집단평균 우선 ────────────────────────────────────
+from inframon.insar.chainage import resolve_shift_dh  # noqa: E402
+
+
+def _rh_track(on_dh, off_dh, sigma=3.0, n=20):
+    st = np.linspace(0, 100, n)
+    of = np.where(np.arange(n) % 2 == 0, 2.0, 40.0)        # 짝수=교면 위, 홀수=밖
+    rh = np.where(of < 10, on_dh, off_dh) + np.random.default_rng(0).normal(0, sigma, n)
+    return {"residual_height_m": rh, "residual_height_sigma_m": np.full(n, sigma)}, st, of
+
+
+def test_잔차고도가_있으면_집단평균_차이를_δh로_쓴다():
+    tr, st, of = _rh_track(10.0, 0.0)
+    dh, meta = resolve_shift_dh(tr, st, of, 100.0, fallback_m=6.0, half_width_m=10.0)
+    assert meta["dh_source"].startswith("잔차고도")
+    assert abs(dh - 10.0) < 3.0 and meta["z"] > 1.0
+    assert meta["fallback_m"] == 6.0
+
+
+def test_잔차고도가_없으면_형하고_가정():
+    dh, meta = resolve_shift_dh({}, np.zeros(3), np.zeros(3), 100.0, fallback_m=6.0,
+                                half_width_m=10.0)
+    assert dh == 6.0 and meta["dh_source"] == "형하고 가정"
+
+
+def test_집단_차이가_유의하지_않으면_가정을_유지하고_사유를_남긴다():
+    tr, st, of = _rh_track(0.5, 0.0, sigma=6.0)
+    dh, meta = resolve_shift_dh(tr, st, of, 100.0, fallback_m=6.0, half_width_m=10.0)
+    assert dh == 6.0 and "유지" in meta["reason"]
+
+
+def test_점별_잔차고도는_쓰지_않는다():
+    """σ 20 m 급 점별 값을 쓰면 쉬프트 잡음이 화소보다 커진다 — 항상 스칼라 δh."""
+    tr, st, of = _rh_track(10.0, 0.0, sigma=20.0)
+    dh, _ = resolve_shift_dh(tr, st, of, 100.0, fallback_m=6.0, half_width_m=10.0)
+    assert isinstance(dh, float)
