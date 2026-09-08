@@ -12,44 +12,35 @@
 > Outputs are pipeline results, **not** validated diagnoses — do not use for operational safety decisions. ·
 > 전 파이프라인·해석해 검증은 실증됨, 현장·상용FEM·실 붕괴라벨 검증은 미수행 — **실무 안전 판정용 아님.**
 
-## 30초 시작 — 한 파일만 실행하면 됩니다
+## 처음 쓰는 컴퓨터에서 — 받기부터 대시보드까지 (PowerShell)
 
-```bash
-git clone https://github.com/tjddnr8334-sudo/inframon
-cd inframon
-python start.py                 # Windows 는 start.bat 더블클릭도 됩니다
+**준비물**: [Python 3.11+](https://www.python.org/downloads/) (설치 화면에서 **"Add python.exe to PATH"** 체크) ·
+[Git](https://git-scm.com/download/win). 이 둘만 있으면 됩니다.
+
+PowerShell 을 열고 (Win+X → 터미널) 한 줄씩:
+
+```powershell
+git clone https://github.com/tjddnr8334-sudo/inframon      # 1. GitHub 에서 받기
+cd inframon                                                 # 2. 폴더로
+python start.py --dashboard                                 # 3. 설치 → 데모 → 대시보드 자동 열림
 ```
 
-`start.py` 가 파이썬 확인 → 가상환경 → 설치 → **데모 파이프라인 실행**까지 알아서 합니다
-(필요한 건 파이썬 3.11+ 뿐, 다시 실행해도 안전합니다).
-
-```
-[4/4] 데모 실행
-  통합 인프라 모니터링 — 파이프라인 완료 (CV→InSAR→PINN→FRAM)
-  측정점/시점    : N=200, M=36
-  최대 CRI       : 0.653 · 경보 경고
-```
-
-| 더 하고 싶으면 | 명령 |
-|---|---|
-| 화면(대시보드)으로 보기 | `python start.py --dashboard` → http://localhost:8501 |
-| 실데이터용 패키지까지 | `python start.py --full` |
-| 단계별 상세 안내 | [docs/시작하기.md](docs/시작하기.md) · [워크플로우 안내서(docx·pdf)](docs/inframon_워크플로우_안내서.pdf) |
-
-## 🖱️ 화면에서 교량 고르기 — 대시보드
-
-```bash
-python start.py --dashboard          # http://localhost:8501
-```
+3번이 끝나면 브라우저에 **http://localhost:8501** 이 뜹니다 — 그게 대시보드입니다.
+(처음 한 번은 설치에 몇 분 걸립니다. 안 열리면 주소를 직접 치세요. 끄려면 터미널에서 Ctrl+C.)
 
 ![dashboard](docs/img/dashboard_start.jpg)
 
-왼쪽에서 **교량명 검색(CSV+OSM)** 또는 **좌표 지정**, 본문 **⓪ 시작** 에서 이 컴퓨터 준비 상태 →
-지도 클릭 → OSM 교량 확인 → 타깃 저장 → **🚀 끝까지 돌리기** 한 버튼. 트랙이 있으면 1분, 없으면
-SLC 다운로드·SNAP 부터 자동(1~3시간, Earthdata 토큰·SNAP·snaphu 필요). 결과는 `docs/bridges/<교량>/`.
+왼쪽 **교량명 검색** 또는 **좌표 지정** → 본문 ⓪ 시작 → 지도 클릭 → OSM 교량 확인 → 타깃 저장 →
+**🚀 끝까지 돌리기**. 트랙이 있는 교량은 1분, 없으면 SLC 다운로드·SNAP 부터 자동(1~3시간).
 
-같은 것을 명령 한 줄로: `python scripts/bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366`
-
+| 그다음 | 명령 |
+|---|---|
+| 실 교량 시연 44초 (명령줄) | `python scripts\demo_4pm.py` |
+| 실 교량·트윈용 패키지까지 | `python start.py --full` |
+| 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
+| SLC 다운로드용 토큰 (한 번) | `python -m inframon --earthdata-save <토큰>` — [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov) 에서 발급 |
+| 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
+| 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · [워크플로우 안내서 PDF](docs/inframon_워크플로우_안내서.pdf) |
 
 ## 🔄 전체 흐름 · Workflow
 
