@@ -32,8 +32,17 @@ python start.py --dashboard                                 # 3. 설치 → 데�
 
 ![dashboard](docs/img/dashboard_start.jpg)
 
-왼쪽 **교량명 검색** 또는 **좌표 지정** → 본문 ⓪ 시작 → 지도 클릭 → OSM 교량 확인 → 타깃 저장 →
-**🚀 끝까지 돌리기**. 트랙이 있는 교량은 1분, 없으면 SLC 다운로드·SNAP 부터 자동(1~3시간).
+**무엇을 누르나** — 본문을 위에서 아래로:
+
+| 순서 | 화면 | 누를 것 |
+|---|---|---|
+| ① | 이 컴퓨터 준비 상태 | 보기만. '모든 항목 준비 완료' 면 아래로 |
+| ② | 교량 선택 | **교량명** 입력 → **🔎 찾기** (또는 **위도·경도** 칸에 직접 입력) |
+| ③ | 전 과정 실행 | 먼저 **📋 계획 보기** (10~30초, SLC 몇 장인지 확인) → 그다음 **▶ 전체 실행** (1~3시간) |
+
+진행 상황에 `②④ SLC·트랙·프레임 — ASC path127 · 41장` 처럼 ✅ 가 찍히면 그 교량은 돌릴 수 있는 것입니다.
+왼쪽 사이드바 **🔎 교량명 검색** → 지도 마커 클릭 → **💾 타깃 저장** → **🚀 끝까지 돌리기** 로 해도 같습니다.
+화면별 스크린샷은 [혼자 돌리기 (pdf)](docs/inframon_혼자_돌리기.pdf) 4장에 있습니다.
 
 | 그다음 | 명령 |
 |---|---|
@@ -42,7 +51,7 @@ python start.py --dashboard                                 # 3. 설치 → 데�
 | 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
 | SLC 다운로드용 토큰 (한 번) | `python -m inframon --earthdata-save <토큰>` — [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov) 에서 발급 |
 | 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
-| 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 6쪽)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
+| 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 9쪽 · 화면별 클릭 순서)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
 
 ## 🔄 전체 흐름 · Workflow
 
