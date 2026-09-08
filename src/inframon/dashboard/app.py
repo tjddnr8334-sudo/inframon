@@ -361,6 +361,42 @@ def bridge_target_section() -> None:
             st.success(f"저장됨 → `{recipe_path}` · 점 추출 AOI ≈ {w_m:.0f}×{h_m:.0f} m "
                        f"(buffer {aoi_buffer}m). 지도 다시 그리면 파랑=AOI·주황=교량.")
             st.json(tgt.model_dump())
+        # ── 여기서 끝까지: bridge_run(좌표 하나 → SLC → InSAR → PS/DS → PINN → CRI → 트윈) ──
+        st.markdown("---")
+        st.markdown("**▶ 이 교량 끝까지 돌리기** — 트랙이 있으면 1분, 없으면 SLC 다운로드·SNAP 부터(1~3시간)")
+        cc1, cc2 = st.columns([3, 2])
+        with cc1:
+            track_hint = st.text_input("트랙 h5 (있으면 경로, 없으면 비움)", "", key="run_track",
+                                       help="비우면 ⓪ SLC 검색·다운로드·InSAR 처리부터 자동. Earthdata 토큰·SNAP·snaphu 필요 — --doctor 로 확인")
+        with cc2:
+            out_dir = st.text_input("결과 폴더", f"docs/bridges/{sel.name or 'bridge'}", key="run_out")
+        if click and st.button("🚀 끝까지 돌리기 (bridge_run)", key="btn_bridge_run", type="primary"):
+            import subprocess
+            import sys as _sys
+            args = [_sys.executable, "scripts/bridge_run.py", "--name", sel.name or "bridge",
+                    "--lat", f"{click['lat']:.6f}", "--lon", f"{click['lng']:.6f}", "--out", out_dir]
+            if track_hint.strip():
+                args += ["--track", track_hint.strip()]
+            st.code(" ".join(args[1:]), language="bash")
+            log = st.empty()
+            lines: list[str] = []
+            with st.spinner("실행 중 — 단계가 아래에 찍힙니다"):
+                proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                        text=True, encoding="utf-8", errors="replace",
+                                        env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"})
+                for ln in proc.stdout:                          # type: ignore[union-attr]
+                    if "Warning" in ln or "warn" in ln:
+                        continue
+                    lines.append(ln.rstrip())
+                    log.code("\n".join(lines[-40:]), language="text")
+                proc.wait()
+            if proc.returncode == 0:
+                st.success(f"완료 → `{out_dir}/결과.md` · 3D: `{out_dir}/twin.viewer.html`(더블클릭)")
+                res = Path(out_dir) / "결과.md"
+                if res.exists():
+                    st.markdown(res.read_text(encoding="utf-8"))
+            else:
+                st.error(f"실패(rc={proc.returncode}) — 위 로그의 '·' 줄이 사유입니다")
     elif click:
         st.caption("‘교량 확인’을 눌러 이 위치가 교량인지 OSM 에서 조회하세요.")
 

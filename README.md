@@ -34,7 +34,21 @@ python start.py                 # Windows 는 start.bat 더블클릭도 됩니�
 |---|---|
 | 화면(대시보드)으로 보기 | `python start.py --dashboard` → http://localhost:8501 |
 | 실데이터용 패키지까지 | `python start.py --full` |
-| 단계별 상세 안내 | [docs/시작하기.md](docs/시작하기.md) |
+| 단계별 상세 안내 | [docs/시작하기.md](docs/시작하기.md) · [워크플로우 안내서(docx·pdf)](docs/inframon_워크플로우_안내서.pdf) |
+
+## 🖱️ 화면에서 교량 고르기 — 대시보드
+
+```bash
+python start.py --dashboard          # http://localhost:8501
+```
+
+![dashboard](docs/img/dashboard_start.jpg)
+
+왼쪽에서 **교량명 검색(CSV+OSM)** 또는 **좌표 지정**, 본문 **⓪ 시작** 에서 이 컴퓨터 준비 상태 →
+지도 클릭 → OSM 교량 확인 → 타깃 저장 → **🚀 끝까지 돌리기** 한 버튼. 트랙이 있으면 1분, 없으면
+SLC 다운로드·SNAP 부터 자동(1~3시간, Earthdata 토큰·SNAP·snaphu 필요). 결과는 `docs/bridges/<교량>/`.
+
+같은 것을 명령 한 줄로: `python scripts/bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366`
 
 
 ## 🔄 전체 흐름 · Workflow
