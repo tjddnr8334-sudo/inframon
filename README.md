@@ -42,7 +42,7 @@ python start.py --dashboard                                 # 3. 설치 → 데�
 | 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
 | SLC 다운로드용 토큰 (한 번) | `python -m inframon --earthdata-save <토큰>` — [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov) 에서 발급 |
 | 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
-| 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · [워크플로우 안내서 PDF](docs/inframon_워크플로우_안내서.pdf) |
+| 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 6쪽)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
 
 ## 🔄 전체 흐름 · Workflow
 
