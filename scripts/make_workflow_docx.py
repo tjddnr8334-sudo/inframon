@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+"""유저용 워크플로우 안내서(.docx) — 무엇을 하는 프로그램이고, 어떻게 돌리며, 결과를 어떻게 읽나.
+
+    python scripts/make_workflow_docx.py            → docs/inframon_워크플로우_안내서.docx
+"""
+
+from __future__ import annotations
+
+import sys
+from datetime import date
+from pathlib import Path
+
+from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Cm, Pt, RGBColor
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "docs/inframon_워크플로우_안내서.docx"
+IMG = ROOT / "docs/img"
+
+# ── 스타일 도우미 ─────────────────────────────────────────────────────────
+def _font(run, size=10.5, bold=False, color=None, mono=False):
+    run.font.size = Pt(size)
+    run.font.bold = bold
+    name = "Consolas" if mono else "맑은 고딕"
+    run.font.name = name
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
+    if color:
+        run.font.color.rgb = RGBColor(*color)
+
+
+def H(doc, text, level=1):
+    p = doc.add_heading(level=level)
+    r = p.add_run(text)
+    _font(r, {0: 22, 1: 16, 2: 13, 3: 11.5}[level], bold=True, color=(0x1F, 0x3A, 0x5F))
+    return p
+
+
+def P(doc, text="", *, bold=False, size=10.5, color=None, after=6):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_after = Pt(after)
+    for i, chunk in enumerate(text.split("**")):
+        if chunk:
+            _font(p.add_run(chunk), size, bold=(bold or i % 2 == 1), color=color)
+    return p
+
+
+def CODE(doc, lines):
+    p = doc.add_paragraph()
+    p.paragraph_format.left_indent = Cm(0.6)
+    p.paragraph_format.space_after = Pt(8)
+    pPr = p._p.get_or_add_pPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear"); shd.set(qn("w:color"), "auto"); shd.set(qn("w:fill"), "F2F4F7")
+    pPr.append(shd)
+    for i, ln in enumerate(lines if isinstance(lines, list) else [lines]):
+        r = p.add_run(ln + ("\n" if i < len(lines) - 1 else ""))
+        _font(r, 9.5, mono=True, color=(0x1B, 0x26, 0x31))
+    return p
+
+
+def BUL(doc, text, level=0):
+    p = doc.add_paragraph(style="List Bullet")
+    p.paragraph_format.left_indent = Cm(0.8 + 0.6 * level)
+    p.paragraph_format.space_after = Pt(3)
+    for i, chunk in enumerate(text.split("**")):
+        if chunk:
+            _font(p.add_run(chunk), 10.5, bold=(i % 2 == 1))
+    return p
+
+
+def TABLE(doc, rows, widths=None, header=True):
+    t = doc.add_table(rows=len(rows), cols=len(rows[0]))
+    t.style = "Table Grid"
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            c = t.cell(i, j)
+            c.text = ""
+            p = c.paragraphs[0]
+            for k, chunk in enumerate(str(cell).split("**")):
+                if chunk:
+                    _font(p.add_run(chunk), 9.5, bold=(header and i == 0) or k % 2 == 1)
+            if header and i == 0:
+                tcPr = c._tc.get_or_add_tcPr()
+                shd = OxmlElement("w:shd")
+                shd.set(qn("w:val"), "clear"); shd.set(qn("w:color"), "auto"); shd.set(qn("w:fill"), "DCE6F1")
+                tcPr.append(shd)
+    if widths:
+        for row in t.rows:
+            for j, w in enumerate(widths):
+                row.cells[j].width = Cm(w)
+    doc.add_paragraph().paragraph_format.space_after = Pt(4)
+    return t
+
+
+def FIG(doc, path: Path, caption: str, width_cm=16.0):
+    if not path.exists():
+        P(doc, f"(그림 없음: {path.name})", color=(0x99, 0x99, 0x99))
+        return
+    doc.add_picture(str(path), width=Cm(width_cm))
+    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p = P(doc, caption, size=9, color=(0x55, 0x5F, 0x6B), after=10)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+
+# ── 문서 ─────────────────────────────────────────────────────────────────
+def build() -> Path:
+    doc = Document()
+    for s in doc.sections:
+        s.left_margin = s.right_margin = Cm(2.2)
+        s.top_margin = s.bottom_margin = Cm(2.0)
+    st = doc.styles["Normal"]
+    st.font.name = "맑은 고딕"
+    st.element.rPr.rFonts.set(qn("w:eastAsia"), "맑은 고딕")
+    st.font.size = Pt(10.5)
+
+    # 표지
+    p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(120)
+    _font(p.add_run("inframon"), 30, bold=True, color=(0x1F, 0x3A, 0x5F))
+    p = doc.add_paragraph()
+    _font(p.add_run("교량 InSAR → PINN 가상센싱 → 위험도 → IFC 디지털 트윈"), 15, color=(0x33, 0x44, 0x55))
+    p = doc.add_paragraph()
+    _font(p.add_run("사용자 워크플로우 안내서"), 20, bold=True)
+    p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(40)
+    _font(p.add_run(f"{date.today().isoformat()} · https://github.com/tjddnr8334-sudo/inframon"),
+          10, color=(0x77, 0x77, 0x77))
+    doc.add_page_break()
+
+    # 1. 이게 뭔가
+    H(doc, "1. 이 프로그램이 하는 일", 1)
+    P(doc, "위성 레이더(Sentinel-1 InSAR)로 **교량의 미세 변위**를 재고, 그 관측을 물리 모델(PINN)에 "
+           "넣어 **관측점이 없는 곳까지 변위장**을 채우고, 그것으로 **위험도(CRI)**를 내고, "
+           "전부를 **3D 디지털 트윈(IFC)** 위에 올립니다. 유저가 하는 것은 **교량을 고르는 것**뿐입니다.")
+    TABLE(doc, [
+        ["단계", "무엇을", "어디서"],
+        ["① 교량 선정", "좌표 하나 → 연장·경간·폭·형식·형하고", "파트너 실측 CSV → OSM → 표준데이터"],
+        ["⓪ SLC 확보", "Sentinel-1 SLC 검색·다운로드", "ASF (Earthdata 토큰 필요)"],
+        ["⓪ InSAR", "간섭도 → 위상 언래핑 → 변위 시계열", "SNAP + snaphu"],
+        ["④ PS/DS", "교량 위 산란체 선별, 쉬프트 보정", "inframon"],
+        ["⑤ 잔차고도", "점이 지면이 아니라 **교면 위**임을 고도로 증명", "inframon (수직기선 B⊥)"],
+        ["⑥ IFC 트윈", "실측 제원 → IFC4 → 점을 부재에 결합 → 3D", "inframon"],
+        ["⑦ PINN·CRI", "가상센싱(전체 변위장) → 위험도·경보", "inframon"],
+        ["⑧ 브리프", "건기연 형식 4단 그림 (a)(b)(c)(d)", "inframon"],
+        ["⑨ 감사", "이 결과를 보고에 써도 되는가 — 파일이 스스로 판정", "inframon"],
+        ["⑭ BMAP", "파트너 플랫폼(Pontifex) 전송", "HTTP API"],
+    ], widths=[2.6, 8.0, 5.4])
+
+    # 2. 흐름 그림
+    H(doc, "2. 전체 흐름", 1)
+    CODE(doc, [
+        "  유저: 교량 좌표 하나  (예: 마포대교 37.5337, 126.9366)",
+        "         │",
+        "         ▼",
+        "  ① 제원 ──► ⓪ SLC 다운로드 ──► ⓪ InSAR(SNAP·snaphu) ──► 트랙 h5",
+        "         │                                                  │",
+        "         │        (트랙이 이미 있으면 여기부터)              ▼",
+        "         └──► ② 데크선 ─► ③ 지면 ─► ④ 점 선택(쉬프트 보정) ─► ⑤ 잔차고도",
+        "                                                            │",
+        "                       ┌────────────────────────────────────┘",
+        "                       ▼",
+        "  ⑥ IFC 트윈(3D) ◄── ⑦ PINN 가상센싱 → CRI 위험도 ──► ⑧ 브리프 그림",
+        "                       │",
+        "                       ▼",
+        "  ⑨ 감사(보고 가능 / 조건부 / 불가) ──► ⑩ 결과.md ──► ⑭ BMAP 전송(선택)",
+    ])
+    P(doc, "각 단계는 **없는 것은 없다고 적고 넘어갑니다** — 멈추지 않습니다. 어느 교량을 보고에 쓸지는 "
+           "감사 판정과 결과.md 를 보고 **유저가 정합니다**.")
+
+    # 3. 설치
+    H(doc, "3. 다른 컴퓨터에서 처음부터 (PowerShell)", 1)
+    H(doc, "3.1 준비물", 2)
+    TABLE(doc, [
+        ["", "필요", "쓰는 곳"],
+        ["Python 3.11+", "python.org — 설치 시 'Add python.exe to PATH' 체크", "전부"],
+        ["Git", "git-scm.com", "받기"],
+        ["**Earthdata 토큰**", "urs.earthdata.nasa.gov 가입 → 프로필 → Generate Token", "⓪ SLC 다운로드"],
+        ["**SNAP**", "step.esa.int/main/download/snap-download", "⓪ InSAR 처리"],
+        ["**snaphu**(WSL)", "wsl --install → sudo apt install snaphu", "⓪ 언래핑"],
+        ["디스크", "SLC 1장 ≈ 4 GB × 12장 ≈ 50 GB", "⓪"],
+    ], widths=[3.2, 8.4, 4.4])
+    P(doc, "트랙이 이미 있는 교량(정자교·청양교·내곡교 등)만 돌리면 **Python·Git 만** 있으면 됩니다. "
+           "위 표의 굵은 세 가지는 프로그램이 대신 설치·가입해 줄 수 없습니다.")
+
+    H(doc, "3.2 받기·설치 (10분)", 2)
+    CODE(doc, ["git clone https://github.com/tjddnr8334-sudo/inframon",
+               "cd inframon",
+               "python start.py --full"])
+    P(doc, "확인: 마지막 줄에 **판정: ✅ 코어 동작 가능**. `--full` 이 가상환경(.venv)을 만들고 "
+           "torch·pyproj·scipy·matplotlib·ifcopenshell 까지 깝니다.")
+
+    H(doc, "3.3 이 PC 에 뭐가 있나 (1분)", 2)
+    CODE(doc, ["python -m inframon --doctor"])
+    P(doc, "확인: **[외부 도구·자격]** 세 줄 — Earthdata / SNAP gpt / snaphu 각각 ✅❌. ❌ 면 그 줄에 설치법이 적혀 있습니다.")
+
+    H(doc, "3.4 먼저 되는 것으로 한 번 (1분)", 2)
+    CODE(doc, ["python scripts\\demo_4pm.py"])
+    P(doc, "정자교를 44초에 끝까지 돌리고 결과 창 4개(3D 속도 · 3D 위험도 · 브리프 그림 · 결과.md)를 엽니다. "
+           "확인: 터미널에 **⑩ 결과 문서** 까지 찍히고 `rc=0`.")
+    FIG(doc, IMG / "twin_3d_jeongjagyo.png", "그림 1. 3D 디지털 트윈 — IFC 부재(A1·P1~P4·S1) 위에 InSAR 점. 점을 클릭하면 값·부재·GlobalId.")
+
+    H(doc, "3.5 토큰 저장 (한 번)", 2)
+    CODE(doc, ["python -m inframon --earthdata-save <토큰>"])
+    P(doc, "`~/.inframon/earthdata_token` 에 저장됩니다. 확인: `--doctor` 에서 Earthdata ✅.")
+
+    H(doc, "3.6 새 교량 — 계획만 먼저 (1분, 토큰 불필요)", 2)
+    CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan"])
+    P(doc, "확인: **②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** — 어떤 궤도로 몇 장이 있는지. "
+           "장면 수가 나오면 다음으로.")
+
+    H(doc, "3.7 새 교량 — 끝까지 (1~3시간)", 2)
+    CODE(doc, ["python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366"])
+    P(doc, "트랙이 없으므로 **⓪ SLC 다운로드 → SNAP → 언래핑**부터 갑니다. 단계마다 찍힙니다:")
+    CODE(doc, ["⓪ SLC → InSAR      ← 대부분의 시간 (다운로드 GB 단위 · SNAP 수십 분)",
+               "① 제원  ② 데크선  ③ 지면  ④ 점 선택  ⑤ 잔차고도",
+               "⑥ IFC 트윈  ⑦ PINN·CRI  ⑧ 브리프  ⑨ 감사  ⑩ 결과 문서"])
+    P(doc, "확인: `docs\\bridges\\마포대교\\결과.md` — 각 단계가 무엇을 어디서 가져왔는지, 못 한 것은 왜인지.")
+
+    H(doc, "3.8 결과 보기", 2)
+    TABLE(doc, [
+        ["파일", "무엇"],
+        ["twin.viewer.html", "3D 트윈(변위 속도 채널) — 더블클릭, 인터넷 불필요"],
+        ["twin_cri.viewer.html", "3D 트윈(CRI 위험도 채널)"],
+        ["brief.png", "건기연 형식 4단 그림 (a)(b)(c)(d)"],
+        ["결과.md", "수치 표 · 출처 · 감사 판정 · 적어 둘 것 · 원리상 못 하는 것"],
+        ["*_proxy.ifc", "IFC4 프록시 교량 — Revit·BlenderBIM 에서 열림"],
+    ], widths=[4.5, 11.5])
+
+    # 4. 결과 읽기
+    doc.add_page_break()
+    H(doc, "4. 결과를 어떻게 읽나", 1)
+    H(doc, "4.1 브리프 그림 (a)(b)(c)(d)", 2)
+    FIG(doc, ROOT / "docs/bridges/정자교/brief.png",
+        "그림 2. 정자교 — (a) PS 교축 배치 (b) 잔차고도: 교면 위 점이 지면보다 +5.2 ± 1.2 m (c) 속도 ± 95% CI (d) 시계열·추세")
+    TABLE(doc, [
+        ["패널", "보는 것", "판단"],
+        ["(a)", "PS 가 교면 안에 몇 개, 어디에", "교면 밖 점은 지반 — 교량 값에 섞이면 안 됨"],
+        ["(b)", "DEM 대비 상대고도", "교면 위 점이 지면보다 형하고만큼 높으면 **교면 위 산란체 확인**"],
+        ["(c)", "속도 ± 95% CI, ±0.5 mm/yr 참고범위", "오차막대가 0 을 포함 → 유의한 변형 없음"],
+        ["(d)", "시계열 중앙값 · 추세", "계절 주기 정상 · 추세 mm/yr"],
+    ], widths=[1.4, 6.0, 8.6])
+
+    H(doc, "4.2 감사 판정", 2)
+    TABLE(doc, [
+        ["판정", "뜻", "예"],
+        ["✅ 보고 가능", "언래핑·교량 포함·경간·PINN 물리값 전부 통과", "청양교 · 내곡교"],
+        ["🟡 조건부", "쓸 수는 있으나 사유가 있음 — 사유를 함께 적을 것", "정자교(붕괴 교량, 관측으로 못 봄)"],
+        ["❌ 보고 불가", "래핑 위상 · 교량 위 점 0 · 비물리 값", "동수원(OSM 연장 불일치)"],
+    ], widths=[3.0, 8.0, 5.0])
+    P(doc, "**ⓘ 표기**는 감점이 아니라 반드시 알아야 할 사실입니다 — 예: 'EI·고유진동수는 관측값이 아니라 설계 제원 기반'.")
+
+    H(doc, "4.3 PINN 가상센싱", 2)
+    FIG(doc, ROOT / "docs/twin/twin_pinn.png",
+        "그림 3. 관측점 12개로 학습한 PINN 이 교축 200점 × 201시점의 전체 변위장을 채운다. 흰 선 = 관측점 위치. 관측점 밖은 외삽.")
+
+    # 5. 못 하는 것
+    H(doc, "5. 이 프로그램이 원리상 못 하는 것 — 결과를 읽기 전에", 1)
+    TABLE(doc, [
+        ["항목", "왜", "그러면"],
+        ["EI(강성) 관측 식별", "InSAR 는 상대 변위 — 자중 처짐(청양교 이론 345 mm)은 위성이 보기 전에 이미 들어가 있음", "EI·고유진동수는 설계 제원 기반 (ⓘ 표기). 절대 강성은 레벨링·GNSS 필요"],
+        ["데크 위 PS 밀도", "Sentinel-1 화소 ~11 m. 81 m 교량은 교축 구간당 화소 1.3개", "고해상도 SAR·코너리플렉터. 긴 교량(마포대교 1,390 m)은 유리"],
+        ["쉬프트 방향", "궤도 heading 이 정함 — 조정 대상 아님", "크기 δh 는 잔차고도로 관측값 대체"],
+        ["국부 붕괴 탐지", "정자교 2023-04-05 보도부 붕괴(수 m)는 화소보다 작음. 열·추세 제거 후 계단 z=−0.6", "알려진 사고 교량은 자동 표기하고 '정상'을 보고 근거로 쓰지 않음"],
+        ["시점 수", "속도 95% CI 는 장 수가 정함. 25장 → 2.5 mm/yr, 201장 → 0.2 mm/yr", "브리프 기준 ≥100장. 부족하면 판정 보류"],
+    ], widths=[3.2, 7.2, 5.6])
+
+    # 6. 막히면
+    H(doc, "6. 막히면", 1)
+    for t in [
+        "**⓪ '토큰 없음'** → 3.5 로. 발급은 urs.earthdata.nasa.gov (1분).",
+        "**'SNAP gpt 없음'** → SNAP 설치 후 PATH 또는 환경변수 SNAP_HOME.",
+        "**'snaphu 없음'** → WSL 에 snaphu. 언래핑이 실패하면 파라미터 사다리 4단계가 자동으로 돌고, 그래도 안 되면 unwrap_retry.json 에 사유.",
+        "**OSM 504** → 자동 재시도 3회. 캐시(osm_roads_500m.json)가 있으면 캐시.",
+        "**중간에 죽음** → 같은 명령 다시. 받은 SLC 는 재사용. 결과.md 에 '예외:' 줄이 남음.",
+        "**'교면 위 점 0'** → 교량이 작거나 궤도 방향이 불리함. 계획(3.6)에서 장면 수·궤도를 먼저 볼 것.",
+    ]:
+        BUL(doc, t)
+
+    # 7. 예시 교량
+    H(doc, "7. 지금까지 돌린 교량 (docs/bridges/)", 1)
+    TABLE(doc, [
+        ["교량", "점", "CRI", "잔차고도(교면−지면)", "감사", "비고"],
+        ["청양교", "44", "0.784", "+12.5 ± 6.4 m", "보고 가능", "25시점 — 속도 CI 넓음"],
+        ["정자교", "12", "0.569", "+5.2 ± 1.2 m (z 4.3)", "조건부", "2023-04-05 붕괴 교량 — 관측으로 못 봄"],
+        ["내곡교", "34", "0.821 경고", "—", "보고 가능", "건기연 브리프 같은 교량 (PS 35 vs 32)"],
+        ["칠백로", "22", "0.808 경고", "—", "조건부", ""],
+        ["상규", "3", "0.879 위험", "—", "보고 가능", "점 3개 — 판정 신뢰도 낮음"],
+        ["동수원", "77", "0.729", "—", "보고 불가", "CSV 890 m vs OSM 1227 m"],
+    ], widths=[2.0, 1.2, 2.2, 3.6, 2.2, 4.8])
+    P(doc, "여러 교량을 한 번에: `python scripts\\bridge_run.py --batch docs\\bridges\\batch.json`")
+
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(str(OUT))
+    return OUT
+
+
+if __name__ == "__main__":
+    out = build()
+    print(f"저장: {out}  ({out.stat().st_size:,} B)")
+    sys.exit(0)
