@@ -14,7 +14,7 @@
 
 옵션:
     python start.py --dashboard   설치 후 대시보드까지 띄운다(브라우저 자동 열림)
-    python start.py --full        실 교량 시연·실데이터용 패키지까지(대시보드·위성조회·PINN·트윈·그림)
+    python start.py --full        **전부** — 대시보드·SLC 검색·HyP3·PINN·CV·트윈·그림·API (한 줄로 끝)
     python start.py --no-demo     설치만 하고 데모는 건너뛴다
 
 표준 라이브러리만 쓴다 — 이 파일을 돌리는 데 필요한 건 파이썬뿐이다.
@@ -94,7 +94,8 @@ def ensure_venv() -> Path:
 
 def install(py: Path, extras: str | None) -> None:
     target = f".[{extras}]" if extras else "."
-    say(f"  설치: {target}" + ("  (수백 MB — 몇 분 걸릴 수 있습니다)" if extras else ""))
+    say(f"  설치: {target}" + ("  (torch 포함 1~2 GB — 5~10분 걸릴 수 있습니다)" if extras == "full"
+                            else "  (수백 MB — 몇 분)" if extras else ""))
     run([str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"], quiet=True, check=False)
     run([str(py), "-m", "pip", "install", "-q", "-e", target])
 
@@ -153,7 +154,7 @@ def main() -> None:
     py = ensure_venv()
 
     step(3, total, "inframon 설치")
-    extras = "dashboard,search,demo" if a.full else ("dashboard" if a.dashboard else None)
+    extras = "full" if a.full else ("dashboard" if a.dashboard else None)
     install(py, extras)
 
     ran = False

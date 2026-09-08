@@ -17,13 +17,13 @@ _DEPS: tuple[tuple[str, bool, str, str], ...] = (
     ("numpy", True, "코어 수치 연산", "pip install -e ."),
     ("h5py", True, "project.h5·Track H5 입출력", "pip install -e ."),
     ("pydantic", True, "데이터 계약(스키마)", "pip install -e ."),
-    ("scipy", False, "CV 형태학(거리변환)·StaMPS .mat 로드", "pip install -e .[cv]"),
-    ("torch", False, "PINN real(PDE+FEM)·CV transformer 백엔드", "pip install -e .[pinn]"),
-    ("transformers", False, "CV transformer 분할·SAM 부재 분할", "pip install -e .[cv]"),
-    ("rasterio", False, "GeoTIFF 에서 geo_transform/crs 읽기", "conda install -c conda-forge rasterio"),
-    ("pyproj", False, "Track CRS ≠ CV CRS 일 때 좌표 재투영", "pip install pyproj"),
-    ("asf_search", False, "Sentinel-1 SLC 검색(트랙 선별)", "pip install -e .[search]"),
-    ("streamlit", False, "대시보드 뷰어", "pip install -e .[dashboard]"),
+    ("scipy", False, "CV 형태학(거리변환)·StaMPS .mat 로드", "python start.py --full  (전부 한 번에)"),
+    ("torch", False, "PINN real(PDE+FEM)·CV transformer 백엔드", "python start.py --full  (전부 한 번에)"),
+    ("transformers", False, "CV transformer 분할·SAM 부재 분할", "python start.py --full  (전부 한 번에)"),
+    ("rasterio", False, "GeoTIFF 에서 geo_transform/crs 읽기", "python start.py --full  (전부 한 번에)"),
+    ("pyproj", False, "Track CRS ≠ CV CRS 일 때 좌표 재투영", "python start.py --full  (전부 한 번에)"),
+    ("asf_search", False, "Sentinel-1 SLC 검색(트랙 선별)", "python start.py --full  (전부 한 번에)"),
+    ("streamlit", False, "대시보드 뷰어", "python start.py --full  (전부 한 번에)"),
 )
 
 

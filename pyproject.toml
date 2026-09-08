@@ -55,8 +55,15 @@ bim = ["ifcopenshell>=0.8", "pyproj>=3.6"]
 # OpenSees(Timoshenko)로 만들어 PINN 역산과 대조. Windows 는 DLL 이슈로 리눅스/WSL 권장.
 fem = ["openseespy>=3.5"]
 # 실 교량 시연(scripts/demo_4pm.py · bridge_run.py): PINN·IFC 트윈·브리프 그림·좌표 투영.
-# 새 PC 에서 `python start.py --full` 이 이것을 깐다. 없으면 시연이 중간에 죽는다.
 demo = ["torch>=2.2", "pyproj>=3.6", "scipy>=1.11", "matplotlib>=3.7", "ifcopenshell>=0.8"]
+# **전부** — 새 PC 에서 `python start.py --full` 한 줄이 이것을 깐다. 대시보드가 ⚠ 로 표시하던
+# scipy·torch·transformers·rasterio·pyproj·asf_search·hyp3 를 각각 치지 않아도 되게.
+# rasterio 는 Windows 도 pip wheel 로 된다(conda 불필요). mintpy·gdal 은 WSL 레인용이라 제외.
+full = ["torch>=2.2", "pyproj>=3.6", "scipy>=1.11", "matplotlib>=3.7", "ifcopenshell>=0.8",
+        "scikit-image>=0.22", "imageio>=2.31", "pillow>=10", "transformers>=4.40", "timm>=0.9",
+        "rasterio>=1.3", "asf_search>=7.0", "hyp3_sdk>=6.0",
+        "streamlit>=1.33", "plotly>=5.20", "folium>=0.16", "streamlit-folium>=0.20",
+        "fastapi>=0.110", "uvicorn>=0.29", "networkx>=3.2"]
 dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27", "ifcopenshell>=0.8"]
 
 [project.scripts]

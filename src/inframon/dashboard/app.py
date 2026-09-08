@@ -246,7 +246,7 @@ def bridge_target_section() -> None:
         import folium
         from streamlit_folium import st_folium
     except ImportError:
-        st.info("지도 기능에는 folium·streamlit-folium 이 필요합니다: `pip install -e .[dashboard]`")
+        st.info("지도 기능에는 folium·streamlit-folium 이 필요합니다: `python start.py --full`")
         return
 
     recipe_path = st.text_input("레시피 저장 경로", f"{_recipe_dir()}/bridge_target.json",
@@ -492,7 +492,7 @@ def slc_search_section() -> None:
     try:
         import asf_search  # noqa: F401
     except ImportError:
-        st.info("SLC 검색에는 asf_search 가 필요합니다: `pip install -e .[search]`")
+        st.info("SLC 검색에는 asf_search 가 필요합니다: `python start.py --full`")
         return
 
     from inframon.insar.recipe import (
@@ -2180,7 +2180,7 @@ def tab_psi(start: date) -> None:
         from streamlit_folium import st_folium
         from inframon.insar.bim_export import _hex_colors, _VALUE_SPECS
     except ImportError:
-        st.info("지도에는 folium·streamlit-folium 이 필요합니다: `pip install -e .[dashboard]`")
+        st.info("지도에는 folium·streamlit-folium 이 필요합니다: `python start.py --full`")
         return
 
     # 값 계산: LOS 속도·연직(입사각 39° 가정)·누적 변위
@@ -2262,13 +2262,13 @@ def _env_checks() -> list[dict]:
         hyp3 = False
     rows.append({"name": "레인 C · HyP3 (클라우드)", "ok": hyp3,
                  "why": "로컬 연산 없이 클라우드 처리",
-                 "fix": 'pip install -e ".[hyp3]"'})
+                 "fix": "python start.py --full"})
     # 자격·데이터
     netrc = (Path.home() / ".netrc").exists() or (Path.home() / "_netrc").exists()
     cred = netrc or bool(os.environ.get("EARTHDATA_TOKEN"))
     rows.append({"name": "Earthdata 자격 (SLC 다운로드)", "ok": cred,
                  "why": "위성 원본 내려받기",
-                 "fix": "https://urs.earthdata.nasa.gov 가입 → ~/.netrc 또는 --earthdata-token"})
+                 "fix": "urs.earthdata.nasa.gov 가입 → Generate Token → python -m inframon --earthdata-save <토큰>"})
     try:
         from inframon.insar.slc_store import get_slc_dir, scan
         d = get_slc_dir()
