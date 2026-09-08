@@ -119,22 +119,58 @@ def main() -> None:
     axx.legend(fontsize=7.5, loc="upper right")
     axx.grid(alpha=.25)
 
-    # (b) 잔차고도 — 없다
+    # (b) 잔차고도 — 트랙에 있으면 그린다, 없으면 없다고 적는다
     axx = ax[1]
+    rh = tr.get("residual_height_m")
+    rs = tr.get("residual_height_sigma_m")
     axx.set_xlim(-12, L + 12)
-    axx.set_ylim(-25, 5)
-    axx.axhline(0, color="#7f8c8d", lw=.8, ls="--")
-    axx.axhline(-a.height, color="#8a7a5c", lw=1.2, label=f"지표 기준선 −{a.height:g} m (형하고)")
-    axx.text(.5, .55, "잔차고도(DEM 대비 PS 상대고도) — 아직 없음\n\n"
-             "PSI 높이 추정(수직 기선 B⊥)이 있어야 한다.\n"
-             "이 트랙에는 그 값이 없어 '교면 위 산란체' 를 고도로 증명하지 못한다.\n"
-             "지금 근거는 평면 배치(a)와 보도선 정렬뿐이다.",
-             ha="center", va="center", transform=axx.transAxes, fontsize=9.5, color="#7f8c8d",
-             bbox=dict(boxstyle="round", fc="#f8f9f9", ec="#bdc3c7"))
+    if rh is not None and np.isfinite(rh).any():
+        import json as _json
+        rh, rs = np.asarray(rh, float), np.asarray(rs, float)
+        gmeta = _json.loads(str(tr["attrs"].get("residual_height", "{}") or "{}"))
+        gt = gmeta.get("group_test") or {}
+        on_deck_all = np.abs(of) <= (a.offset if a.offset is not None else half)
+        in_span = (st >= -2) & (st <= L + 2)
+        on = on_deck_all & in_span
+        # 지면 기준선 = 교면 밖 점의 가중평균(기준점 오프셋을 흡수한다)
+        base = gt.get("mean_off_m", float(np.nanmedian(rh[~on])) if (~on).any() else 0.0)
+        axx.axhline(base, color="#8a7a5c", lw=1.4, label=f"지표 기준선 (교면 밖 평균 {base:+.1f} m)")
+        axx.axhline(base + a.height, color="#2471a3", lw=1.2, ls="--",
+                    label=f"교면 예상 = 지표 + 형하고 {a.height:g} m")
+        axx.errorbar(st[~on & in_span], rh[~on & in_span], yerr=rs[~on & in_span], fmt="o",
+                     ms=4, color="#bdc3c7", ecolor="#d5dbdb", elinewidth=.8, capsize=2,
+                     zorder=2, label=f"교면 밖 {int((~on & in_span).sum())}")
+        axx.errorbar(st[on], rh[on], yerr=rs[on], fmt="o", ms=5, color="#2980b9",
+                     ecolor="#5d6d7e", elinewidth=1, capsize=2.5, zorder=3,
+                     label=f"교면 위 {int(on.sum())}")
+        if gt.get("ok"):
+            axx.axhspan(gt["mean_on_m"] - gt["se_on_m"], gt["mean_on_m"] + gt["se_on_m"],
+                        color="#2980b9", alpha=.12, zorder=1)
+            ttl = (f"(b) DEM 대비 상대고도(잔차고도) — 교면 위 {gt['mean_on_m']:+.1f}±{gt['se_on_m']:.1f} m "
+                   f"vs 밖 {gt['mean_off_m']:+.1f}±{gt['se_off_m']:.1f} m\n"
+                   f"차이 {gt['diff_m']:+.1f} ± {gt['se_diff_m']:.1f} m (z={gt['z']:.2f}) · "
+                   f"점별 σ 중앙 {np.nanmedian(rs):.0f} m · B⊥ {gmeta.get('bperp_min_m', 0):+.0f}~{gmeta.get('bperp_max_m', 0):+.0f} m")
+        else:
+            ttl = "(b) DEM 대비 상대고도(잔차고도)"
+        lo = np.nanpercentile(rh - rs, 5)
+        hi = np.nanpercentile(rh + rs, 95)
+        axx.set_ylim(min(lo, base - 5), max(hi, base + a.height + 5))
+        axx.set_title(ttl, fontsize=9.5)
+        axx.legend(fontsize=7, loc="lower right")
+    else:
+        axx.set_ylim(-25, 5)
+        axx.axhline(0, color="#7f8c8d", lw=.8, ls="--")
+        axx.axhline(-a.height, color="#8a7a5c", lw=1.2, label=f"지표 기준선 −{a.height:g} m (형하고)")
+        axx.text(.5, .55, "잔차고도(DEM 대비 PS 상대고도) — 아직 없음\n\n"
+                 "PSI 높이 추정(수직 기선 B⊥)이 있어야 한다.\n"
+                 "이 트랙에는 그 값이 없어 '교면 위 산란체' 를 고도로 증명하지 못한다.\n"
+                 "지금 근거는 평면 배치(a)와 보도선 정렬뿐이다.",
+                 ha="center", va="center", transform=axx.transAxes, fontsize=9.5, color="#7f8c8d",
+                 bbox=dict(boxstyle="round", fc="#f8f9f9", ec="#bdc3c7"))
+        axx.set_title("(b) DEM 대비 상대고도 종단 — 잔차고도 추정 필요(다음 단계)", fontsize=10)
+        axx.legend(fontsize=7.5, loc="lower right")
     axx.set_xlabel("교축 거리 [m]")
     axx.set_ylabel("DEM 대비 상대고도 [m]")
-    axx.set_title("(b) DEM 대비 상대고도 종단 — 잔차고도 추정 필요(다음 단계)", fontsize=10)
-    axx.legend(fontsize=7.5, loc="lower right")
     axx.grid(alpha=.25)
 
     # (c) LOS 속도 vs 교축, 95% CI
@@ -168,17 +204,22 @@ def main() -> None:
     ref_txt = ("교대 기준점 적용" if (prof.reference and prof.reference.get("applied"))
                else "교대 기준점 미적용(양끝 점 없음)")
     axx.set_title(f"(c) LOS 변위속도 — {ref_txt}\n"
-                  f"속도 {np.nanmin(v[m]) if m.any() else 0:+.2f} ~ {np.nanmax(v[m]) if m.any() else 0:+.2f} mm/yr", fontsize=10)
+                  f"속도 {np.nanmin(v[shown]) if shown.any() else 0:+.2f} ~ "
+                  f"{np.nanmax(v[shown]) if shown.any() else 0:+.2f} mm/yr"
+                  + ("" if m.any() else "  (유효 PS 없음 — 교면 위 점 참고 표시)"), fontsize=10)
     axx.legend(fontsize=7.5, loc="upper right")
     axx.grid(alpha=.25)
 
-    # (d) 시계열 + 중앙값 + 추세
+    # (d) 시계열 + 중앙값 + 추세 — 유효 점이 없으면 교면 위 점을 참고로(그렇게 적는다)
     axx = ax[3]
-    for i in np.where(sel)[0]:
+    on_deck_mask = np.abs(of) <= (a.offset if a.offset is not None else half)
+    show_d = sel if sel.any() else (on_deck_mask & (st >= -2) & (st <= L + 2))
+    d_note = "" if sel.any() else " — QC 미통과, 교면 위 점 참고"
+    for i in np.where(show_d)[0]:
         axx.plot(yr, los[i], color="#95a5a6", lw=.6, alpha=.7, zorder=1)
-    med = np.nanmedian(los[sel], axis=0) if sel.any() else np.zeros_like(yr)
+    med = np.nanmedian(los[show_d], axis=0) if show_d.any() else np.zeros_like(yr)
     axx.plot(yr, med, color="#2471a3", lw=2.0, zorder=3, label="중앙값 시계열")
-    if sel.any():
+    if show_d.any():
         X = np.column_stack([np.ones(yr.size), yr])
         b, *_ = np.linalg.lstsq(X, med, rcond=None)
         axx.plot(yr, X @ b, color="#c0392b", lw=1.4, ls="--", zorder=4,
@@ -186,7 +227,8 @@ def main() -> None:
     axx.axhline(0, color="#7f8c8d", lw=.8, ls=":")
     axx.set_xlabel(f"경과 [년]  ({t0} ~ {t1})")
     axx.set_ylabel("LOS 변위 [mm]")
-    axx.set_title(f"(d) 유효 PS {int(sel.sum())}점 LOS 시계열(회색) · 중앙값(청색) · 추세", fontsize=10)
+    axx.set_title(f"(d) {'유효' if sel.any() else '교면 위'} PS {int(show_d.sum())}점 LOS 시계열(회색) · "
+                  f"중앙값(청색) · 추세{d_note}", fontsize=10)
     axx.legend(fontsize=7.5, loc="upper left")
     axx.grid(alpha=.25)
 

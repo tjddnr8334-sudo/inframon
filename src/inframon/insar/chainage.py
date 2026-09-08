@@ -156,7 +156,8 @@ def _read_track(track_h5: str | Path) -> dict[str, Any]:
         if "pixel_lonlat" in f:                          # 트랙 h5
             out: dict[str, Any] = {"lonlat": np.asarray(f["pixel_lonlat"][()], float)}
             for k in ("coh", "temp_coh", "amplitude_dispersion", "los_velocity_mm_yr",
-                      "incidenceAngle", "los_mm", "scatterer_class"):
+                      "incidenceAngle", "los_mm", "scatterer_class",
+                      "residual_height_m", "residual_height_sigma_m"):
                 if k in f:
                     out[k] = np.asarray(f[k][()])
             if "epochs" in f:
