@@ -1,0 +1,101 @@
+{
+ "elements": [
+  {
+   "guid": "34F4SO6XDB202YMU38FI0D",
+   "name": "P1C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    -2.5,
+    -4.55,
+    5.4
+   ],
+   "bbox_max": [
+    2.5,
+    4.55,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0FSK4AJH64ZR8GOED70IXI",
+   "name": "A1",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    -29.0,
+    -4.55,
+    0.0
+   ],
+   "bbox_max": [
+    -25.0,
+    4.55,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0LL4L4D5YD74ZQKVTI3KLM",
+   "name": "A2",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    25.0,
+    -4.55,
+    0.0
+   ],
+   "bbox_max": [
+    29.0,
+    4.55,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34D9V1CBOF_Z86JPT1ZZTC",
+   "name": "P1",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    -1.5,
+    -4.55,
+    0.0
+   ],
+   "bbox_max": [
+    1.5,
+    4.55,
+    6.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "154YORZSK7BXIEEOG5RKPN",
+   "name": "S1",
+   "ifc_type": "IfcSlab",
+   "member": "deck",
+   "bbox_min": [
+    -25.0,
+    -4.55,
+    6.0
+   ],
+   "bbox_max": [
+    25.0,
+    4.55,
+    7.55
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "FLOOR"
+   }
+  }
+ ]
+}

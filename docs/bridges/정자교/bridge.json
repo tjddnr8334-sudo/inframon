@@ -1,0 +1,38 @@
+{
+ "name": "정자교",
+ "lat": 37.3685405,
+ "lon": 127.1089983,
+ "track": "data/sarvey_permissive.h5",
+ "proc": null,
+ "master": null,
+ "out": "docs/bridges/정자교",
+ "length_m": 108.0,
+ "n_spans": 5,
+ "width_m": 26.471822000616243,
+ "clearance_m": 6.0,
+ "ground_m": 39.0,
+ "deck_az_deg": 179.96456470490435,
+ "geometry": [
+  [
+   37.3686458,
+   127.1096187
+  ],
+  [
+   37.3686464,
+   127.108398
+  ]
+ ],
+ "notes": [
+  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "형하고 6.0 m 가정(표준데이터 교량높이 없음) — 잔차고도로 대체 시도",
+  "SNAP star 처리 폴더 없음 → 잔차고도 불가(브리프 (b) 비움)"
+ ],
+ "sources": {
+  "specs": "파트너 실측 CSV '정자교' (8 m)",
+  "deck_match": "CSV 연장 108 m 에 맞는 way 선택(4후보 중)",
+  "deck": "OSM 'way/1229714817' 108 m · 방위 180.0°",
+  "width": "OSM 보도 간격 23.5 m + 보도 반폭",
+  "ground": "Open-Meteo DEM",
+  "points": "쉬프트 6.8 m(heading -13.2°) 보정 후 데크 ±30 m 안 9/2661"
+ }
+}

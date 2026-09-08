@@ -1,0 +1,54 @@
+{
+ "schema": "inframon.gltf.meta/1.0",
+ "glb": "twin.glb",
+ "n_points": 3,
+ "value_channel": "velocity",
+ "legend": {
+  "kind": "div",
+  "vmin": -1.835567021369934,
+  "vmax": 1.835567021369934,
+  "units": "mm/yr"
+ },
+ "georef": {
+  "origin_lon": 127.60933582951768,
+  "origin_lat": 38.04991645779438,
+  "origin_height_m": 0.0,
+  "projection": "EPSG:5186",
+  "frame": "ENU_meters",
+  "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
+  "z_source": "ifc_element_top",
+  "z_detail": "ifc_element_top · 지면 163m · z 171~171m (IFC 부재 상단 + 원점 표고 163m)",
+  "ground_m": 163.0,
+  "deck_z_median_m": 170.97
+ },
+ "binding": {
+  "key": "element_globalid",
+  "note": "IFC 4.3 부재 GlobalId 외래키. --bim-align 이 채우면 시계열↔부재 영구결합"
+ },
+ "features": [
+  {
+   "index": 0,
+   "point_id": 0,
+   "element_globalid": "077RC1XM1REE00_FWZENBH",
+   "value": 0.4750808775424957,
+   "lon": 127.60933582951768,
+   "lat": 38.049908828480305
+  },
+  {
+   "index": 1,
+   "point_id": 1,
+   "element_globalid": "077RC1XM1REE00_FWZENBH",
+   "value": 1.0085231065750122,
+   "lon": 127.60937397605794,
+   "lat": 38.04991645779438
+  },
+  {
+   "index": 2,
+   "point_id": 2,
+   "element_globalid": "077RC1XM1REE00_FWZENBH",
+   "value": 1.927460789680481,
+   "lon": 127.60932057085472,
+   "lat": 38.05003471351355
+  }
+ ]
+}
