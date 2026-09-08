@@ -286,6 +286,17 @@ def select_points(b: Bridge, out: Path) -> Path | None:
         extra = {k: f[k][()] for k in ("height", "dem_error", "amplitude_dispersion",
                                        "residual_height_m", "residual_height_sigma_m") if k in f}
         attrs = dict(f.attrs)
+    # 처리 오프셋(B): 지면 점 vs OSM 도로선. 유의하면 전 점군에서 뺀다 — A(δh/tanθ) 보정 전에.
+    try:
+        from inframon.insar import ground_offset as go
+        roads = go.fetch_roads(b.lat, b.lon, cache=out / "osm_roads_500m.json")
+        off = go.estimate(ll, roads, center_lat=b.lat, center_lon=b.lon)
+        ll = go.apply(ll, off, center_lat=b.lat)
+        b.sources["ground_offset"] = off.describe()
+        if not off.significant and off.n_points >= go.MIN_POINTS:
+            note(b, "처리 오프셋 ≈ 0 → 교량 위 점의 횡방향 치우침은 산란체 위치(보도·난간)로 본다")
+    except Exception as e:                       # noqa: BLE001 — OSM 없어도 진행
+        note(b, f"처리 오프셋 추정 불가({type(e).__name__}) — 0 으로 두고 진행")
     corr = apply_correction(ll, np.full(len(ll), float(b.clearance_m)), inc, heading,
                             crs_is_lonlat=True, set_height=False)
     ll1 = np.asarray(corr["xyz"], float)[:, :2]
@@ -542,6 +553,7 @@ def write_results(b: Bridge, out: Path, tw, pinn, rh, aud, brief) -> None:
 - **EI(강성) 관측 식별** — InSAR 는 상대 변위라 자중 처짐을 못 본다. EI·f₁ 은 설계 제원 기반이다(감사 ⓘ).
 - **데크 위 PS 밀도** — Sentinel-1 화소 ~11 m. 프로그램으로 늘릴 수 없다. 고해상도 SAR·코너리플렉터가 답이다.
 - **쉬프트 방향(각도)** — 궤도 heading 이 정한다. 크기 δh 만 잔차고도로 관측값이 된다.
+- **쉬프트의 세 층** — A 기하(δh/tanθ, 보정) · B 처리 오프셋(지면 점 vs OSM 도로선으로 추정, 유의하면 제거) · C 산란체 위치(보도·난간 — 쉬프트가 아님). B 는 OSM 기준 상대값이라 3~5 m 아래는 못 본다.
 - **시점 수** — 속도 95 % CI 는 시점 수와 기간이 정한다({b.n_epochs or '?'}시점). 브리프 기준(≥100장)에 못 미치면 판정을 보류한다.
 """
     (out / "결과.md").write_text(md, encoding="utf-8")
