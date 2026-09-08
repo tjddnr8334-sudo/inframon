@@ -28,6 +28,8 @@ python start.py --dashboard                                 # 3. 설치 → 데�
 3번이 끝나면 브라우저에 **http://localhost:8501** 이 뜹니다 — 그게 대시보드입니다.
 (처음 한 번은 설치에 몇 분 걸립니다. 안 열리면 주소를 직접 치세요. 끄려면 터미널에서 Ctrl+C.)
 
+이미 설치돼 있으면 대시보드만 바로: `.venv\Scripts\streamlit run src\inframon\dashboardpp.py`
+
 ![dashboard](docs/img/dashboard_start.jpg)
 
 왼쪽 **교량명 검색** 또는 **좌표 지정** → 본문 ⓪ 시작 → 지도 클릭 → OSM 교량 확인 → 타깃 저장 →
