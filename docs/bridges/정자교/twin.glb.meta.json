@@ -17,9 +17,9 @@
   "frame": "ENU_meters",
   "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
   "z_source": "ifc_element_top",
-  "z_detail": "ifc_element_top · 지면 39m · z 46~46m (IFC 부재 상단 + 원점 표고 39m)",
-  "ground_m": 39.0,
-  "deck_z_median_m": 45.62
+  "z_detail": "ifc_element_top · 지면 0m · z 7~7m (IFC 부재 상단 + 원점 표고 0m)",
+  "ground_m": 0.0,
+  "deck_z_median_m": 6.62
  },
  "binding": {
   "key": "element_globalid",

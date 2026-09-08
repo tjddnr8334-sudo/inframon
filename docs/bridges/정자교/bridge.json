@@ -11,7 +11,7 @@
  "n_spans": 5,
  "width_m": 26.471822000616243,
  "clearance_m": 5.240624961154438,
- "ground_m": 39.0,
+ "ground_m": 0.0,
  "deck_az_deg": 0.3574623300329968,
  "bridge_type": "slab",
  "material": "prestressed_concrete",
@@ -28,8 +28,10 @@
  ],
  "notes": [
   "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "지면 표고 없음 → 0 m",
   "형하고 6.0 m 가정(표준데이터 교량높이 없음) — 잔차고도로 대체 시도",
-  "처리 오프셋 ≈ 0 → 교량 위 점의 횡방향 치우침은 산란체 위치(보도·난간)로 본다"
+  "처리 오프셋 ≈ 0 → 교량 위 점의 횡방향 치우침은 산란체 위치(보도·난간)로 본다",
+  "브리프 그림 실패: OSError: [Errno 22] Invalid argument: 'docs\\\\bridges\\\\정자교\\\\brief.png'"
  ],
  "sources": {
   "specs": "파트너 실측 CSV '정자교' (8 m)",
@@ -37,7 +39,6 @@
   "deck_match": "CSV 연장 108 m 에 맞는 way 선택(4후보 중)",
   "deck": "OSM '정자교' 110 m · 방위 0.4°",
   "width": "OSM 보도 간격 23.5 m + 보도 반폭",
-  "ground": "Open-Meteo DEM",
   "ground_offset": "처리 오프셋 ≈ 0 (|B| 2.1 m < 3 m · 지면 점 1025 · 도로 양쪽 대칭)",
   "points": "쉬프트 6.8 m(heading -13.2°) 보정 후 데크 ±30 m 안 12/2661",
   "clearance": "잔차고도 집단평균 +5.2±1.2 m (z=4.31)"

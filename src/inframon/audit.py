@@ -77,6 +77,7 @@ class ArtifactAudit:
     ei_identified: bool | None = None       # 강성 식별이 수렴했는가
     ei_modal_basis: str | None = None       # 고유진동수를 무엇으로 계산했는가
     strain_abs_max: float | None = None     # |변형률| 최대(무차원)
+    known_event_unseen: bool = False        # 알려진 사고가 관측 기간 안인데 시계열에 안 보임
     stress_abs_max_pa: float | None = None  # |응력| 최대[Pa]
     # ④ CRI
     cri_worst: float | None = None

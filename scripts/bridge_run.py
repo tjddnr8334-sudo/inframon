@@ -504,6 +504,29 @@ def audit(b: Bridge, proj: str) -> dict:
 
 
 # ── ⑩ 결과 문서 ───────────────────────────────────────────────────────────
+def _events_md(b: Bridge) -> str:
+    """알려진 사고 교량이면 결과 문서에 먼저 적는다."""
+    try:
+        from inframon.known_events import check
+        ep = los = None
+        if b.track and Path(b.track).exists():
+            sub = Path(b.out or f"docs/bridges/{b.name}") / "track_deck.h5"
+            src = sub if sub.exists() else Path(b.track)
+            with h5py.File(src, "r") as f:
+                ep, los = f["epochs"][()], f["los_mm"][()]
+        evs = check(b.lat, b.lon, epochs=ep, los=los)
+    except Exception:                            # noqa: BLE001
+        return ""
+    if not evs:
+        return ""
+    lines = ["## ⚠ 알려진 사고 교량 — 결과를 읽기 전에", ""]
+    for ec in evs:
+        lines.append(f"- {ec.describe()}")
+        if ec.event.get("note"):
+            lines.append(f"  - {ec.event['note']}")
+    return "\n".join(lines)
+
+
 def _f(v, unit: str = "") -> str:
     return f"{v:.1f}{unit}" if isinstance(v, (int, float)) and v == v else "?"
 
@@ -547,6 +570,8 @@ def write_results(b: Bridge, out: Path, tw, pinn, rh, aud, brief) -> None:
 ## 적어 둘 것
 
 {notes}
+
+{_events_md(b)}
 
 ## 이 파이프라인이 원리상 못 하는 것 (모든 교량 공통)
 

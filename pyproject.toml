@@ -54,6 +54,9 @@ bim = ["ifcopenshell>=0.8", "pyproj>=3.6"]
 # PINN 독립 FE 교차검증(scripts/bench/pinn_opensees_*.py) — 알려진 EI 보의 처짐·진동수를
 # OpenSees(Timoshenko)로 만들어 PINN 역산과 대조. Windows 는 DLL 이슈로 리눅스/WSL 권장.
 fem = ["openseespy>=3.5"]
+# 실 교량 시연(scripts/demo_4pm.py · bridge_run.py): PINN·IFC 트윈·브리프 그림·좌표 투영.
+# 새 PC 에서 `python start.py --full` 이 이것을 깐다. 없으면 시연이 중간에 죽는다.
+demo = ["torch>=2.2", "pyproj>=3.6", "scipy>=1.11", "matplotlib>=3.7", "ifcopenshell>=0.8"]
 dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27", "ifcopenshell>=0.8"]
 
 [project.scripts]
