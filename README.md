@@ -14,19 +14,24 @@
 
 ## 처음 쓰는 컴퓨터에서 — 받기부터 대시보드까지 (PowerShell)
 
-**준비물**: [Python 3.11+](https://www.python.org/downloads/) (설치 화면에서 **"Add python.exe to PATH"** 체크) ·
-[Git](https://git-scm.com/download/win). 이 둘만 있으면 됩니다.
+PowerShell 을 열고 (Win+X → 터미널) **이 한 줄을 붙여넣고 Enter** — 끝입니다:
 
-PowerShell 을 열고 (Win+X → 터미널) 한 줄씩:
+```powershell
+irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex
+```
+
+Python·Git 이 없으면 알아서 설치하고([install.ps1](install.ps1)), `$HOME\inframon` 에 받아서, 필요한 패키지 전부 설치 →
+데모 → 브라우저에 **http://localhost:8501** 대시보드가 열립니다. 처음 한 번은 5~10분. 끄려면 Ctrl+C.
+다시 실행하면 최신으로 갱신(git pull)만 하고 바로 대시보드를 띄웁니다.
+
+<details><summary>한 줄이 싫으면 — 손으로 세 줄</summary>
 
 ```powershell
 git clone https://github.com/tjddnr8334-sudo/inframon      # 1. GitHub 에서 받기
 cd inframon                                                 # 2. 폴더로
-python start.py --dashboard                                 # 3. 설치 → 데모 → 대시보드 자동 열림
+python start.py --full --dashboard                          # 3. 전부 설치 → 데모 → 대시보드
 ```
-
-3번이 끝나면 브라우저에 **http://localhost:8501** 이 뜹니다 — 그게 대시보드입니다.
-(처음 한 번은 설치에 몇 분 걸립니다. 안 열리면 주소를 직접 치세요. 끄려면 터미널에서 Ctrl+C.)
+</details>
 
 이미 설치돼 있으면 대시보드만 바로: `.venv\Scripts\streamlit run src\inframon\dashboardpp.py`
 

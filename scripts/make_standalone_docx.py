@@ -128,11 +128,26 @@ def build() -> Path:
     _font(p.add_run("혼자 돌리기 — 다른 컴퓨터에서 받기부터 결과까지"), 20, bold=True)
     p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(14)
     _font(p.add_run("이 프로그램은 Python 으로 혼자 돕니다. Claude 나 다른 AI 는 필요 없습니다.\n"
-                    "아래 순서대로 한 줄씩 치고, 각 단계의 '확인 ☐' 이 맞으면 다음으로 갑니다."),
+                    "PowerShell 에 한 줄만 붙여넣으면 대시보드까지 열립니다. 그 뒤는 화면에서 누르는 순서대로."),
           12, color=(0x33, 0x44, 0x55))
     p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(40)
     _font(p.add_run(f"{date.today().isoformat()} · https://github.com/tjddnr8334-sudo/inframon"),
           10, color=(0x77, 0x77, 0x77))
+    doc.add_page_break()
+
+    # 한 줄
+    H(doc, "가장 쉬운 길 — PowerShell 에 한 줄 붙여넣기", 1)
+    P(doc, "키보드 **Win + X** → **터미널** 을 열고, 아래 한 줄을 그대로 붙여넣고 Enter. 이것으로 0~3 절이 전부 자동입니다.")
+    CODE(doc, "irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex")
+    TABLE(doc, [
+        ["자동으로 하는 일", "걸리는 시간"],
+        ["Python 3.11+ · Git 확인 — 없으면 winget 으로 설치", "0~3분"],
+        ["GitHub 에서 받기 → 내 사용자 폴더 **C:\\Users\\(이름)\\inframon** (이미 있으면 최신으로 갱신)", "10초"],
+        ["필요한 패키지 전부 설치 → 데모 → 진단 → **브라우저에 대시보드**", "5~10분 (처음만)"],
+    ], widths=[11.5, 4.5])
+    CHECK(doc, "브라우저에 http://localhost:8501 대시보드가 열린다 → **4절** 로 바로 간다. 끄려면 터미널에서 Ctrl + C, "
+               "다시 띄우려면 같은 한 줄을 다시 붙여넣는다.")
+    P(doc, "이 한 줄이 안 되는 컴퓨터(인터넷 차단, winget 없음)만 아래 0~3 절을 손으로 합니다.", color=(0x55, 0x5F, 0x6B))
     doc.add_page_break()
 
     # 0
