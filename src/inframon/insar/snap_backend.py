@@ -15,6 +15,7 @@ Windows 에서 그대로 돈다(교체 가능한 상류 백엔드의 Windows 기
 from __future__ import annotations
 
 import math
+import os
 import re
 import subprocess
 import xml.etree.ElementTree as ET
@@ -95,7 +96,15 @@ def find_gpt(explicit: str | None = None) -> str:
     """gpt 실행파일 경로. 없으면 SnapError."""
     import shutil
 
-    for c in ([explicit] if explicit else []) + list(_GPT_CANDIDATES):
+    # --setup-tools 가 사용자 폴더에 깐 SNAP 은 ~/.inframon/tools.json 에 gpt 경로를 남긴다.
+    recorded: list[str] = []
+    try:
+        from ..setup_tools import gpt_path_in, read_tools, snap_install_dir
+        recorded = [read_tools().get("snap_gpt") or "", str(gpt_path_in(snap_install_dir()))]
+    except Exception:                            # noqa: BLE001
+        pass
+    env = os.environ.get("INFRAMON_SNAP_GPT") or ""
+    for c in ([explicit] if explicit else []) + [env] + recorded + list(_GPT_CANDIDATES):
         if not c:
             continue
         if Path(c).exists():
@@ -104,8 +113,8 @@ def find_gpt(explicit: str | None = None) -> str:
         if w:
             return w
     raise SnapError(
-        "SNAP gpt 를 찾지 못했습니다. ESA SNAP 설치 후 경로를 지정하세요 "
-        "(예: C:\\Program Files\\esa-snap\\bin\\gpt.exe). https://step.esa.int/main/download/snap-download/")
+        "SNAP gpt 를 찾지 못했습니다. `python start.py --tools` 가 내려받아 설치합니다(1.1 GB). "
+        "직접 깔았다면 INFRAMON_SNAP_GPT 에 gpt 경로를 지정하세요.")
 
 
 # ── SLC 날짜/주석 파싱 ────────────────────────────────────────────────────

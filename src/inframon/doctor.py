@@ -130,17 +130,17 @@ def _external_tools() -> dict[str, dict]:
         tok, src = find_earthdata_token()
         out["earthdata"] = {"ok": bool(tok), "where": src,
                             "hint": ("Earthdata 토큰 없음 → SLC 다운로드 불가. "
-                                     "urs.earthdata.nasa.gov 에서 토큰 발급 후 "
-                                     "`python -m inframon --earthdata-save <토큰>`")}
+                                     "`python start.py --tools` 가 토큰 페이지를 열어 주고 붙여넣으면 저장 "
+                                     "(또는 `python -m inframon --earthdata-save <토큰>`)")}
     except Exception as e:                       # noqa: BLE001
         out["earthdata"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "asf_search 설치 필요"}
     try:
-        from .insar.snap_backend import find_gpt
-        g = find_gpt()
-        out["snap_gpt"] = {"ok": bool(g), "where": g or "없음",
-                           "hint": ("SNAP gpt 없음 → InSAR 처리 불가. "
-                                    "https://step.esa.int/main/download/snap-download/ 설치 후 "
-                                    "PATH 또는 SNAP_HOME 지정")}
+        from .insar.snap_backend import SnapError, find_gpt
+        hint = "SNAP gpt 없음 → InSAR 처리 불가. `python start.py --tools` 가 내려받아 설치합니다(1.1 GB, 무인)"
+        try:
+            out["snap_gpt"] = {"ok": True, "where": find_gpt(), "hint": hint}
+        except SnapError:                        # 없음 — 오류가 아니라 정상적인 '미설치'
+            out["snap_gpt"] = {"ok": False, "where": "없음", "hint": hint}
     except Exception as e:                       # noqa: BLE001
         out["snap_gpt"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "SNAP 설치 필요"}
     try:
@@ -148,7 +148,8 @@ def _external_tools() -> dict[str, dict]:
         t = find_snaphu()
         out["snaphu"] = {"ok": t is not None,
                          "where": (f"{t.kind}:{t.path}" if t else "없음"),
-                         "hint": "snaphu 없음 → 언래핑 불가. " + install_hint()}
+                         "hint": ("snaphu 없음 → 언래핑 불가. `python start.py --tools` 가 WSL 에 설치합니다. "
+                                  + install_hint())}
     except Exception as e:                       # noqa: BLE001
         out["snaphu"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "snaphu 설치 필요"}
     return out

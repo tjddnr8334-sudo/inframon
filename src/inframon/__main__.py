@@ -187,6 +187,11 @@ def main() -> None:
     p.add_argument("--earthdata-save", default=None, metavar="TOKEN",
                    help="Earthdata 토큰을 ~/.inframon/earthdata_token 에 저장하고 종료 — 한 번만 하면 "
                         "이후 SLC 다운로드가 자동 인증된다.")
+    p.add_argument("--setup-tools", nargs="?", const="all", default=None, metavar="도구",
+                   help="외부 도구 자동 준비 후 종료 — SNAP(1.1 GB 내려받아 무인 설치)·snaphu(WSL apt)·"
+                        "Earthdata 토큰(브라우저 열고 붙여넣기→검증→저장). 기본 all, 또는 "
+                        "snap,snaphu,earthdata 중 골라서.")
+    p.add_argument("--yes", action="store_true", help="--setup-tools 에서 묻지 않고 진행(비대화).")
     p.add_argument("--slc-dir", default=None, metavar="DIR",
                    help="SLC 보관 폴더 지정 후 종료(예: E:\\SLC). 저장되면 이후 취득(--snap-auto 등)이 "
                         "여기 있는 장면을 자동 인식·재사용해 다운로드를 건너뛴다. 환경변수 "
@@ -1128,6 +1133,10 @@ def main() -> None:
         serve_forever(args.pontifex_mock, token=getattr(args, "pontifex_token", None),
                       state_path="data/pontifex_mock_state.json")
         return
+    if args.setup_tools is not None:
+        from .setup_tools import run_setup
+        res = run_setup(args.setup_tools, interactive=(False if args.yes else None))
+        sys.exit(0 if all(res.values()) else 1)
     if args.earthdata_save:
         from .insar.slc_download import save_earthdata_token
         path = save_earthdata_token(args.earthdata_save)

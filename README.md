@@ -20,16 +20,18 @@ PowerShell 을 열고 (Win+X → 터미널) **이 한 줄을 붙여넣고 Enter*
 irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex
 ```
 
-Python·Git 이 없으면 알아서 설치하고([install.ps1](install.ps1)), `$HOME\inframon` 에 받아서, 필요한 패키지 전부 설치 →
-데모 → 브라우저에 **http://localhost:8501** 대시보드가 열립니다. 처음 한 번은 5~10분. 끄려면 Ctrl+C.
-다시 실행하면 최신으로 갱신(git pull)만 하고 바로 대시보드를 띄웁니다.
+Python·Git 이 없으면 알아서 설치하고([install.ps1](install.ps1)), `$HOME\inframon` 에 받아서, 파이썬 패키지 전부 →
+**SNAP**(1.1 GB, 무인 설치) → **snaphu**(WSL 안에) → **Earthdata 토큰**(브라우저가 열리면 토큰만 붙여넣기) →
+데모 → 브라우저에 **http://localhost:8501** 대시보드. 처음 한 번은 10~20분. 끄려면 Ctrl+C.
+다시 실행하면 갱신(git pull)과 빠진 것만 채우고 바로 대시보드를 띄웁니다. 사람이 직접 해야 하는 것은
+[Earthdata 가입](https://urs.earthdata.nasa.gov/users/new)(무료) 하나뿐입니다.
 
 <details><summary>한 줄이 싫으면 — 손으로 세 줄</summary>
 
 ```powershell
 git clone https://github.com/tjddnr8334-sudo/inframon      # 1. GitHub 에서 받기
 cd inframon                                                 # 2. 폴더로
-python start.py --full --dashboard                          # 3. 전부 설치 → 데모 → 대시보드
+python start.py --full --tools --dashboard                  # 3. 전부 설치 → SNAP·snaphu·토큰 → 데모 → 대시보드
 ```
 </details>
 
@@ -54,7 +56,7 @@ python start.py --full --dashboard                          # 3. 전부 설치 �
 | 실 교량 시연 44초 (명령줄) | `python scripts\demo_4pm.py` |
 | 실 교량·트윈용 패키지까지 | `python start.py --full` |
 | 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
-| SLC 다운로드용 토큰 (한 번) | `python -m inframon --earthdata-save <토큰>` — [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov) 에서 발급 |
+| SNAP·snaphu·Earthdata 토큰 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기 (`python -m inframon --earthdata-save <토큰>` 도 됨) |
 | 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
 | 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 9쪽 · 화면별 클릭 순서)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
 

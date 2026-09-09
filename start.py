@@ -15,6 +15,7 @@
 옵션:
     python start.py --dashboard   설치 후 대시보드까지 띄운다(브라우저 자동 열림)
     python start.py --full        **전부** — 대시보드·SLC 검색·HyP3·PINN·CV·트윈·그림·API (한 줄로 끝)
+    python start.py --tools       외부 도구까지 — SNAP(1.1 GB 무인 설치)·snaphu(WSL)·Earthdata 토큰
     python start.py --no-demo     설치만 하고 데모는 건너뛴다
 
 표준 라이브러리만 쓴다 — 이 파일을 돌리는 데 필요한 건 파이썬뿐이다.
@@ -29,6 +30,13 @@ import subprocess
 import sys
 import venv
 from pathlib import Path
+
+# 한국어 Windows 콘솔/파이프(cp949)에서 '—' 같은 글자로 죽지 않게 — --help 조차 못 찍던 것을 겪었다.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / ".venv"
@@ -107,6 +115,12 @@ def demo(py: Path) -> Path:
     return out
 
 
+def tools(py: Path) -> None:
+    """SNAP·snaphu·Earthdata — 토큰은 사람이 붙여넣어야 하므로 stdin 을 그대로 물려준다."""
+    say("")
+    run([str(py), "-m", "inframon", "--setup-tools"], check=False)
+
+
 def doctor(py: Path) -> None:
     say("")
     run([str(py), "-m", "inframon", "--doctor"], check=False)
@@ -130,7 +144,8 @@ def next_steps(py: Path, ran_demo: bool) -> None:
     say(f"  · 이 PC 도구 상태      : {p} -m inframon --insar-tools")
     say(f"  · 산출물 품질 감사     : {p} -m inframon --audit-artifacts")
     say("")
-    say("  실위성 데이터로 돌리려면 SNAP·snaphu·교량 CSV 가 더 필요합니다 —")
+    say("  실위성 데이터로 돌리려면 SNAP·snaphu·Earthdata 토큰이 더 필요합니다 —")
+    say("  · 셋 다 자동 준비      : python start.py --tools")
     say("  단계별 안내: docs/시작하기.md")
     say(LINE)
 
@@ -141,10 +156,12 @@ def main() -> None:
     ap.add_argument("--dashboard", action="store_true", help="설치 후 대시보드까지 띄운다")
     ap.add_argument("--full", action="store_true",
                     help="실데이터용 추가 패키지(dashboard·search·pinn)까지 설치")
+    ap.add_argument("--tools", action="store_true",
+                    help="외부 도구까지 — SNAP(1.1 GB)·snaphu(WSL)·Earthdata 토큰을 내려받아 준비")
     ap.add_argument("--no-demo", action="store_true", help="데모 실행을 건너뛴다")
     a = ap.parse_args()
 
-    total = 4 + (1 if a.dashboard else 0)
+    total = 4 + (1 if a.tools else 0) + (1 if a.dashboard else 0)
     say(f"{LINE}\n  inframon 시작 — 설치부터 결과까지\n{LINE}")
 
     step(1, total, "파이썬 확인")
@@ -156,18 +173,25 @@ def main() -> None:
     step(3, total, "inframon 설치")
     extras = "full" if a.full else ("dashboard" if a.dashboard else None)
     install(py, extras)
+    n = 3
+
+    if a.tools:
+        n += 1
+        step(n, total, "외부 도구 (SNAP · snaphu · Earthdata 토큰)")
+        tools(py)
 
     ran = False
+    n += 1
     if not a.no_demo:
-        step(4, total, "데모 실행")
+        step(n, total, "데모 실행")
         demo(py)
         ran = True
     else:
-        step(4, total, "환경 진단")
+        step(n, total, "환경 진단")
     doctor(py)
 
     if a.dashboard:
-        step(5, total, "대시보드")
+        step(n + 1, total, "대시보드")
         next_steps(py, ran)
         dashboard(py)
         return

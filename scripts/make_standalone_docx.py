@@ -143,7 +143,9 @@ def build() -> Path:
         ["자동으로 하는 일", "걸리는 시간"],
         ["Python 3.11+ · Git 확인 — 없으면 winget 으로 설치", "0~3분"],
         ["GitHub 에서 받기 → 내 사용자 폴더 **C:\\Users\\(이름)\\inframon** (이미 있으면 최신으로 갱신)", "10초"],
-        ["필요한 패키지 전부 설치 → 데모 → 진단 → **브라우저에 대시보드**", "5~10분 (처음만)"],
+        ["파이썬 패키지 전부 설치 → **SNAP** 1.1 GB 무인 설치 → **snaphu** (WSL 안에)", "5~15분 (처음만)"],
+        ["**Earthdata 토큰** — 브라우저가 토큰 페이지를 열면 [Generate Token] → 터미널에 붙여넣고 Enter (계정이 없으면 그냥 Enter 로 건너뛰고 5절)", "30초"],
+        ["데모 → 진단 → **브라우저에 대시보드**", "1분"],
     ], widths=[11.5, 4.5])
     CHECK(doc, "브라우저에 http://localhost:8501 대시보드가 열린다 → **4절** 로 바로 간다. 끄려면 터미널에서 Ctrl + C, "
                "다시 띄우려면 같은 한 줄을 다시 붙여넣는다.")
@@ -234,19 +236,18 @@ def build() -> Path:
                "python scripts\\bridge_run.py --batch docs\\bridges\\batch.json   # 여러 교량 한 번에"])
 
     # 5
-    H(doc, "5. 새 교량을 위성 원본(SLC)부터 — 토큰 한 번", 1)
-    P(doc, "위성 원본은 NASA Earthdata 계정이 있어야 받습니다. 프로그램이 대신 가입할 수 없으니 이것만 직접:")
-    for t in [
-        "https://urs.earthdata.nasa.gov 에서 가입(무료) → 로그인",
-        "오른쪽 위 프로필 → **Generate Token** → 긴 문자열 복사",
-        "PowerShell 에서:",
-    ]:
-        BUL(doc, t)
-    CODE(doc, ["python -m inframon --earthdata-save <붙여넣은 토큰>"])
-    CHECK(doc, "`Earthdata 토큰 저장: ...earthdata_token` 이 찍힌다. `python -m inframon --doctor` 에서 Earthdata ✅.")
-    P(doc, "InSAR 처리에는 **SNAP**(ESA, https://step.esa.int/main/download/snap-download/)과 **snaphu**(WSL: "
-           "`wsl --install` 후 `sudo apt install snaphu`)가 더 필요합니다. 없으면 `--doctor` 가 어느 것이 없는지와 "
-           "설치법을 그 자리에 적어 줍니다.")
+    H(doc, "5. 외부 도구 — SNAP · snaphu · Earthdata 토큰 (한 번)", 1)
+    P(doc, "위성 원본(SLC)부터 돌리려면 셋이 필요합니다. 한 줄 설치기가 이미 했다면 건너뜁니다. 빠진 것만 채우려면:")
+    CODE(doc, ["python start.py --tools"])
+    TABLE(doc, [
+        ["도구", "프로그램이 하는 일", "사람이 할 일"],
+        ["SNAP (ESA)", "1.1 GB 내려받아 내 사용자 폴더에 무인 설치, gpt 경로 기록", "없음 (기다리기)"],
+        ["snaphu", "WSL(Ubuntu) 안에 apt 로 설치. WSL 이 없으면 설치를 걸고 재부팅 안내", "관리자 승인 '예', 재부팅 후 같은 명령 한 번 더"],
+        ["Earthdata 토큰", "토큰 페이지를 브라우저로 열고, 붙여넣은 토큰을 NASA 서버에 확인한 뒤 저장", "**가입(무료)** → 로그인 → [Generate Token] → 복사 → 터미널에 붙여넣기"],
+    ], widths=[3.0, 7.5, 5.5])
+    CHECK(doc, "마지막 줄 `결과: snap ✅, snaphu ✅, earthdata ✅`. `python -m inframon --doctor` 의 [외부 도구] 세 줄이 전부 ✅.")
+    P(doc, "토큰만 따로 넣을 때: `python -m inframon --earthdata-save <토큰>`. 계정 가입은 https://urs.earthdata.nasa.gov/users/new — "
+           "프로그램이 대신 가입할 수 없는 유일한 것입니다.")
     P(doc, "그다음 새 교량:")
     CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan   # 계획만(1분)",
                "python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366                           # 끝까지(1~3시간)"])
@@ -281,8 +282,8 @@ def build() -> Path:
         ["`git` 은 인식되지 않는 명령", "Git 설치 후 PowerShell 새로 열기"],
         ["설치가 중간에 멈춤 / 빨간 글씨", "인터넷·방화벽 확인 후 같은 명령 다시 (이미 깔린 것은 건너뜀)"],
         ["8501 이 안 열림", "터미널 마지막 줄 주소를 브라우저에 직접. 이미 쓰는 포트면 `--server.port 8502`"],
-        ["끝까지 돌리기에서 '토큰 없음'", "5번"],
-        ["'SNAP gpt 없음' / 'snaphu 없음'", "`python -m inframon --doctor` 출력의 설치법"],
+        ["'토큰 없음' / 'SNAP gpt 없음' / 'snaphu 없음'", "`python start.py --tools` (5절) — 빠진 것만 채운다"],
+        ["snaphu 에서 'WSL 설치 → 재부팅'", "재부팅 후 `python start.py --tools` 한 번 더"],
         ["OSM 조회 실패(504)", "자동 재시도 3회. 잠시 후 다시. 캐시가 있으면 캐시 사용"],
         ["실행이 죽음", "같은 명령 다시 (받은 위성 자료는 재사용). `결과.md` 의 '예외:' 줄이 사유"],
         ["'교면 위 점 0'", "교량이 작거나 궤도 방향이 불리. 계획(5번)에서 장면 수·궤도 먼저"],

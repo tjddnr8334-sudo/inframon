@@ -3,7 +3,8 @@
 #   irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex
 #
 # 하는 일: Python·Git 확인(없으면 winget 으로 설치) → GitHub 에서 받기(있으면 갱신)
-#          → python start.py --full --dashboard  (전부 설치 → 데모 → 대시보드 자동 열림)
+#          → python start.py --full --tools --dashboard
+#            (파이썬 패키지 전부 → SNAP 1.1 GB 무인 설치 · snaphu(WSL) · Earthdata 토큰 붙여넣기 → 데모 → 대시보드)
 # 설치 위치: $HOME\inframon  (바꾸려면 실행 전 $env:INFRAMON_DIR = "D:\어디" )
 
 # 주의: 네이티브 명령(git·winget)이 stderr 로 진행률을 찍으면 PS 5.1 은 "Stop" 에서 오류로 죽는다 → Continue + 종료코드 확인
@@ -90,8 +91,8 @@ if (Test-Path (Join-Path $Dir "start.py")) {
 }
 
 # ---------- 4. 전부 설치 → 데모 → 대시보드 ----------
-Say "4/4  설치 → 데모 → 대시보드  (처음 한 번은 5~10분, 끄려면 Ctrl+C)"
+Say "4/4  설치 → 외부 도구(SNAP·snaphu·Earthdata) → 데모 → 대시보드  (처음 한 번은 10~20분, 끄려면 Ctrl+C)"
 Write-Host "    다음부터 대시보드만:  cd `"$Dir`";  .venv\Scripts\streamlit run src\inframon\dashboard\app.py"
 Set-Location $Dir
-& $Py start.py --full --dashboard
+& $Py start.py --full --tools --dashboard
 if ($LASTEXITCODE -ne 0) { Fail "start.py 가 종료코드 $LASTEXITCODE 로 끝났습니다. 위 메시지를 확인하세요." }

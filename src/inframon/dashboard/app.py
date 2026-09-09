@@ -2242,10 +2242,15 @@ def _env_checks() -> list[dict]:
                          "why": d.enables or ("필수" if d.required else "선택 기능"),
                          "fix": d.install or ""})
     # 상류 처리 레인 — 하나만 있어도 track.h5 를 만들 수 있다.
-    snap = Path(r"C:\Program Files\esa-snap\bin\gpt.exe").exists()
+    # doctor 와 같은 탐지기 — 사용자 폴더에 --tools 로 깐 SNAP(tools.json)·INFRAMON_SNAP_GPT 도 본다.
+    try:
+        from inframon.insar.snap_backend import find_gpt
+        snap = bool(find_gpt())
+    except Exception:  # noqa: BLE001
+        snap = False
     rows.append({"name": "레인 A · SNAP (Windows 네이티브)", "ok": snap,
                  "why": "WSL 없이 SLC→track.h5 처리",
-                 "fix": "https://step.esa.int/main/download/snap-download/ 설치"})
+                 "fix": "python start.py --tools  (1.1 GB 내려받아 무인 설치)"})
     try:
         from inframon.insar.toolchain import wsl_status
         ws = wsl_status()
@@ -2265,10 +2270,15 @@ def _env_checks() -> list[dict]:
                  "fix": "python start.py --full"})
     # 자격·데이터
     netrc = (Path.home() / ".netrc").exists() or (Path.home() / "_netrc").exists()
-    cred = netrc or bool(os.environ.get("EARTHDATA_TOKEN"))
+    try:
+        from inframon.insar.slc_download import find_earthdata_token
+        tok = find_earthdata_token()[0]          # env 와 ~/.inframon/earthdata_token 둘 다
+    except Exception:  # noqa: BLE001
+        tok = os.environ.get("EARTHDATA_TOKEN")
+    cred = netrc or bool(tok)
     rows.append({"name": "Earthdata 자격 (SLC 다운로드)", "ok": cred,
                  "why": "위성 원본 내려받기",
-                 "fix": "urs.earthdata.nasa.gov 가입 → Generate Token → python -m inframon --earthdata-save <토큰>"})
+                 "fix": "python start.py --tools  (토큰 페이지를 열어 주니 붙여넣기만)"})
     try:
         from inframon.insar.slc_store import get_slc_dir, scan
         d = get_slc_dir()
