@@ -322,8 +322,16 @@ def setup_slc_dir(log: Log = print, *, path: str | Path | None = None,
     from .insar.slc_store import drives, get_slc_dir, scan, set_slc_dir, suggest_dir
     cur = get_slc_dir()
     if cur is not None and path is None:
-        log(f"    이미 있음: {cur} ({len(scan(cur))}장)")
-        return True
+        if ask is None:
+            log(f"    이미 있음: {cur} ({len(scan(cur))}장)")
+            return True
+        # 대화 모드 — 이미 정해져 있어도 보여 주고 바꿀 기회를 준다(다른 드라이브에 받고 싶을 때).
+        log(f"    지금 설정: {cur} ({len(scan(cur))}장)")
+        new = ask("    그대로 두려면 Enter, 다른 곳에 받으려면 새 폴더 경로(예: E:\\SLC): ").strip()
+        if not new:
+            log(f"    유지: {cur}")
+            return True
+        path = new
     if path is None:
         rec = suggest_dir()
         if ask is None:
@@ -371,7 +379,9 @@ def run_setup(which: str = "all", *, log: Log = print, interactive: bool | None 
             log, token=token, ask=(input if interactive else None))
     if "slc_dir" in wanted:
         log(f"  SLC 폴더    : {'✅ ' + st['slc_dir']['where'] if st['slc_dir']['ok'] else '❌ 미설정 → 큰 드라이브에 만들기'}")
-        res["slc_dir"] = st["slc_dir"]["ok"] or setup_slc_dir(log, ask=(input if interactive else None))
+        # 대화 모드면 이미 있어도 한 번 보여 주고 바꿀지 묻는다(비대화면 있는 것은 건너뜀).
+        res["slc_dir"] = ((st["slc_dir"]["ok"] and not interactive)
+                          or setup_slc_dir(log, ask=(input if interactive else None)))
     missing = [k for k, v in res.items() if not v]
     log("  결과: " + (", ".join(f"{k} {'✅' if v else '❌'}" for k, v in res.items())))
     if missing:

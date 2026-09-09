@@ -177,42 +177,56 @@ def build() -> Path:
         ["", "필요", "쓰는 곳"],
         ["Python 3.11+", "python.org — 설치 시 'Add python.exe to PATH' 체크", "전부"],
         ["Git", "git-scm.com", "받기"],
-        ["**Earthdata 토큰**", "urs.earthdata.nasa.gov 가입 → 프로필 → Generate Token", "⓪ SLC 다운로드"],
-        ["**SNAP**", "step.esa.int/main/download/snap-download", "⓪ InSAR 처리"],
-        ["**snaphu**(WSL)", "wsl --install → sudo apt install snaphu", "⓪ 언래핑"],
-        ["디스크", "SLC 1장 ≈ 4 GB × 12장 ≈ 50 GB", "⓪"],
+        ["**Earthdata 계정**", "urs.earthdata.nasa.gov 가입(무료, 3분). 토큰은 3.2 가 브라우저를 열어 주면 붙여넣기", "⓪ SLC 다운로드"],
+        ["SNAP", "3.2 가 1.1 GB 내려받아 무인 설치 (직접: step.esa.int)", "⓪ InSAR 처리"],
+        ["snaphu(WSL)", "3.2 가 WSL 안에 apt 설치. WSL 이 없으면 설치를 걸고 재부팅 안내", "⓪ 언래핑"],
+        ["SLC 보관 폴더", "3.2 가 드라이브를 묻고 폴더를 만듦 (장당 4~8 GB, 교량당 200~400 GB → 큰 드라이브)", "⓪ 다운로드가 떨어지는 곳"],
     ], widths=[3.2, 8.4, 4.4])
     P(doc, "트랙이 이미 있는 교량(정자교·청양교·내곡교 등)만 돌리면 **Python·Git 만** 있으면 됩니다. "
-           "위 표의 굵은 세 가지는 프로그램이 대신 설치·가입해 줄 수 없습니다.")
+           "사람이 직접 해야 하는 것은 **Earthdata 가입** 하나 — 나머지는 3.2 한 줄이 받아서 설치합니다.")
 
-    H(doc, "3.2 받기·설치 (10분)", 2)
-    CODE(doc, ["git clone https://github.com/tjddnr8334-sudo/inframon",
+    H(doc, "3.2 받기·설치 — 원하는 폴더에서 (10~20분)", 2)
+    P(doc, "PowerShell(Win + X → 터미널)을 열고, **먼저 프로그램을 둘 폴더로 이동**합니다. 그 아래에 `inframon` 폴더가 생깁니다. "
+           "그다음 한 줄 — Python·Git 이 없으면 깔고, 받고, 파이썬 패키지 전부와 SNAP·snaphu 를 설치하고, "
+           "Earthdata 토큰은 브라우저를 열어 붙여넣게 하고, SLC 보관 드라이브를 묻고, 데모와 대시보드까지 띄웁니다.")
+    CODE(doc, ["cd E:\\                                                                              # ① 프로그램을 둘 곳",
+               "irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex   # ② 전부"])
+    P(doc, "손으로 하려면 (같은 폴더에서):")
+    CODE(doc, ["cd E:\\",
+               "git clone https://github.com/tjddnr8334-sudo/inframon",
                "cd inframon",
-               "python start.py --full"])
-    P(doc, "확인: 마지막 줄에 **판정: ✅ 코어 동작 가능**. `--full` 이 가상환경(.venv)을 만들고 "
-           "torch·pyproj·scipy·matplotlib·ifcopenshell 까지 깝니다.")
+               "python start.py --full --tools"])
+    P(doc, "확인: **판정: ✅ 코어 동작 가능** 과 **결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅**. "
+           "`--full` 이 가상환경(.venv)을 만들고 torch·pyproj·scipy·matplotlib·ifcopenshell 까지 깝니다. "
+           "`--tools` 가 SNAP·snaphu·토큰·SLC 폴더를 준비합니다. 토큰 프롬프트에서 그냥 Enter 로 건너뛰었으면 3.5 로.")
+    P(doc, "**이후 명령은 `python` 이 아니라 `.venv\\Scripts\\python`** 으로 부릅니다 — start.py 가 시스템 파이썬이 아니라 "
+           ".venv 안에 설치하기 때문입니다. 그냥 `python -m inframon` 은 새 컴퓨터에서 'No module named inframon' 이 납니다.")
 
     H(doc, "3.3 이 PC 에 뭐가 있나 (1분)", 2)
-    CODE(doc, ["python -m inframon --doctor"])
-    P(doc, "확인: **[외부 도구·자격]** 세 줄 — Earthdata / SNAP gpt / snaphu 각각 ✅❌. ❌ 면 그 줄에 설치법이 적혀 있습니다.")
+    CODE(doc, [".venv\\Scripts\\python -m inframon --doctor"])
+    P(doc, "확인: **[외부 도구·자격]** 네 줄 — Earthdata / SNAP gpt / snaphu / SLC 보관 폴더 각각 ✅❌. ❌ 면 그 줄에 설치법이 적혀 있고, "
+           "`python start.py --tools` 를 다시 돌리면 빠진 것만 채웁니다.")
 
     H(doc, "3.4 먼저 되는 것으로 한 번 (1분)", 2)
-    CODE(doc, ["python scripts\\demo_4pm.py"])
+    CODE(doc, [".venv\\Scripts\\python scripts\\demo_4pm.py"])
     P(doc, "정자교를 44초에 끝까지 돌리고 결과 창 4개(3D 속도 · 3D 위험도 · 브리프 그림 · 결과.md)를 엽니다. "
            "확인: 터미널에 **⑩ 결과 문서** 까지 찍히고 `rc=0`.")
     FIG(doc, IMG / "twin_3d_jeongjagyo.png", "그림 1. 3D 디지털 트윈 — IFC 부재(A1·P1~P4·S1) 위에 InSAR 점. 점을 클릭하면 값·부재·GlobalId.")
 
-    H(doc, "3.5 토큰 저장 (한 번)", 2)
-    CODE(doc, ["python -m inframon --earthdata-save <토큰>"])
-    P(doc, "`~/.inframon/earthdata_token` 에 저장됩니다. 확인: `--doctor` 에서 Earthdata ✅.")
+    H(doc, "3.5 토큰·SLC 폴더 — 3.2 에서 건너뛰었다면 (한 번)", 2)
+    CODE(doc, ["python start.py --tools --no-demo                        # 빠진 것만: 토큰 붙여넣기 · SLC 드라이브 고르기",
+               ".venv\\Scripts\\python -m inframon --earthdata-save <토큰>   # 토큰만 따로",
+               ".venv\\Scripts\\python -m inframon --slc-dir E:\\SLC           # SLC 폴더만 따로 (없으면 만듦)"])
+    P(doc, "토큰은 `~/.inframon/earthdata_token` 에, SLC 폴더는 `~/.inframon/config.json` 에 저장됩니다. "
+           "확인: `--doctor` 에서 Earthdata ✅, SLC 보관 폴더 ✅.")
 
     H(doc, "3.6 새 교량 — 계획만 먼저 (1분, 토큰 불필요)", 2)
-    CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan"])
+    CODE(doc, [".venv\\Scripts\\python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan"])
     P(doc, "확인: **②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** — 어떤 궤도로 몇 장이 있는지. "
            "장면 수가 나오면 다음으로.")
 
     H(doc, "3.7 새 교량 — 끝까지 (1~3시간)", 2)
-    CODE(doc, ["python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366"])
+    CODE(doc, [".venv\\Scripts\\python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366"])
     P(doc, "트랙이 없으므로 **⓪ SLC 다운로드 → SNAP → 언래핑**부터 갑니다. 단계마다 찍힙니다:")
     CODE(doc, ["⓪ SLC → InSAR      ← 대부분의 시간 (다운로드 GB 단위 · SNAP 수십 분)",
                "① 제원  ② 데크선  ③ 지면  ④ 점 선택  ⑤ 잔차고도",
@@ -290,7 +304,7 @@ def build() -> Path:
         ["상규", "3", "0.879 위험", "—", "보고 가능", "점 3개 — 판정 신뢰도 낮음"],
         ["동수원", "77", "0.729", "—", "보고 불가", "CSV 890 m vs OSM 1227 m"],
     ], widths=[2.0, 1.2, 2.2, 3.6, 2.2, 4.8])
-    P(doc, "여러 교량을 한 번에: `python scripts\\bridge_run.py --batch docs\\bridges\\batch.json`")
+    P(doc, "여러 교량을 한 번에: `.venv\\Scripts\\python scripts\\bridge_run.py --batch docs\\bridges\\batch.json`")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(OUT))

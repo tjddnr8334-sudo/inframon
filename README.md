@@ -14,28 +14,31 @@
 
 ## 처음 쓰는 컴퓨터에서 — 받기부터 대시보드까지 (PowerShell)
 
-PowerShell 을 열고 (Win+X → 터미널) **이 한 줄을 붙여넣고 Enter** — 끝입니다:
+PowerShell 을 열고 (Win+X → 터미널), **① 프로그램을 둘 폴더로 먼저 이동**한 뒤 **② 한 줄을 붙여넣고 Enter** — 끝입니다:
 
 ```powershell
-irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex
+cd E:\                                                                             # ① 프로그램을 둘 곳 (원하는 드라이브·폴더)
+irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex   # ② 전부 받고 설치
 ```
 
-Python·Git 이 없으면 알아서 설치하고([install.ps1](install.ps1)), `$HOME\inframon` 에 받아서, 파이썬 패키지 전부 →
-**SNAP**(1.1 GB, 무인 설치) → **snaphu**(WSL 안에) → **Earthdata 토큰**(브라우저가 열리면 토큰만 붙여넣기) →
-데모 → 브라우저에 **http://localhost:8501** 대시보드. 처음 한 번은 10~20분. 끄려면 Ctrl+C.
-다시 실행하면 갱신(git pull)과 빠진 것만 채우고 바로 대시보드를 띄웁니다. 사람이 직접 해야 하는 것은
-[Earthdata 가입](https://urs.earthdata.nasa.gov/users/new)(무료) 하나뿐입니다.
+Python·Git 이 없으면 알아서 설치하고([install.ps1](install.ps1)), **지금 있는 폴더 아래 `inframon`**(위 예시면 `E:\inframon`)에 받아서,
+파이썬 패키지 전부 → **SNAP**(1.1 GB, 무인 설치) → **snaphu**(WSL 안에) → **Earthdata 토큰**(브라우저가 열리면 토큰만 붙여넣기)
+→ **SLC 보관 폴더**(드라이브 고르면 폴더를 만들어 줌) → 데모 → 브라우저에 **http://localhost:8501** 대시보드.
+처음 한 번은 10~20분. 끄려면 Ctrl+C. 다시 실행하면 갱신(git pull)과 빠진 것만 채우고 바로 대시보드를 띄웁니다.
+사람이 직접 해야 하는 것은 [Earthdata 가입](https://urs.earthdata.nasa.gov/users/new)(무료) 하나뿐입니다.
 
-<details><summary>한 줄이 싫으면 — 손으로 세 줄</summary>
+<details><summary>한 줄이 싫으면 — 손으로 네 줄</summary>
 
 ```powershell
-git clone https://github.com/tjddnr8334-sudo/inframon      # 1. GitHub 에서 받기
-cd inframon                                                 # 2. 폴더로
-python start.py --full --tools --dashboard                  # 3. 전부 설치 → SNAP·snaphu·토큰 → 데모 → 대시보드
+cd E:\                                                      # 1. 프로그램을 둘 곳
+git clone https://github.com/tjddnr8334-sudo/inframon      # 2. GitHub 에서 받기 → E:\inframon
+cd inframon                                                 # 3. 폴더로
+python start.py --full --tools --dashboard                  # 4. 전부 설치 → SNAP·snaphu·토큰·SLC 폴더 → 데모 → 대시보드
 ```
+`start.py` 는 가상환경 `.venv` 안에 설치합니다. 그래서 **이후 명령은 `python` 대신 `.venv\Scripts\python`** 으로 부릅니다(아래 표).
 </details>
 
-이미 설치돼 있으면 대시보드만 바로: `.venv\Scripts\streamlit run src\inframon\dashboardpp.py`
+이미 설치돼 있으면 대시보드만 바로: `.venv\Scripts\streamlit run src\inframon\dashboard\app.py`
 
 ![dashboard](docs/img/dashboard_start.jpg)
 
@@ -51,15 +54,15 @@ python start.py --full --tools --dashboard                  # 3. 전부 설치 �
 왼쪽 사이드바 **🔎 교량명 검색** → 지도 마커 클릭 → **💾 타깃 저장** → **🚀 끝까지 돌리기** 로 해도 같습니다.
 화면별 스크린샷은 [혼자 돌리기 (pdf)](docs/inframon_혼자_돌리기.pdf) 4장에 있습니다.
 
-| 그다음 | 명령 |
+| 그다음 (inframon 폴더 안에서) | 명령 |
 |---|---|
-| 실 교량 시연 44초 (명령줄) | `python scripts\demo_4pm.py` |
+| 실 교량 시연 44초 (명령줄) | `.venv\Scripts\python scripts\demo_4pm.py` |
 | 실 교량·트윈용 패키지까지 | `python start.py --full` |
-| 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
-| SNAP·snaphu·Earthdata 토큰 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기 (`python -m inframon --earthdata-save <토큰>` 도 됨) |
-| 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
-| 다른 사람에게 넘길 때 | 주소 한 줄 + `python scripts\pack_handoff.py` 가 만든 zip (파트너 CSV·처리 결과 h5, ~25 MB). 받는 쪽 `--unpack` |
-| SLC 를 어느 드라이브에 쌓을지 | 대시보드 🔧 패널 **SLC 보관 폴더** (드라이브 고르면 폴더를 만들어 줌) 또는 `python -m inframon --slc-dir E:\SLC` |
+| 새 교량 명령 한 줄 | `.venv\Scripts\python scripts\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
+| SNAP·snaphu·Earthdata 토큰·SLC 폴더 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기, SLC 폴더는 드라이브 고르기 (토큰만: `.venv\Scripts\python -m inframon --earthdata-save <토큰>`) |
+| 이 PC 에 뭐가 없나 | `.venv\Scripts\python -m inframon --doctor` |
+| 다른 사람에게 넘길 때 | 주소 한 줄 + `.venv\Scripts\python scripts\pack_handoff.py` 가 만든 zip (파트너 CSV·처리 결과 h5, ~25 MB). 받는 쪽 `--unpack` |
+| SLC 를 어느 드라이브에 쌓을지 | 대시보드 🔧 패널 **SLC 보관 폴더** (드라이브 고르면 폴더를 만들어 줌) 또는 `.venv\Scripts\python -m inframon --slc-dir E:\SLC` |
 | Earthdata 토큰·SNAP·snaphu·SLC 폴더 자세히 | [docs/외부도구_준비.md](docs/외부도구_준비.md) — 가입 화면, 토큰 발급 클릭 순서, 자동/수동, 오류별 조치 |
 | 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 9쪽 · 화면별 클릭 순서)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
 

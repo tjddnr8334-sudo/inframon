@@ -4,13 +4,24 @@
 #
 # 하는 일: Python·Git 확인(없으면 winget 으로 설치) → GitHub 에서 받기(있으면 갱신)
 #          → python start.py --full --tools --dashboard
-#            (파이썬 패키지 전부 → SNAP 1.1 GB 무인 설치 · snaphu(WSL) · Earthdata 토큰 붙여넣기 → 데모 → 대시보드)
-# 설치 위치: $HOME\inframon  (바꾸려면 실행 전 $env:INFRAMON_DIR = "D:\어디" )
+#            (파이썬 패키지 전부 → SNAP 1.1 GB 무인 설치 · snaphu(WSL) · Earthdata 토큰 붙여넣기
+#             · SLC 보관 폴더 → 데모 → 대시보드)
+# 설치 위치: **지금 있는 폴더**\inframon — 먼저 원하는 곳으로 cd 한 뒤 붙여넣는다 (예: cd E:\).
+#            이미 inframon 폴더 안(start.py 가 있는 곳)이면 그 폴더를 그대로 갱신.
+#            환경변수로 고정하려면 실행 전 $env:INFRAMON_DIR = "D:\어디".
 
 # 주의: 네이티브 명령(git·winget)이 stderr 로 진행률을 찍으면 PS 5.1 은 "Stop" 에서 오류로 죽는다 → Continue + 종료코드 확인
 $ErrorActionPreference = "Continue"
 $Repo = "https://github.com/tjddnr8334-sudo/inframon"
-$Dir  = if ($env:INFRAMON_DIR) { $env:INFRAMON_DIR } else { Join-Path $HOME "inframon" }
+$Here = (Get-Location).Path
+$Dir  = if ($env:INFRAMON_DIR) { $env:INFRAMON_DIR }
+        elseif (Test-Path (Join-Path $Here "start.py")) { $Here }
+        else { Join-Path $Here "inframon" }
+
+Write-Host ""
+Write-Host "inframon 한 줄 설치기" -ForegroundColor Green
+Write-Host "    설치 위치: $Dir"
+Write-Host "    (다른 드라이브·폴더에 두려면 Ctrl+C 로 멈추고, 그 폴더로 cd 한 뒤 같은 한 줄을 다시 붙여넣으세요)"
 
 function Say($t) { Write-Host ""; Write-Host "==> $t" -ForegroundColor Cyan }
 function RefreshPath {

@@ -137,14 +137,17 @@ def build() -> Path:
 
     # 한 줄
     H(doc, "가장 쉬운 길 — PowerShell 에 한 줄 붙여넣기", 1)
-    P(doc, "키보드 **Win + X** → **터미널** 을 열고, 아래 한 줄을 그대로 붙여넣고 Enter. 이것으로 0~3 절이 전부 자동입니다.")
-    CODE(doc, "irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex")
+    P(doc, "키보드 **Win + X** → **터미널** 을 열고, **① 프로그램을 둘 폴더로 먼저 이동**한 뒤 **② 한 줄**을 그대로 붙여넣고 Enter. "
+           "이것으로 0~3 절과 5 절이 전부 자동입니다.")
+    CODE(doc, ["cd E:\\                                                                              # ① 프로그램을 둘 곳 (원하는 드라이브·폴더)",
+               "irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex   # ② 전부"])
     TABLE(doc, [
         ["자동으로 하는 일", "걸리는 시간"],
         ["Python 3.11+ · Git 확인 — 없으면 winget 으로 설치", "0~3분"],
-        ["GitHub 에서 받기 → 내 사용자 폴더 **C:\\Users\\(이름)\\inframon** (이미 있으면 최신으로 갱신)", "10초"],
+        ["GitHub 에서 받기 → **지금 있는 폴더 아래 inframon** (위 예시면 E:\\inframon. 이미 있으면 최신으로 갱신)", "10초"],
         ["파이썬 패키지 전부 설치 → **SNAP** 1.1 GB 무인 설치 → **snaphu** (WSL 안에)", "5~15분 (처음만)"],
         ["**Earthdata 토큰** — 브라우저가 토큰 페이지를 열면 [Generate Token] → 터미널에 붙여넣고 Enter (계정이 없으면 그냥 Enter 로 건너뛰고 5절)", "30초"],
+        ["**SLC 보관 폴더** — 드라이브별 여유 공간을 보여 주고 묻는다. Enter = 가장 큰 드라이브의 \\SLC", "10초"],
         ["데모 → 진단 → **브라우저에 대시보드**", "1분"],
     ], widths=[11.5, 4.5])
     CHECK(doc, "브라우저에 http://localhost:8501 대시보드가 열린다 → **4절** 로 바로 간다. 끄려면 터미널에서 Ctrl + C, "
@@ -165,19 +168,24 @@ def build() -> Path:
 
     # 1
     H(doc, "1. GitHub 에서 받기", 1)
-    CODE(doc, ["cd $HOME",
+    P(doc, "**먼저 프로그램을 둘 폴더로 이동**합니다 (원하는 드라이브·폴더 — 그 아래에 `inframon` 폴더가 생깁니다). 그다음 받기:")
+    CODE(doc, ["cd E:\\",
                "git clone https://github.com/tjddnr8334-sudo/inframon",
                "cd inframon"])
-    CHECK(doc, "`Receiving objects: 100%` 가 찍히고, `cd inframon` 뒤 프롬프트가 `...\\inframon>` 로 바뀐다.")
+    CHECK(doc, "`Receiving objects: 100%` 가 찍히고, `cd inframon` 뒤 프롬프트가 `E:\\inframon>` 로 바뀐다.")
 
     # 2
-    H(doc, "2. 전부 설치 (한 줄, 5~10분)", 1)
-    CODE(doc, ["python start.py --full"])
+    H(doc, "2. 전부 설치 — 외부 도구까지 (한 줄, 10~20분)", 1)
+    CODE(doc, ["python start.py --full --tools"])
     P(doc, "이 한 줄이: 파이썬 확인 → 가상환경(.venv) 생성 → inframon 과 필요한 패키지 전부(torch·scipy·pyproj·"
-           "rasterio·asf_search·streamlit 등 20개) 설치 → 데모 실행 → 진단 리포트. 한 번만 하면 됩니다.")
-    CHECK(doc, "마지막 부분에 **`판정: ✅ 코어 동작 가능`**. 그 위 [의존성] 목록이 전부 ✅.")
-    P(doc, "남는 ⚠ 는 하나뿐이어야 합니다 — **Earthdata 토큰 없음**. 이것은 위성 원본(SLC)을 내려받을 때만 "
-           "필요하고, 5번에서 넣습니다. 이미 만들어진 교량 결과를 보는 데는 필요 없습니다.")
+           "rasterio·asf_search·streamlit 등 20개) 설치 → **SNAP** 1.1 GB 내려받아 무인 설치 → **snaphu** WSL 안에 설치 → "
+           "**Earthdata 토큰** 브라우저 열어 붙여넣기 → **SLC 보관 폴더** 드라이브 고르기 → 데모 실행 → 진단 리포트. 한 번만 하면 됩니다.")
+    CHECK(doc, "`결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅` 와 마지막 부분에 **`판정: ✅ 코어 동작 가능`**. [의존성]·[외부 도구] 전부 ✅.")
+    P(doc, "토큰 프롬프트에서 그냥 Enter 로 건너뛰었으면 ⚠ **Earthdata 토큰 없음** 하나가 남습니다 — 위성 원본(SLC)을 내려받을 때만 "
+           "필요하고, 5절에서 넣습니다. 이미 만들어진 교량 결과를 보는 데는 필요 없습니다.")
+    P(doc, "**이후 명령은 `python` 이 아니라 `.venv\\Scripts\\python`** 으로 부릅니다 — start.py 가 시스템 파이썬이 아니라 .venv 안에 "
+           "설치하기 때문입니다. 그냥 `python -m inframon` 은 새 컴퓨터에서 'No module named inframon' 이 납니다. "
+           "(`python start.py …` 는 예외 — 이 파일은 표준 라이브러리만 씁니다.)")
 
     # 3
     H(doc, "3. 대시보드 띄우기", 1)
@@ -231,9 +239,9 @@ def build() -> Path:
     ], widths=[5.0, 11.0])
 
     H(doc, "4-6. 같은 것을 명령 한 줄로 (대시보드 없이)", 2)
-    CODE(doc, ["python scripts\\demo_4pm.py                     # 정자교 44초, 결과 창 4개 자동 열림",
-               "python scripts\\bridge_run.py --name 청양교 --lat 36.450655 --lon 126.80732",
-               "python scripts\\bridge_run.py --batch docs\\bridges\\batch.json   # 여러 교량 한 번에"])
+    CODE(doc, [".venv\\Scripts\\python scripts\\demo_4pm.py                     # 정자교 44초, 결과 창 4개 자동 열림",
+               ".venv\\Scripts\\python scripts\\bridge_run.py --name 청양교 --lat 36.450655 --lon 126.80732",
+               ".venv\\Scripts\\python scripts\\bridge_run.py --batch docs\\bridges\\batch.json   # 여러 교량 한 번에"])
 
     # 5
     H(doc, "5. 외부 도구 — Earthdata 토큰 · SNAP · snaphu · SLC 폴더 (한 번)", 1)
@@ -247,7 +255,7 @@ def build() -> Path:
         ["snaphu", "WSL(Ubuntu) 안에 apt 로 설치. WSL 이 없으면 설치를 걸고 재부팅 안내", "관리자 승인 '예', 재부팅 후 같은 명령 한 번 더"],
         ["Earthdata 토큰", "토큰 페이지를 브라우저로 열고, 붙여넣은 토큰을 NASA 서버에 확인한 뒤 저장", "**가입(무료)** → 로그인 → [Generate Token] → 복사 → 터미널에 붙여넣기"],
     ], widths=[3.0, 7.5, 5.5])
-    CHECK(doc, "마지막 줄 `결과: snap ✅, snaphu ✅, earthdata ✅`. `python -m inframon --doctor` 의 [외부 도구] 세 줄이 전부 ✅.")
+    CHECK(doc, "마지막 줄 `결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅`. `.venv\\Scripts\\python -m inframon --doctor` 의 [외부 도구] 세 줄이 전부 ✅.")
 
     H(doc, "5-1. Earthdata 토큰 — 사람이 하는 3분", 2)
     FIG(doc, IMG / "earthdata_signup.jpg", "그림 7. https://urs.earthdata.nasa.gov/users/new — Username(소문자·숫자·._ 4~30자) · 비밀번호 12자+ 대소문자·숫자·특수문자 · 이름 · 메일 · Country · Affiliation → CONTINUE → 메일 인증.", width_cm=15)
@@ -258,7 +266,7 @@ def build() -> Path:
     ]:
         BUL(doc, t)
     P(doc, "토큰은 60일짜리(최대 2개). 만료 7일 전부터 프로그램이 자동 갱신하니 다시 붙여넣을 일은 거의 없습니다. "
-           "토큰만 따로: `python -m inframon --earthdata-save <토큰>`. 첫 SLC 다운로드가 401/403 이면 "
+           "토큰만 따로: `.venv\\Scripts\\python -m inframon --earthdata-save <토큰>`. 첫 SLC 다운로드가 401/403 이면 "
            "https://search.asf.alaska.edu 에 한 번 로그인해 ASF 앱을 승인합니다.", size=10)
 
     H(doc, "5-2. SNAP · snaphu — 프로그램이 하는 것", 2)
@@ -272,13 +280,13 @@ def build() -> Path:
     H(doc, "5-3. SLC 보관 폴더 — 원하는 드라이브에", 2)
     P(doc, "위성 원본은 장당 4–8 GB, 교량 하나에 200–400 GB 까지 갑니다. C: 에 두면 곧 차니 **큰 드라이브**를 고릅니다. "
            "🔧 패널 맨 아래 **SLC 보관 폴더**: 드라이브 드롭다운(여유 공간 큰 순) → 폴더(자동 `\SLC`) → **폴더 만들고 저장**. "
-           "터미널이면 `python -m inframon --slc-dir E:\SLC` (없으면 만듦).")
+           "터미널이면 `.venv\\Scripts\\python -m inframon --slc-dir E:\\SLC` (없으면 만듦).")
     P(doc, "이후 다운로드는 `E:\SLC\<궤도_프레임>\` 에 떨어지고, 같은 프레임을 쓰는 다음 교량은 다운로드를 건너뜁니다. "
            "이미 받아둔 zip 이 있는 폴더를 지정하면 그대로 인식합니다.", size=10)
     CHECK(doc, "🔧 패널에 `현재: E:\SLC (0장)` 처럼 표시. `--doctor` 의 SLC 보관 폴더 ✅.")
     P(doc, "그다음 새 교량:")
-    CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan   # 계획만(1분)",
-               "python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366                           # 끝까지(1~3시간)"])
+    CODE(doc, [".venv\\Scripts\\python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan   # 계획만(1분)",
+               ".venv\\Scripts\\python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366                           # 끝까지(1~3시간)"])
     CHECK(doc, "계획: `②④ SLC·트랙·프레임  ASC path127 · 41장` 처럼 장면 수가 나온다. 끝까지: `⓪ SLC → InSAR` 부터 `⑩` 까지 찍힌다.")
 
     # 6

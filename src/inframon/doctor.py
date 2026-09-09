@@ -95,8 +95,8 @@ def run_doctor(path: str | Path | None = None) -> DoctorReport:
                                      and capabilities["unwrap_snaphu"] and have["torch"])
 
     notes: list[str] = []
-    for k in ("earthdata", "snap_gpt", "snaphu"):
-        if not tools[k]["ok"]:
+    for k in ("earthdata", "snap_gpt", "snaphu", "slc_dir"):
+        if k in tools and not tools[k]["ok"]:
             notes.append(tools[k]["hint"])
     if not capabilities["pinn_real"]:
         notes.append("PINN real 미가용 → pinn=stub 로만 실행 가능(torch 설치 필요).")
@@ -122,9 +122,26 @@ def run_doctor(path: str | Path | None = None) -> DoctorReport:
                         notes=notes, tools=tools)
 
 
+def python_cmd() -> str:
+    """안내문에 적을 파이썬 호출 — start.py 가 .venv 안에 설치하므로, 지금 .venv 로 돌고 있으면
+    `.venv\\Scripts\\python` 을 적어야 사용자가 그대로 붙여넣어도 'No module named inframon' 이 안 난다."""
+    import sys
+    exe = Path(sys.executable)
+    if sys.prefix != getattr(sys, "base_prefix", sys.prefix):      # 가상환경 안
+        for anc in exe.parents:
+            if anc.name == ".venv":
+                try:
+                    return str(exe.relative_to(anc.parent)).removesuffix(".exe")
+                except ValueError:
+                    break
+        return str(exe)
+    return "python"
+
+
 def _external_tools() -> dict[str, dict]:
-    """Earthdata 토큰 · SNAP gpt · snaphu — 있으면 어디에, 없으면 어떻게."""
+    """Earthdata 토큰 · SNAP gpt · snaphu · SLC 보관 폴더 — 있으면 어디에, 없으면 어떻게."""
     out: dict[str, dict] = {}
+    py = python_cmd()
     try:
         from .insar.slc_download import find_earthdata_token
         tok, src = find_earthdata_token()
@@ -138,9 +155,19 @@ def _external_tools() -> dict[str, dict]:
         out["earthdata"] = {"ok": bool(tok) and (d is None or d >= 0), "where": src,
                             "hint": ("Earthdata 토큰 없음 → SLC 다운로드 불가. "
                                      "`python start.py --tools` 가 토큰 페이지를 열어 주고 붙여넣으면 저장 "
-                                     "(또는 `python -m inframon --earthdata-save <토큰>`)")}
+                                     f"(또는 `{py} -m inframon --earthdata-save <토큰>`)")}
     except Exception as e:                       # noqa: BLE001
         out["earthdata"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "asf_search 설치 필요"}
+    try:
+        from .insar.slc_store import get_slc_dir, scan
+        d = get_slc_dir()
+        out["slc_dir"] = {"ok": d is not None,
+                          "where": f"{d} ({len(scan(d))}장)" if d else "미설정 → 프로젝트 폴더에 쌓임",
+                          "hint": ("SLC 보관 폴더 미설정 → 다운로드가 프로젝트 폴더(C:)에 쌓입니다. "
+                                   "`python start.py --tools` 가 드라이브를 묻고 만들어 줍니다 "
+                                   f"(또는 `{py} -m inframon --slc-dir E:\\SLC`)")}
+    except Exception as e:                       # noqa: BLE001
+        out["slc_dir"] = {"ok": False, "where": f"확인 실패 {type(e).__name__}", "hint": "SLC 보관 폴더 확인 실패"}
     try:
         from .insar.snap_backend import SnapError, find_gpt
         hint = "SNAP gpt 없음 → InSAR 처리 불가. `python start.py --tools` 가 내려받아 설치합니다(1.1 GB, 무인)"
@@ -206,9 +233,9 @@ def format_report(rep: DoctorReport) -> str:
         if not d.present:
             lines.append(f"        설치: {d.install}")
     if rep.tools:
-        lines.append("  [외부 도구·자격 — 프로그램이 대신 못 하는 것]")
+        lines.append("  [외부 도구·자격 — `python start.py --tools` 가 준비하는 것]")
         for k, lab in (("earthdata", "Earthdata 토큰"), ("snap_gpt", "SNAP gpt"),
-                       ("snaphu", "snaphu")):
+                       ("snaphu", "snaphu"), ("slc_dir", "SLC 보관 폴더")):
             t = rep.tools.get(k)
             if t:
                 lines.append(f"    {'✅' if t['ok'] else '❌'} {lab:<14} {t['where']}")
