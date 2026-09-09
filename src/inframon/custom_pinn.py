@@ -318,20 +318,26 @@ def run_custom_pinn(
             collected["girder_virtual_sensing"] = store.read_json_attr("pinn", "virtual_sensing")
         except (KeyError, ValueError):
             collected["girder_virtual_sensing"] = None
-        if fram_mode == "real":
-            from .fram.real_engine import run_fram_real as run_fram
-        else:
-            from .fram.engine import run_fram
-        # CRI 정상범위(reference range): 건강 인구 대비 판독 등급. True=패키지 기본치.
-        if reference_range:
-            from .fram.reference_range import default_reference_range
-            cfg.fram_reference_range = (reference_range if isinstance(reference_range, dict)
-                                        else default_reference_range().to_dict())
-        fram = run_fram(store, insar, pinn, cfg)
-        try:
-            collected["reference_range"] = store.read_json_attr("fram", "reference_range")
-        except (KeyError, ValueError):
+        # FRAM 이 보는 교량 인자를 /pinn 에 남긴다 — 대시보드 ③ FRAM 탭(run_custom_fram)이
+        # PINN 을 다시 돌리지 않고 **같은 인자로** CRI 만 다시 낼 수 있게.
+        store.write_json_attr("pinn", "fram_cfg", {
+            "bridge_grade": getattr(cfg, "bridge_grade", None),
+            "bridge_terrain": getattr(cfg, "bridge_terrain", None),
+            "bridge_inspect_grade": getattr(cfg, "bridge_inspect_grade", None),
+            "bridge_build_year": getattr(cfg, "bridge_build_year", None),
+            "fram_mode": fram_mode if fram_mode != "none" else "real",
+            "reference_range": (reference_range if isinstance(reference_range, dict)
+                                else bool(reference_range)),
+        })
+        if fram_mode == "none":                 # 단계별 실행 — FRAM 은 ③ 탭에서 따로
+            fram = None
             collected["reference_range"] = None
+        else:
+            fram = _run_fram(store, insar, pinn, cfg, fram_mode, reference_range)
+            try:
+                collected["reference_range"] = store.read_json_attr("fram", "reference_range")
+            except (KeyError, ValueError):
+                collected["reference_range"] = None
 
     return {
         "bridge_name": prof.name or bridge_name,
@@ -341,9 +347,62 @@ def run_custom_pinn(
         "profile": prof.model_dump(),
         "collected": collected,
         "n_points": insar.n_points, "n_dates": insar.n_dates,
+        "cri_global_max": None if fram is None else float(fram.cri_global_max),
+        "warning_level": None if fram is None else fram.warning.level,
+        "warning_basis": None if fram is None else fram.warning.basis,
+        "reference_range": collected.get("reference_range"),
+        "critical_members": [] if fram is None else list(fram.warning.critical_members),
+    }
+
+
+def _run_fram(store, insar, pinn, cfg, fram_mode="real", reference_range=True):
+    """FRAM 실행 — real(교량 등급·지형·점검·연식 경보차등) / 그 외 기본 엔진.
+
+    CRI 정상범위(reference range): 건강 인구 대비 판독 등급. True=패키지 기본치, dict=사용자 지정, None=끔.
+    """
+    if fram_mode == "real":
+        from .fram.real_engine import run_fram_real as run_fram
+    else:
+        from .fram.engine import run_fram
+    if reference_range:
+        from .fram.reference_range import default_reference_range
+        cfg.fram_reference_range = (reference_range if isinstance(reference_range, dict)
+                                    else default_reference_range().to_dict())
+    return run_fram(store, insar, pinn, cfg)
+
+
+def run_custom_fram(project_h5: str | Path, *, fram_mode: str | None = None,
+                    reference_range: dict | bool | None = None) -> dict[str, Any]:
+    """/pinn 이 있는 project.h5 에 **FRAM(CRI·경보)만** (다시) 낸다 — 대시보드 ③ FRAM 탭.
+
+    run_custom_pinn 이 /pinn 에 남긴 fram_cfg(교량 등급·지형·점검등급·준공연도·모드)를 그대로 써서
+    ⓪ 전체 실행과 같은 경보차등이 나온다. 인자를 주면 그것이 우선. /insar·/pinn 이 없으면 ValueError.
+    """
+    from .contracts.schema import PINNOutput
+    with ProjectStore(Path(project_h5), mode="a") as store:
+        if not store.has_meta("insar") or not store.has_meta("pinn"):
+            raise ValueError("project.h5 에 /insar 와 /pinn 이 있어야 합니다 — ① InSAR → ② PINN 을 먼저.")
+        insar = store.read_meta("insar", InSAROutput)
+        pinn = store.read_meta("pinn", PINNOutput)
+        try:
+            saved = store.read_json_attr("pinn", "fram_cfg") or {}
+        except (KeyError, ValueError):
+            saved = {}
+        cfg = PipelineConfig(n_points=insar.n_points, n_dates=insar.n_dates)
+        for k in ("bridge_grade", "bridge_terrain", "bridge_inspect_grade", "bridge_build_year"):
+            setattr(cfg, k, saved.get(k))
+        mode = fram_mode or saved.get("fram_mode") or "real"
+        rr = reference_range if reference_range is not None else saved.get("reference_range", True)
+        fram = _run_fram(store, insar, pinn, cfg, mode, rr)
+        try:
+            rr_out = store.read_json_attr("fram", "reference_range")
+        except (KeyError, ValueError):
+            rr_out = None
+    return {
         "cri_global_max": float(fram.cri_global_max),
         "warning_level": fram.warning.level,
         "warning_basis": fram.warning.basis,
-        "reference_range": collected.get("reference_range"),
+        "reference_range": rr_out,
         "critical_members": list(fram.warning.critical_members),
+        "fram_mode": mode, "n_points": insar.n_points, "n_dates": insar.n_dates,
     }

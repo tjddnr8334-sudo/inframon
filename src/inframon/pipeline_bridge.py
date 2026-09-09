@@ -131,6 +131,59 @@ def run_bridge_pipeline(
     rep = PipelineReport(lat=lat, lon=lon)
     ctx = rep.context
 
+    _light_stages(rep, ctx, lat, lon, out, roi_sizes)
+
+    # ⑧⑨⑫⑬⑭ 중량 단계 — plan 이면 계획, full 이면 실행
+    _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
+                 + (" (IFC 부재 GlobalId 결합)" if (ifc or bim_elements)
+                    else " — IFC 미지정: 점군 트윈만(결합 생략)"))
+    from .insar import processing_engine as _pe
+    _eng_how = _pe.describe(engine)
+    if _pe.needs_source(engine) and not engine_source:
+        _eng_how += " — ⚠️ source 필요(이미 처리된 산출물 경로)"
+    _ps_how = ("build_bridge_track_ps_ds (ADI PS/DS, 데크 30m)"
+               if _pe.supports_deck_ps_ds(engine)
+               else f"{engine} 엔진은 Track H5 직접 산출 → 재추출 불필요")
+    heavy = [
+        (f"⑧InSAR처리({engine})", _eng_how),
+        ("⑨PS/DS(교량30m)", _ps_how),
+        ("⑫PINN→FRAM", "--custom-pinn (형식별 PINN + FRAM CRI)"),
+        ("⑬IFC디지털트윈", _twin_how),
+        ("⑭BMAP등록", "bridge_registry.json 등록 → --serve-api 서빙"),
+    ]
+    try:
+        if mode == "full":
+            _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
+                       ifc=ifc, bim_elements=bim_elements, registry=registry,
+                       bridge_id=bridge_id, twin_value=twin_value,
+                       engine=engine, engine_source=engine_source)
+        else:
+            for step, how in heavy:
+                rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
+    finally:
+        # 실패한 실행일수록 기록이 필요하다 — 성공·실패 무관하게 남긴다.
+        _save_ctx(out, ctx)
+        try:
+            rep.write_json(out / "pipeline_report.json", args={
+                "mode": mode, "engine": engine,
+                "engine_source": str(engine_source) if engine_source else None,
+                "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
+                "ifc": str(ifc) if ifc else None,
+                "bim_elements": str(bim_elements) if bim_elements else None,
+                "registry": str(registry) if registry else None,
+                "bridge_id": bridge_id, "twin_value": twin_value,
+            })
+        except OSError as e:  # 기록 실패가 파이프라인을 죽이면 안 된다
+            rep.add(StageResult("실행기록", "error", f"pipeline_report.json 기록 실패: {e}"))
+
+    return rep
+
+
+def _light_stages(rep, ctx, lat, lon, out, roi_sizes) -> None:
+    """경량 단계 — ①교량선정 ③ROI ②④SLC·트랙 ⑤⑥⑦(계획) ⑪교량메타. 네트워크 조회만, 수 초.
+
+    ⓪ 전체 실행(plan/full)과 대시보드 ① InSAR 탭의 단계 실행이 같은 코드를 쓴다.
+    """
     # ① 교량 선정 (OSM)
     try:
         from .insar.osm_bridge import confirm_bridge
@@ -231,49 +284,6 @@ def run_bridge_pipeline(
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult("⑪교량메타", "error", str(e)[:70]))
 
-    # ⑧⑨⑫⑬⑭ 중량 단계 — plan 이면 계획, full 이면 실행
-    _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
-                 + (" (IFC 부재 GlobalId 결합)" if (ifc or bim_elements)
-                    else " — IFC 미지정: 점군 트윈만(결합 생략)"))
-    from .insar import processing_engine as _pe
-    _eng_how = _pe.describe(engine)
-    if _pe.needs_source(engine) and not engine_source:
-        _eng_how += " — ⚠️ source 필요(이미 처리된 산출물 경로)"
-    _ps_how = ("build_bridge_track_ps_ds (ADI PS/DS, 데크 30m)"
-               if _pe.supports_deck_ps_ds(engine)
-               else f"{engine} 엔진은 Track H5 직접 산출 → 재추출 불필요")
-    heavy = [
-        (f"⑧InSAR처리({engine})", _eng_how),
-        ("⑨PS/DS(교량30m)", _ps_how),
-        ("⑫PINN→FRAM", "--custom-pinn (형식별 PINN + FRAM CRI)"),
-        ("⑬IFC디지털트윈", _twin_how),
-        ("⑭BMAP등록", "bridge_registry.json 등록 → --serve-api 서빙"),
-    ]
-    try:
-        if mode == "full":
-            _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
-                       ifc=ifc, bim_elements=bim_elements, registry=registry,
-                       bridge_id=bridge_id, twin_value=twin_value,
-                       engine=engine, engine_source=engine_source)
-        else:
-            for step, how in heavy:
-                rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
-    finally:
-        # 실패한 실행일수록 기록이 필요하다 — 성공·실패 무관하게 남긴다.
-        try:
-            rep.write_json(out / "pipeline_report.json", args={
-                "mode": mode, "engine": engine,
-                "engine_source": str(engine_source) if engine_source else None,
-                "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
-                "ifc": str(ifc) if ifc else None,
-                "bim_elements": str(bim_elements) if bim_elements else None,
-                "registry": str(registry) if registry else None,
-                "bridge_id": bridge_id, "twin_value": twin_value,
-            })
-        except OSError as e:  # 기록 실패가 파이프라인을 죽이면 안 된다
-            rep.add(StageResult("실행기록", "error", f"pipeline_report.json 기록 실패: {e}"))
-
-    return rep
 
 
 def _prof_for_twin(ctx: dict):
@@ -375,10 +385,9 @@ def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
         rep.add(StageResult("⑭BMAP등록", "error", str(e)[:100]))
 
 
-def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
-               ifc=None, bim_elements=None, registry=None, bridge_id=None,
-               twin_value="cri", engine="snap", engine_source=None):
-    """중량 단계 실제 실행(mode='full') — ⑧처리→PS/DS→PINN. 실패는 단계별 보고.
+def _stage_insar(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
+                 engine="snap", engine_source=None):
+    """⑧ InSAR 처리 → ⑨ 교량 데크 PS/DS. 성공하면 하류에 넘길 deck h5 경로, ⑧ 실패면 None.
 
     ⑧은 `insar.processing_engine` 으로 갈아끼운다(snap·hyp3·sarvey·miaplpy·mintpy·
     stamps). 하류가 보는 계약은 Track H5 경로 하나라, 엔진이 바뀌어도 ⑨ 이후는 같다.
@@ -398,7 +407,7 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
         # 뒤 단계를 조용히 빠뜨리면 "왜 트윈이 없지?" 가 된다 — 사유와 함께 명시 보고.
         for _s in ("⑨PS/DS(교량30m)", "⑫PINN→FRAM", "⑬IFC디지털트윈", "⑭BMAP등록"):
             rep.add(StageResult(_s, "skip", "⑧ InSAR 처리 실패 → 선행 산출물 없음"))
-        return
+        return None
 
     # ⑧ 성공 후 기록 — **엔진 실행과 같은 try 에 두면 안 된다**. 보고용 부기가 던진
     # 예외로 이미 done 인 ⑧이 error 로 뒤집히고 하류가 통째로 skip 되기 때문이다.
@@ -474,23 +483,186 @@ def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
         rep.add(StageResult("⑨PS/DS(교량30m)", "partial", "교량 geometry 없음 → 반경 track 사용"))
         deck_h5 = eres.track_h5
 
-    # ⑫ import → 교량맞춤 PINN → FRAM
+    return deck_h5
+
+
+# ── 단계 함수 — ⓪ 전체 실행(_run_heavy)과 대시보드 ①~④ 탭의 '▶ 이 단계 실행' 이 같은 코드를 쓴다 ──
+def _stage_import(rep, ctx, out, deck_h5):
+    """⑩ 트랙 h5 → <out>/project.h5 의 /insar (계약 인제스트). 성공하면 project 경로, 실패면 None."""
+    proj = str(Path(out) / "project.h5")
     try:
         from .contracts.io import ProjectStore
-        from .custom_pinn import run_custom_pinn
         from .insar.track_reader import import_track_h5
-        proj = str(out / "project.h5")
-        _geom = ctx.get("bridge", {}).get("geometry")   # ①에서 확인된 교량 선형(곡선 station용)
+        _geom = (ctx.get("bridge") or {}).get("geometry")   # ①에서 확인된 교량 선형(곡선 station용)
         with ProjectStore(proj, mode="a") as store:
             import_track_h5(store, deck_h5, geometry_latlon=_geom)
-        summ = run_custom_pinn(proj, lat, lon)
-        ctx["pinn"] = {"cri_max": summ["cri_global_max"], "warning": summ["warning_level"],
+        ctx["project"] = proj
+        ctx["deck_h5"] = str(deck_h5)
+        rep.add(StageResult("⑩트랙→project.h5", "done",
+                            f"{Path(str(deck_h5)).name} → {Path(proj).name} (/insar)"))
+        return proj
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult("⑩트랙→project.h5", "error", str(e)[:100]))
+        rep.add(StageResult("⑫PINN→FRAM", "skip", "⑩ 트랙 인제스트 실패 → PINN 입력(/insar) 없음"))
+        return None
+
+
+def _stage_pinn(rep, ctx, lat, lon, proj, *, fram_mode="real"):
+    """⑫ 교량맞춤 PINN (+FRAM). fram_mode='none' 이면 PINN 만 — ③ FRAM 탭이 따로 낸다."""
+    label = "⑫PINN" if fram_mode == "none" else "⑫PINN→FRAM"
+    try:
+        from .custom_pinn import run_custom_pinn
+        summ = run_custom_pinn(proj, lat, lon, fram_mode=fram_mode)
+        ctx["pinn"] = {"cri_max": summ.get("cri_global_max"), "warning": summ.get("warning_level"),
                        "project": proj}
-        rep.add(StageResult("⑫PINN→FRAM", "done",
+        if fram_mode == "none":
+            rep.add(StageResult(label, "done", f"형식별 PINN 완료 (FRAM 은 ③에서) · {proj}"))
+        else:
+            rep.add(StageResult(label, "done",
+                                f"CRI {summ['cri_global_max']:.3f} · 경보 {summ['warning_level']} · {proj}"))
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult(label, "error", str(e)[:100]))
+
+
+def _stage_fram(rep, ctx, proj):
+    """⑫' FRAM 만 — /pinn 이 이미 있을 때 CRI·경보를 (다시) 낸다."""
+    try:
+        from .custom_pinn import run_custom_fram
+        summ = run_custom_fram(proj)
+        ctx["pinn"] = {**(ctx.get("pinn") or {}), "cri_max": summ["cri_global_max"],
+                       "warning": summ["warning_level"], "project": proj}
+        rep.add(StageResult("⑫FRAM(CRI)", "done",
                             f"CRI {summ['cri_global_max']:.3f} · 경보 {summ['warning_level']} · {proj}"))
     except Exception as e:  # noqa: BLE001
-        rep.add(StageResult("⑫PINN→FRAM", "error", str(e)[:100]))
+        rep.add(StageResult("⑫FRAM(CRI)", "error", str(e)[:100]))
 
-    # ⑬⑭ 디지털트윈 → BMAP 등록 (목표 체인의 마지막 두 고리)
+
+def _stage_life(rep, ctx, proj):
+    """잔존수명 — /insar 변위 추세를 사용성·강성 한계까지 외삽해 /life 에 기록."""
+    try:
+        from .contracts.io import ProjectStore
+        from .life import estimate_remaining_life, summarize
+        with ProjectStore(proj, mode="a") as store:
+            o = estimate_remaining_life(store, None)
+        ctx["life"] = {"summary": summarize(o), "confidence": o.confidence}
+        rep.add(StageResult("잔존수명", "done", f"{summarize(o)} · 신뢰도 {o.confidence}"))
+    except Exception as e:  # noqa: BLE001
+        rep.add(StageResult("잔존수명", "error", str(e)[:100]))
+
+
+def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
+               ifc=None, bim_elements=None, registry=None, bridge_id=None,
+               twin_value="cri", engine="snap", engine_source=None):
+    """중량 단계 전부(mode='full') — ⑧처리→⑨PS/DS→⑩인제스트→⑫PINN·FRAM→⑬⑭트윈·등록.
+
+    각 단계는 위의 _stage_* 하나씩이다. 대시보드 ①~④ 탭은 같은 함수를 한 단계씩 부른다
+    (run_bridge_stage). 실패는 단계별 보고하고 뒤 단계는 사유와 함께 skip.
+    """
+    deck_h5 = _stage_insar(rep, ctx, lat, lon, out, token, snap_count, do_adi,
+                           engine=engine, engine_source=engine_source)
+    if deck_h5 is None:
+        return
+    proj = _stage_import(rep, ctx, out, deck_h5)
+    if proj:
+        _stage_pinn(rep, ctx, lat, lon, proj)
     _twin_and_register(rep, ctx, lat, lon, out, ifc=ifc, bim_elements=bim_elements,
                        registry=registry, bridge_id=bridge_id, twin_value=twin_value)
+
+
+# ── 단계별 실행(대시보드 ①~④ 탭) ─────────────────────────────────────────
+STAGES = ("insar", "pinn", "fram", "life", "twin")
+_CTX_FILE = "pipeline_context.json"
+
+
+def _save_ctx(out, ctx) -> None:
+    """앞 단계가 알아낸 것(교량 선형·제원·deck h5 경로 …)을 다음 단계가 잇도록 남긴다."""
+    import json
+    try:
+        (Path(out) / _CTX_FILE).write_text(json.dumps(_jsonable(ctx), ensure_ascii=False, indent=1),
+                                           encoding="utf-8")
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def _load_ctx(out) -> dict:
+    import json
+    try:
+        d = json.loads((Path(out) / _CTX_FILE).read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def run_bridge_stage(
+    stage: str, lat: float, lon: float, *, out_dir: str | Path,
+    engine: str = "snap", engine_source: str | Path | None = None,
+    earthdata_token: str | None = None, snap_count: int = 8, do_adi: bool = False,
+    ifc: str | Path | None = None, bim_elements: str | Path | None = None,
+    registry: str | Path | None = None, bridge_id: str | None = None,
+    twin_value: str = "cri", roi_sizes=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
+) -> PipelineReport:
+    """한 단계만 실행 — 대시보드 ① InSAR · ② PINN · ③ FRAM · ④ 잔존수명 · 트윈 탭의 '▶ 이 단계 실행'.
+
+    ⓪ 전체 실행과 같은 _stage_* 를 쓰되 하나씩 부른다. 단계 사이의 연결은 <out>/project.h5
+    (/insar → /pinn → /fram → /life) 와 <out>/pipeline_context.json(교량 선형·제원) 이다.
+    앞 단계 산출이 없으면 실행하지 않고 어느 단계를 먼저 하라고 skip 으로 적는다.
+    """
+    if stage not in STAGES:
+        raise ValueError(f"stage 는 {STAGES} 중 하나: {stage!r}")
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+    rep = PipelineReport(lat=lat, lon=lon)
+    ctx = rep.context
+    ctx.update(_load_ctx(out))
+    proj = out / "project.h5"
+
+    def _has(group: str) -> bool:
+        if not proj.exists():
+            return False
+        try:
+            from .contracts.io import ProjectStore
+            with ProjectStore(str(proj), mode="r") as store:
+                return store.has_meta(group)
+        except Exception:  # noqa: BLE001
+            return False
+
+    try:
+        if stage == "insar":
+            _light_stages(rep, ctx, lat, lon, out, roi_sizes)
+            deck_h5 = _stage_insar(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
+                                   engine=engine, engine_source=engine_source)
+            if deck_h5 is not None:
+                _stage_import(rep, ctx, out, deck_h5)
+        elif stage == "pinn":
+            if not _has("insar"):
+                rep.add(StageResult("⑫PINN", "skip", "project.h5 에 /insar 없음 → ① InSAR 를 먼저"))
+            else:
+                _stage_pinn(rep, ctx, lat, lon, str(proj), fram_mode="none")
+        elif stage == "fram":
+            if not _has("pinn"):
+                rep.add(StageResult("⑫FRAM(CRI)", "skip", "project.h5 에 /pinn 없음 → ② PINN 을 먼저"))
+            else:
+                _stage_fram(rep, ctx, str(proj))
+        elif stage == "life":
+            if not _has("insar"):
+                rep.add(StageResult("잔존수명", "skip", "project.h5 에 /insar 없음 → ① InSAR 를 먼저"))
+            else:
+                _stage_life(rep, ctx, str(proj))
+        elif stage == "twin":
+            if not _has("fram"):
+                rep.add(StageResult("⑬IFC디지털트윈", "skip", "project.h5 에 /fram 없음 → ③ FRAM 을 먼저"))
+                rep.add(StageResult("⑭BMAP등록", "skip", "/fram 없음 → 등록 생략"))
+            else:
+                ctx["pinn"] = {**(ctx.get("pinn") or {}), "project": str(proj)}
+                _twin_and_register(rep, ctx, lat, lon, out, ifc=ifc, bim_elements=bim_elements,
+                                   registry=registry, bridge_id=bridge_id, twin_value=twin_value)
+    finally:
+        _save_ctx(out, ctx)
+        try:
+            rep.write_json(out / f"pipeline_report_{stage}.json", args={
+                "stage": stage, "engine": engine,
+                "engine_source": str(engine_source) if engine_source else None,
+                "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
+                "ifc": str(ifc) if ifc else None})
+        except OSError as e:
+            rep.add(StageResult("실행기록", "error", f"pipeline_report_{stage}.json 기록 실패: {e}"))
+    return rep

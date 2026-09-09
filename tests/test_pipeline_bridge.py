@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import inframon.custom_pinn  # noqa: F401 — 아래 monkeypatch(ProjectStore→_DummyStore) 전에 실제 ProjectStore 로 먼저 묶어 둔다
 from inframon import pipeline_bridge as pb
 from inframon.insar.roi_selection import RoiResult
 

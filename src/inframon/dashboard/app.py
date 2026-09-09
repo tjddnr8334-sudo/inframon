@@ -116,6 +116,11 @@ def default_project_path() -> str:
                 shutil.copyfile(seed, target)
             except OSError:
                 pass
+    # ⓪ 시작(전체 실행)과 ①~④ 탭의 단계 실행은 <루트>/pipeline/project.h5 에 쓴다 —
+    # 루트에 데모 project.h5 가 없으면 그것을 기본으로 보여 줘야 "실행했는데 어디 갔지" 가 없다.
+    staged = root / "pipeline" / "project.h5"
+    if not target.exists() and staged.exists():
+        return str(staged)
     return str(target)
 
 
@@ -1250,6 +1255,9 @@ def insar_process_section(path: str) -> None:
 # ───────────────────────────── ① InSAR 탭 ─────────────────────────────
 def tab_insar(path: str, start: date) -> None:
     st.subheader("① InSAR — 변위 시계열 추출 (데이터 관문)")
+    st.caption("**⓪ 시작 → ▶ 전체 실행** 이 만든 InSAR 결과(변위 맵·시계열·속도 지도)를 이 탭 **아래쪽**에서 봅니다. "
+               "아래 펼침 항목(A~F)은 SLC 선별·SARvey 등을 **손으로 단계별로** 할 때만 씁니다 — 보통은 건드리지 않습니다.")
+    _step_run_block("insar", path)
 
     # 교량 프로젝트(레시피 폴더) — 교량마다 다른 폴더를 쓰면 여러 교량을 따로 관리한다.
     # 아래 A~F 단계의 모든 레시피 경로가 이 폴더를 기준으로 자동 구성된다.
@@ -1322,7 +1330,7 @@ def tab_insar(path: str, start: date) -> None:
                 st.error(f"가져오기 실패: {exc}")
 
     if not has_group(path, "insar"):
-        st.info("아직 InSAR 데이터가 없습니다. 사이드바 **데모 데이터 생성** 또는 위 **Track HDF5 가져오기**를 쓰세요.")
+        st.info("① InSAR 결과가 아직 없습니다. " + _NEED_RUN + " 이미 처리한 Track H5 가 있으면 위 **Track HDF5 가져오기**.")
         return
 
     # 변위 시각화
@@ -1431,8 +1439,10 @@ def tab_insar(path: str, start: date) -> None:
 # ───────────────────────────── ② PINN 탭 ──────────────────────────────
 def tab_pinn(path: str, start: date) -> None:
     st.subheader("② PINN — 물리 성분분해 · 구조응답 · 변동 V")
+    st.caption("① InSAR 변위를 물리 모델에 넣어 열팽창·하중·침하·이상으로 나누고 구조응답을 채운 결과.")
+    _step_run_block("pinn", path)
     if not has_group(path, "pinn"):
-        st.info("PINN 결과가 없습니다. 사이드바 **데모 데이터 생성**으로 전체 파이프라인을 돌리세요.")
+        st.info("② PINN 결과가 아직 없습니다. " + _NEED_RUN)
         return
 
     meta = read_meta(path, "pinn")
@@ -1641,8 +1651,10 @@ def thermal_bridge_section(path: str, times) -> None:
 # ───────────────────────────── ③ FRAM 탭 ──────────────────────────────
 def tab_fram(path: str, start: date) -> None:
     st.subheader("③ FRAM — 공명 위험 지수 CRI · 경보")
+    st.caption("② PINN 의 기능별 변동 V 로 공명 위험 지수 CRI 와 경보 등급을 낸 결과.")
+    _step_run_block("fram", path)
     if not has_group(path, "fram"):
-        st.info("FRAM 결과가 없습니다. 사이드바 **데모 데이터 생성**으로 전체 파이프라인을 돌리세요.")
+        st.info("③ FRAM 결과가 아직 없습니다. " + _NEED_RUN)
         return
 
     data = fram_panel_data(path)
@@ -1840,6 +1852,154 @@ def tab_fram(path: str, start: date) -> None:
 
 
 # ──────────────────────────── 상태 헤더 ────────────────────────────
+_STEP_GROUPS = (("① InSAR", "insar"), ("② PINN", "pinn"), ("③ FRAM", "fram"), ("④ 잔존수명", "life"))
+
+
+def _step_strip(path: str) -> None:
+    """탭 줄 아래 '진행 띠' — ⓪ 시작이 어디까지 만들었는지 한 줄로.
+
+    ①~④ 탭은 처리하는 곳이 아니라 ⓪ 시작(▶ 전체 실행)이 만든 project.h5 를 단계별로 **보는** 곳이다.
+    사용자가 '①→②→③ 순서로 직접 돌려야 하나' 로 헤매지 않게, 각 단계가 채워졌는지(✅/⬜)를
+    항상 보여 주고 ⬜ 는 어디서 채우는지 말한다.
+    """
+    exists = Path(path).exists()
+    marks = []
+    for label, grp in _STEP_GROUPS:
+        ok = exists and has_group(path, grp)
+        marks.append(f"{label} {'✅' if ok else '⬜'}")
+    done = sum(m.endswith("✅") for m in marks)
+    line = "**⓪ 시작** → " + " → ".join(marks)
+    if done == len(marks):
+        st.caption(f"진행: {line}  —  전 단계 완료. 각 탭에서 결과를 봅니다.")
+    else:
+        st.caption(f"진행: {line}  —  ⬜ 는 **⓪ 시작** 탭의 **▶ 전체 실행** 이 순서대로 채웁니다. "
+                   "①~④ 탭은 결과를 보는 곳입니다.")
+
+
+_NEED_RUN = ("먼저 **⓪ 시작** 탭에서 교량을 고르고 **▶ 전체 실행** 을 누르거나, "
+             "위 **▶ 이 단계 실행** 으로 ① → ② → ③ → ④ 순서로 한 단계씩 채우세요. "
+             "(프로그램 동작만 보려면 사이드바 ⚙️ 데모 데이터 생성)")
+
+
+# ── 단계별 실행(①~④ 탭 맨 위 '▶ 이 단계 실행') ────────────────────────────
+_BRIDGE_FILE = "bridge.json"
+_STEP_INFO = {   # step → (제목, 하는 일, 걸리는 시간, 선행 그룹)
+    "insar": ("① InSAR 실행", "SLC 다운로드 → SNAP 간섭도 → snaphu 언래핑 → 교량 데크 PS/DS → project.h5 의 /insar",
+              "1~3시간 (다운로드 GB 단위)", None),
+    "pinn": ("② PINN 실행", "① 의 변위 시계열 → 형식별 PINN(열팽창·하중·침하·이상 분해 · 구조응답 · 가상센싱) → /pinn",
+             "수 분 (torch)", "insar"),
+    "fram": ("③ FRAM 실행", "② 의 기능별 변동 V → 공명 위험 지수 CRI · 경보 등급 → /fram", "수 초", "pinn"),
+    "life": ("④ 잔존수명 계산", "① 의 변위 추세를 사용성·강성 한계까지 외삽 → /life", "수 초", "insar"),
+}
+_STEP_LABEL = {"insar": "① InSAR", "pinn": "② PINN", "fram": "③ FRAM", "life": "④ 잔존수명"}
+
+
+def _pipeline_dir() -> Path:
+    """⓪ 전체 실행과 ①~④ 단계 실행이 함께 쓰는 산출 폴더 — <저장 루트>/pipeline."""
+    return Path(data_root()) / "pipeline"
+
+
+def _remember_bridge(lat: float, lon: float, name: str | None, engine: str,
+                     engine_source: str | None, ifc: str | None) -> None:
+    """⓪ 에서 고른 교량을 파일로도 남긴다 — 대시보드를 껐다 켜도 ①~④ 탭이 같은 교량을 잇는다."""
+    if not name and abs(lat - 37.5665) < 1e-6 and abs(lon - 126.9780) < 1e-6:
+        return                                  # 손대지 않은 기본값(서울시청) — 교량이 아니다
+    rec = {"name": name or f"{lat:.4f},{lon:.4f}", "lat": float(lat), "lon": float(lon),
+           "engine": engine, "engine_source": engine_source or None, "ifc": ifc or None}
+    try:
+        p = _pipeline_dir() / _BRIDGE_FILE
+        old = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+        if old != rec:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+
+
+def _bridge_ctx() -> dict | None:
+    """지금 다루는 교량 — 이 세션에서 ⓪ 에 고른 것 > 지난번 남긴 bridge.json. 없으면 None."""
+    ss = st.session_state
+    lat, lon = ss.get("start_lat_in"), ss.get("start_lon_in")
+    if ss.get("start_name") or (lat is not None and (abs(lat - 37.5665) > 1e-6 or abs(lon - 126.9780) > 1e-6)):
+        return {"name": ss.get("start_name") or f"{lat:.4f},{lon:.4f}", "lat": float(lat), "lon": float(lon),
+                "engine": ss.get("start_engine") or "snap",
+                "engine_source": (ss.get("start_engine_source") or "").strip() or None,
+                "ifc": (ss.get("start_ifc") or "").strip() or None}
+    try:
+        d = json.loads((_pipeline_dir() / _BRIDGE_FILE).read_text(encoding="utf-8"))
+        if isinstance(d, dict) and "lat" in d:
+            return d
+    except (OSError, ValueError):
+        pass
+    # 사이드바 '현재 교량'(🔎 교량명 검색 → 💾 타깃 저장이 남긴 레시피)도 같은 교량이다
+    try:
+        t = json.loads((Path(_recipe_dir()) / "bridge_target.json").read_text(encoding="utf-8"))
+        if isinstance(t, dict) and t.get("selected_lat") is not None:
+            return {"name": t.get("name") or t.get("name_ko") or "현재 교량",
+                    "lat": float(t["selected_lat"]), "lon": float(t["selected_lon"]),
+                    "engine": ss.get("start_engine") or "snap", "engine_source": None, "ifc": None}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def _step_run_block(step: str, path: str) -> None:
+    """탭 맨 위 '▶ 이 단계 실행' — 선행 단계가 있어야 눌리고, 결과는 <루트>/pipeline/project.h5 에 쌓인다."""
+    title, what, dur, need = _STEP_INFO[step]
+    proj = str(_pipeline_dir() / "project.h5")
+    b = _bridge_ctx()
+    with st.container(border=True):
+        st.markdown(f"**▶ {title}** — {what}  ·  {dur}")
+        if not b:
+            st.info("교량이 아직 없습니다 — **⓪ 시작** 탭 ② 교량 선택에서 교량을 고르면 여기서 단계별로 실행할 수 있습니다.")
+            return
+        st.caption(f"교량 **{b['name']}** ({b['lat']:.5f}, {b['lon']:.5f}) · 엔진 {b.get('engine', 'snap')} · 결과 `{proj}`")
+        blockers: list[str] = []
+        if need is not None and not (Path(proj).exists() and has_group(proj, need)):
+            blockers.append(f"먼저 **{_STEP_LABEL[need]}** 를 실행하세요 — project.h5 에 /{need} 가 아직 없습니다.")
+        if step == "insar":
+            try:
+                from inframon import setup_tools as tools
+                stt = tools.status()
+                miss = [k for k in ("earthdata", "snap", "snaphu") if not stt[k]["ok"]]
+                if miss:
+                    blockers.append("외부 도구가 빠져 있습니다: " + ", ".join(miss)
+                                    + " — ⓪ 시작 ① 준비 상태의 🔧 외부 도구 준비 (또는 `python start.py --tools`)")
+            except Exception as exc:  # noqa: BLE001 — 상태 확인 실패가 탭을 죽이면 안 된다
+                blockers.append(f"외부 도구 상태를 확인하지 못했습니다: {exc}")
+        for m in blockers:
+            st.warning(m)
+        clicked = st.button(f"▶ {title}", key=f"btn_step_{step}", type="primary",
+                            disabled=bool(blockers), use_container_width=False)
+        if clicked:
+            from inframon.pipeline_bridge import run_bridge_stage
+            token = None
+            try:
+                from inframon.insar.slc_download import find_earthdata_token
+                token = find_earthdata_token()[0]
+            except Exception:  # noqa: BLE001
+                token = None
+            try:
+                with st.spinner(f"{title} 중… ({dur})"):
+                    rep = run_bridge_stage(step, float(b["lat"]), float(b["lon"]), out_dir=_pipeline_dir(),
+                                           engine=b.get("engine") or "snap",
+                                           engine_source=b.get("engine_source"),
+                                           earthdata_token=token, ifc=b.get("ifc"))
+                st.session_state[f"step_report_{step}"] = [
+                    {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
+                st.rerun()          # 진행 띠(✅/⬜)와 아래 결과를 새 project.h5 로 다시 그린다
+            except Exception as exc:  # noqa: BLE001 — UI 는 어떤 실패에도 살아남아야 한다
+                st.error(f"{title} 실패: {type(exc).__name__}: {exc}")
+        rows = st.session_state.get(f"step_report_{step}")
+        if rows:
+            mark = {"done": "✅", "partial": "◐", "planned": "▷", "skip": "⏭", "error": "❌", "stub": "○"}
+            for r in rows:
+                st.markdown(f"{mark.get(r['status'], '?')} **{r['step']}** — {r['detail']}")
+        if Path(proj).exists() and Path(path).resolve() != Path(proj).resolve():
+            st.caption(f"아래 결과는 사이드바 **project.h5 경로**({path})의 것입니다. 이 단계 실행 결과를 보려면 "
+                       f"그 칸을 `{proj}` 로 바꾸세요.")
+
+
 def status_header(path: str) -> None:
     """상단 '한눈에 보기' — 현재 프로젝트의 경보 등급·최대 CRI·규모를 카드로.
 
@@ -1847,7 +2007,8 @@ def status_header(path: str) -> None:
     중단시키지 않도록 방어적으로 처리한다(데모 전/손상 파일 등).
     """
     if not Path(path).exists():
-        st.info("📂 아직 분석 결과가 없습니다 — 왼쪽 사이드바의 **'데모 데이터 생성'** 으로 시작하세요.")
+        st.info("📂 아직 분석 결과가 없습니다 — 아래 **⓪ 시작** 탭에서 ① 준비 상태 확인 → ② 교량 선택 → "
+                "③ ▶ 전체 실행 순으로 진행하세요.")
         return
     try:
         d = fram_panel_data(path)
@@ -1913,9 +2074,11 @@ def tab_life(path: str, start: date) -> None:
     가정 패널은 접지 않으며, 측정기반/가정기반 채널을 눈에 띄게 구분한다.
     """
     st.subheader("④ 잔존수명 — 사용성 한계까지 남은 시간")
+    st.caption("① InSAR 변위 추세를 사용성·강성 한계까지 외삽한 결과.")
+    _step_run_block("life", path)
     if not has_group(path, "life"):
-        st.info("잔존수명 결과가 없습니다. `python -m inframon --demo --remaining-life` "
-                "(또는 `--import-track-h5 ... --remaining-life`) 로 계산하세요.")
+        st.info("④ 잔존수명 결과가 아직 없습니다 — ① InSAR 가 ✅ 이면 위 **▶ ④ 잔존수명 계산** 을 누르세요. "
+                "(명령줄: `.venv\\Scripts\\python -m inframon --import-track-h5 <track.h5> --remaining-life --out <project.h5>`)")
         st.caption("설계·필요 데이터: `docs/잔존수명_설계.md`")
         return
 
@@ -2381,8 +2544,9 @@ def _render_tool_setup() -> None:
 def tab_start(path: str) -> None:
     """⓪ 시작 — 새 컴퓨터·새 사용자를 위한 안내형 진입점(환경→교량→실행→트윈/BMAP)."""
     st.subheader("⓪ 시작 — 교량 하나를 골라 전 과정을 돌립니다")
-    st.caption("① 이 컴퓨터 준비 상태 확인 → ② 교량 선택 → ③ 파이프라인 실행 "
-               "→ ④ 디지털트윈·BMAP 등록. 처음이면 위에서부터 순서대로 하면 됩니다.")
+    st.caption("① 이 컴퓨터 준비 상태 확인(패키지·SNAP·snaphu·토큰·SLC 폴더) → ② 교량 선택 → ③ 파이프라인 실행 "
+               "→ ④ 디지털트윈·BMAP 등록. 처음이면 위에서부터 순서대로. "
+               "③ 은 한 번에(▶ 전체 실행) 또는 위 탭 ①→②→③→④ 에서 한 단계씩.")
 
     # ── ① 이 컴퓨터 준비 상태 ─────────────────────────────────────────
     st.markdown("#### ① 이 컴퓨터 준비 상태")
@@ -2466,6 +2630,10 @@ def tab_start(path: str) -> None:
                                placeholder="예: work/sarvey/outputs/xxx_ts.h5")
     ifc_in = st.text_input("IFC 파일 (선택 — 있으면 부재 GlobalId 로 결합)", key="start_ifc",
                            placeholder="없으면 비워두세요 — 점군 트윈으로 진행합니다")
+    _remember_bridge(float(lat), float(lon), st.session_state.get("start_name"), eng,
+                     src_in.strip() or None, ifc_in.strip() or None)
+    st.caption("한 번에 끝까지 가려면 **▶ 전체 실행**. 한 단계씩 보며 가려면 위 탭 **① InSAR → ② PINN → ③ FRAM → ④ 잔존수명** "
+               "순서로 각 탭 맨 위 **▶ 이 단계 실행** 을 누릅니다 (같은 교량·같은 결과 파일).")
     b1, b2 = st.columns(2)
     run_plan = b1.button("📋 계획 보기 (빠름)", use_container_width=True, key="btn_start_plan")
     run_full = b2.button("▶ 전체 실행 (수 시간)", use_container_width=True, key="btn_start_full")
@@ -2519,7 +2687,9 @@ def main() -> None:
     # session_state 에서 GC 하므로, 매 rerun 마다 키를 재확정해 기본값 리셋을 막는다.
     # 단, 버튼(btn_*·prof_save)은 session_state 로 값 설정이 금지되므로 제외한다.
     for _k in list(st.session_state.keys()):
-        if _k.startswith("btn_") or _k in ("prof_save",) or _k.startswith("FormSubmitter"):
+        # file_uploader(prof_up·traffic_up)도 값 설정이 금지돼 있다 — 재확정하면 StreamlitValueAssignmentNotAllowedError
+        if (_k.startswith("btn_") or _k in ("prof_save", "prof_up", "traffic_up")
+                or _k.startswith("FormSubmitter")):
             continue
         st.session_state[_k] = st.session_state[_k]
     st.title("🌉 inframon — 통합 인프라 모니터링")
@@ -2686,6 +2856,7 @@ def main() -> None:
     _SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
     active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
                       label_visibility="collapsed")
+    _step_strip(path)
     st.divider()
 
     # 조건식(`f() if c else g()`)을 문장으로 쓰면 Streamlit 매직이 그 값(None)을 화면에

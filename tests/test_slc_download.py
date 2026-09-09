@@ -64,7 +64,12 @@ def test_select_filters_slc_vv_dedup_and_missing():
 
 # ── 자격 우선순위(가짜 asf_search 주입) ──
 @pytest.fixture
-def fake_asf(monkeypatch):
+def fake_asf(monkeypatch, tmp_path):
+    # 이 PC 의 실제 자격(~/.inframon/earthdata_token · 환경변수)이 새어 들어오면
+    # 'creds 우선'·'없으면 예외' 검증이 뒤집힌다 — 토큰 탐색을 빈 곳으로 돌린다.
+    monkeypatch.setattr(sd, "TOKEN_FILE", tmp_path / "no_token")
+    for env in ("EARTHDATA_TOKEN", "INFRAMON_EARTHDATA_TOKEN"):
+        monkeypatch.delenv(env, raising=False)
     mod = types.ModuleType("asf_search")
 
     class _Session:
