@@ -62,6 +62,18 @@ def CODE(doc, lines):
     return p
 
 
+def CHECK(doc, text):
+    """'확인 ☐' 줄 — 이 단계가 성공했는지 사용자가 눈으로 대조하는 기준."""
+    p = doc.add_paragraph()
+    p.paragraph_format.left_indent = Cm(0.6)
+    p.paragraph_format.space_after = Pt(10)
+    _font(p.add_run("확인 ☐  "), 10.5, bold=True, color=(0x1E, 0x7E, 0x34))
+    for i, chunk in enumerate(text.split("**")):
+        if chunk:
+            _font(p.add_run(chunk), 10.5, bold=(i % 2 == 1))
+    return p
+
+
 def BUL(doc, text, level=0):
     p = doc.add_paragraph(style="List Bullet")
     p.paragraph_format.left_indent = Cm(0.8 + 0.6 * level)
@@ -170,89 +182,128 @@ def build() -> Path:
     P(doc, "각 단계는 **없는 것은 없다고 적고 넘어갑니다** — 멈추지 않습니다. 어느 교량을 보고에 쓸지는 "
            "감사 판정과 결과.md 를 보고 **유저가 정합니다**.")
 
-    # 3. 설치
-    H(doc, "3. 다른 컴퓨터에서 처음부터 (PowerShell)", 1)
-    H(doc, "3.1 준비물", 2)
+    # 3. 설치 — 2026-09-09 사용자 PC(E:\inframon)에서 이 순서 그대로 검증
+    H(doc, "3. 다른 컴퓨터에서 처음부터 — PowerShell 단계별", 1)
+    P(doc, "아래 순서 그대로 하면 됩니다. 각 단계에 **확인 ☐** 이 있으니 그것이 나오면 다음으로, 안 나오면 6장(막히면)으로. "
+           "처음 한 번은 10~20분, 그다음부터는 대시보드만 띄우면 됩니다.")
     TABLE(doc, [
-        ["", "필요", "쓰는 곳"],
-        ["Python 3.11+", "python.org — 설치 시 'Add python.exe to PATH' 체크", "전부"],
-        ["Git", "git-scm.com", "받기"],
-        ["**Earthdata 계정**", "urs.earthdata.nasa.gov 가입(무료, 3분). 토큰은 3.2 가 브라우저를 열어 주면 붙여넣기", "⓪ SLC 다운로드"],
-        ["SNAP", "3.2 가 1.1 GB 내려받아 무인 설치 (직접: step.esa.int)", "⓪ InSAR 처리"],
-        ["snaphu(WSL)", "3.2 가 WSL 안에 apt 설치. WSL 이 없으면 설치를 걸고 재부팅 안내", "⓪ 언래핑"],
-        ["SLC 보관 폴더", "3.2 가 드라이브를 묻고 폴더를 만듦 (장당 4~8 GB, 교량당 200~400 GB → 큰 드라이브)", "⓪ 다운로드가 떨어지는 곳"],
-    ], widths=[3.2, 8.4, 4.4])
-    P(doc, "트랙이 이미 있는 교량(정자교·청양교·내곡교 등)만 돌리면 **Python·Git 만** 있으면 됩니다. "
-           "사람이 직접 해야 하는 것은 **Earthdata 가입** 하나 — 나머지는 3.2 한 줄이 받아서 설치합니다.")
+        ["단계", "하는 것", "시간", "확인"],
+        ["3.1", "프로그램을 둘 폴더로 이동 → **한 줄** 붙여넣기 (받기·파이썬 패키지·SNAP·snaphu 전부)", "10~20분", "`결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅`"],
+        ["3.2", "  ↳ 그 안에서 **Earthdata 토큰** 붙여넣기 (브라우저가 열림)", "1분", "`✅ Earthdata 토큰 확인(CMR 200)`"],
+        ["3.3", "  ↳ 그 안에서 **SLC 보관 폴더** 고르기", "10초", "`✅ SLC 보관 폴더 — E:\\SLC`"],
+        ["3.4", "이 PC 에 뭐가 있나 (진단)", "10초", "[외부 도구·자격] 네 줄 전부 ✅"],
+        ["3.5", "먼저 되는 것으로 한 번 (정자교 시연)", "44초", "`⑩ 결과 문서` · `rc=0` · 창 4개"],
+        ["3.6", "새 교량 — 계획만", "1분", "`②④ SLC·트랙·프레임 … N장`"],
+        ["3.7", "새 교량 — 끝까지 (SLC 다운로드 → InSAR → 트윈)", "1~3시간", "`docs\\bridges\\<교량>\\결과.md`"],
+        ["3.8", "결과 보기", "—", "twin.viewer.html 더블클릭"],
+    ], widths=[1.2, 8.6, 1.8, 4.4])
 
-    H(doc, "3.2 받기·설치 — 원하는 폴더에서 (10~20분)", 2)
-    P(doc, "PowerShell(Win + X → 터미널)을 열고, **먼저 프로그램을 둘 폴더로 이동**합니다. 그 아래에 `inframon` 폴더가 생깁니다. "
-           "그다음 한 줄 — Python·Git 이 없으면 깔고, 받고, 파이썬 패키지 전부와 SNAP·snaphu 를 설치하고, "
-           "Earthdata 토큰은 브라우저를 열어 붙여넣게 하고, SLC 보관 드라이브를 묻고, 데모와 대시보드까지 띄웁니다.")
-    CODE(doc, ["cd E:\\                                                                              # ① 프로그램을 둘 곳",
+    H(doc, "3.0 미리 있어야 하는 것", 2)
+    TABLE(doc, [
+        ["", "무엇", "없으면"],
+        ["Python 3.11+", "python.org — 설치 화면에서 'Add python.exe to PATH' 체크", "3.1 의 한 줄이 winget 으로 깔아 줌"],
+        ["Git", "git-scm.com", "3.1 의 한 줄이 winget 으로 깔아 줌 (그것도 안 되면 zip 으로 받음)"],
+        ["**Earthdata 계정**", "https://urs.earthdata.nasa.gov/users/new — 무료, 3분, 메일 인증", "**사람이 직접** 가입해야 함 — 프로그램이 대신 못 하는 유일한 것"],
+        ["디스크", "SLC 1장 4~8 GB × 교량당 30~50장 → 200~400 GB", "큰 드라이브를 3.3 에서 고른다"],
+    ], widths=[3.0, 7.0, 6.0])
+    P(doc, "SNAP·snaphu·토큰 저장·SLC 폴더는 3.1 한 줄이 받아서 준비합니다. 트랙이 이미 있는 교량(정자교·청양교·내곡교 등)만 "
+           "볼 거면 Python·Git 만 있으면 됩니다.")
+
+    H(doc, "3.1 폴더로 이동 → 한 줄 (10~20분)", 2)
+    P(doc, "PowerShell 을 엽니다(Win + X → 터미널). **먼저 프로그램을 둘 폴더로 이동**합니다 — 그 아래에 `inframon` 폴더가 생깁니다. "
+           "그다음 한 줄을 붙여넣고 Enter.")
+    CODE(doc, ["cd E:\\                                                                              # ① 프로그램을 둘 곳 (원하는 드라이브·폴더)",
                "irm https://raw.githubusercontent.com/tjddnr8334-sudo/inframon/main/install.ps1 | iex   # ② 전부"])
-    P(doc, "손으로 하려면 (같은 폴더에서):")
+    P(doc, "이 한 줄이 순서대로:")
+    for t in [
+        "Python·Git 확인 — 없으면 winget 으로 설치",
+        "GitHub 에서 받기 → `E:\\inframon` (이미 있으면 git pull 로 갱신)",
+        "가상환경 `.venv` 만들고 파이썬 패키지 전부(torch·scipy·pyproj·rasterio·asf_search·streamlit 등) 설치 — 5~10분",
+        "**SNAP** 1.1 GB 내려받아 무인 설치 (이미 있으면 건너뜀) · **snaphu** WSL 안에 설치 (WSL 없으면 설치 걸고 재부팅 안내)",
+        "**Earthdata 토큰** — 브라우저를 열고 붙여넣기 기다림 → 3.2",
+        "**SLC 보관 폴더** — 드라이브를 묻는다 → 3.3",
+        "데모 → 진단 → 브라우저에 대시보드 http://localhost:8501 (끄려면 Ctrl + C)",
+    ]:
+        BUL(doc, t)
+    P(doc, "손으로 하려면 (같은 폴더에서, 한 줄과 같은 일):")
     CODE(doc, ["cd E:\\",
                "git clone https://github.com/tjddnr8334-sudo/inframon",
                "cd inframon",
                "python start.py --full --tools"])
-    P(doc, "확인: **판정: ✅ 코어 동작 가능** 과 **결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅**. "
-           "`--full` 이 가상환경(.venv)을 만들고 torch·pyproj·scipy·matplotlib·ifcopenshell 까지 깝니다. "
-           "`--tools` 가 SNAP·snaphu·토큰·SLC 폴더를 준비합니다. 토큰 프롬프트에서 그냥 Enter 로 건너뛰었으면 3.5 로.")
-    P(doc, "**토큰 프롬프트가 뜨면** (브라우저에 Earthdata 페이지가 함께 열립니다):")
+    CHECK(doc, "`결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅` 와 그 아래 진단의 `판정: ✅ 코어 동작 가능`.")
+    P(doc, "**이후 명령은 `python` 이 아니라 `.venv\\Scripts\\python`** 으로 부릅니다 — start.py 가 시스템 파이썬이 아니라 "
+           "`.venv` 안에 설치하기 때문입니다. 그냥 `python -m inframon` 은 새 컴퓨터에서 'No module named inframon' 이 납니다. "
+           "(`python start.py …` 만 예외 — 이 파일은 표준 라이브러리만 씁니다.)", color=(0x8A, 0x2B, 0x2B))
+
+    H(doc, "3.2 Earthdata 토큰 — 프롬프트가 뜨면 (1분)", 2)
+    P(doc, "터미널에 `3) 여기 붙여넣고 Enter` 가 뜨고 브라우저에 Earthdata 페이지가 열립니다.")
     for t in [
-        "계정이 없으면 가입(무료): https://urs.earthdata.nasa.gov/users/new → 메일 인증",
-        "로그인 → 프로필 화면(이름·Username·Email 이 보임) 위쪽 작은 메뉴 **Generate Token** → 아래 **GENERATE TOKEN** 버튼",
+        "계정이 없으면 가입(무료): https://urs.earthdata.nasa.gov/users/new → 메일 인증 → 로그인",
+        "프로필 화면(이름·Username·Email 이 보임) **위쪽 작은 메뉴 Generate Token** → 아래 **GENERATE TOKEN** 버튼",
         "가려진 토큰 옆 **Show Token** 또는 복사 아이콘 → `eyJ0eXAiOi…` 로 시작하는 긴 문자열 **전체** 복사",
-        "PowerShell 의 '여기 붙여넣고 Enter' 에 붙여넣고 Enter → `✅ Earthdata 토큰 확인 → …\\.inframon\\earthdata_token`",
-        "토큰은 비밀번호와 같습니다 — **터미널에만** 붙여넣고 채팅·메일·문서에는 넣지 않습니다. 60일마다 프로그램이 자동 갱신합니다.",
+        "PowerShell 로 돌아와 붙여넣고 Enter — 프로그램이 NASA 서버(CMR)에 한 번 조회해 **유효할 때만** 저장",
+        "토큰은 비밀번호와 같습니다 — **터미널에만** 붙여넣고 채팅·메일·문서에는 넣지 않습니다. 노출됐으면 같은 페이지에서 새로 발급(최대 2개)하고 옛것은 Revoke",
+        "60일짜리 — 만료 7일 전부터 프로그램이 자동 갱신하므로 다시 붙여넣을 일은 거의 없습니다",
     ]:
         BUL(doc, t)
-    P(doc, "**SLC 보관 폴더를 물으면**: 드라이브별 여유 공간이 표시됩니다. 원하는 경로(예: `E:\\SLC`)를 치거나 Enter(가장 큰 드라이브). "
-           "이미 정해져 있으면 현재 위치를 보여 주고 Enter = 유지, 새 경로 = 변경.")
-    P(doc, "**이후 명령은 `python` 이 아니라 `.venv\\Scripts\\python`** 으로 부릅니다 — start.py 가 시스템 파이썬이 아니라 "
-           ".venv 안에 설치하기 때문입니다. 그냥 `python -m inframon` 은 새 컴퓨터에서 'No module named inframon' 이 납니다.")
+    CHECK(doc, "`✅ Earthdata 토큰 확인(CMR 200) → C:\\Users\\<이름>\\.inframon\\earthdata_token`. 그냥 Enter 로 건너뛰었으면 나중에 `python start.py --tools --no-demo`.")
 
-    H(doc, "3.3 이 PC 에 뭐가 있나 (1분)", 2)
+    H(doc, "3.3 SLC 보관 폴더 — 물으면 (10초)", 2)
+    P(doc, "위성 원본은 장당 4~8 GB, 교량 하나에 200~400 GB 까지 갑니다. C: 에 두면 곧 차니 **큰 드라이브**를 고릅니다. "
+           "드라이브별 여유 공간이 표시됩니다.")
+    CODE(doc, ["    드라이브 여유 공간:",
+               "      C:\\  여유    120.3 GB / 476 GB",
+               "      E:\\  여유   1827.0 GB / 1863 GB",
+               "    SLC 보관 폴더 (Enter = E:\\SLC, 건너뛰려면 '-'):  E:\\SLC"])
+    P(doc, "원하는 경로를 치거나 Enter(여유가 가장 큰 드라이브의 `\\SLC`). 이미 정해져 있으면 현재 위치를 보여 주고 **Enter = 유지, 새 경로 = 변경**. "
+           "이후 다운로드는 `E:\\SLC\\<궤도_프레임>\\` 에 떨어지고, 같은 프레임을 쓰는 다음 교량은 다운로드를 건너뜁니다. "
+           "나중에 바꾸려면 `.venv\\Scripts\\python -m inframon --slc-dir D:\\SLC` (없으면 만듦).")
+    CHECK(doc, "`✅ SLC 보관 폴더 — E:\\SLC (새로 만듦)` 또는 `유지: …`.")
+
+    H(doc, "3.4 이 PC 에 뭐가 있나 (10초)", 2)
     CODE(doc, [".venv\\Scripts\\python -m inframon --doctor"])
-    P(doc, "확인: **[외부 도구·자격]** 네 줄 — Earthdata / SNAP gpt / snaphu / SLC 보관 폴더 각각 ✅❌. ❌ 면 그 줄에 설치법이 적혀 있고, "
-           "`python start.py --tools` 를 다시 돌리면 빠진 것만 채웁니다.")
+    CODE(doc, ["  [외부 도구·자격 — `python start.py --tools` 가 준비하는 것]",
+               "    ✅ Earthdata 토큰   C:\\Users\\<이름>\\.inframon\\earthdata_token (만료 D-59)",
+               "    ✅ SNAP gpt       C:\\Program Files\\esa-snap\\bin\\gpt.exe",
+               "    ✅ snaphu         wsl:/usr/bin/snaphu",
+               "    ✅ SLC 보관 폴더      E:\\SLC (0장)",
+               "  [가능한 기능]  … ✅ slc_download  ✅ insar_snap  ✅ unwrap_snaphu  ✅ full_pipeline",
+               "  판정: ✅ 코어 동작 가능"])
+    CHECK(doc, "[외부 도구·자격] 네 줄 전부 ✅, [가능한 기능] 에 `full_pipeline ✅`. ❌ 가 있으면 그 줄에 적힌 대로 하거나 `python start.py --tools --no-demo` (빠진 것만 다시).")
 
-    H(doc, "3.4 먼저 되는 것으로 한 번 (1분)", 2)
+    H(doc, "3.5 먼저 되는 것으로 한 번 — 정자교 시연 (44초)", 2)
     CODE(doc, [".venv\\Scripts\\python scripts\\demo_4pm.py"])
-    P(doc, "정자교를 44초에 끝까지 돌리고 결과 창 4개(3D 속도 · 3D 위험도 · 브리프 그림 · 결과.md)를 엽니다. "
-           "확인: 터미널에 **⑩ 결과 문서** 까지 찍히고 `rc=0`.")
+    P(doc, "이미 처리된 트랙으로 정자교를 끝까지 돌리고 결과 창 4개(3D 속도 · 3D 위험도 · 브리프 그림 · 결과.md)를 엽니다. "
+           "이것이 되면 ⑥~⑩(트윈·PINN·브리프·감사·결과)이 이 PC 에서 도는 것입니다.")
+    CHECK(doc, "터미널에 **⑩ 결과 문서** 까지 찍히고 `rc=0`. 3D 창에서 드래그 회전, 점 클릭 = 값·부재.")
     FIG(doc, IMG / "twin_3d_jeongjagyo.png", "그림 1. 3D 디지털 트윈 — IFC 부재(A1·P1~P4·S1) 위에 InSAR 점. 점을 클릭하면 값·부재·GlobalId.")
 
-    H(doc, "3.5 토큰·SLC 폴더 — 3.2 에서 건너뛰었다면 (한 번)", 2)
-    CODE(doc, ["python start.py --tools --no-demo                        # 빠진 것만: 토큰 붙여넣기 · SLC 드라이브 고르기",
-               ".venv\\Scripts\\python -m inframon --earthdata-save <토큰>   # 토큰만 따로",
-               ".venv\\Scripts\\python -m inframon --slc-dir E:\\SLC           # SLC 폴더만 따로 (없으면 만듦)"])
-    P(doc, "토큰은 `~/.inframon/earthdata_token` 에, SLC 폴더는 `~/.inframon/config.json` 에 저장됩니다. "
-           "확인: `--doctor` 에서 Earthdata ✅, SLC 보관 폴더 ✅.")
-
-    H(doc, "3.6 새 교량 — 계획만 먼저 (1분, 토큰 불필요)", 2)
+    H(doc, "3.6 새 교량 — 계획만 먼저 (1분)", 2)
     CODE(doc, [".venv\\Scripts\\python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan"])
-    P(doc, "확인: **②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** — 어떤 궤도로 몇 장이 있는지. "
-           "장면 수가 나오면 다음으로.")
+    P(doc, "좌표만 주면 제원(파트너 CSV → OSM → 표준데이터)과, 어느 궤도에 SLC 가 몇 장 있는지를 검색합니다. 다운로드는 하지 않습니다. "
+           "장면 수가 10장 미만이면 그 교량은 이 궤도로 어렵습니다 — 다른 교량이나 궤도를 봅니다.")
+    CHECK(doc, "**②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** 처럼 궤도·프레임·장면 수. ①의 ❌ 는 OSM 서버 일시 오류(504) — 다시 돌리면 됩니다.")
 
     H(doc, "3.7 새 교량 — 끝까지 (1~3시간)", 2)
     CODE(doc, [".venv\\Scripts\\python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366"])
-    P(doc, "트랙이 없으므로 **⓪ SLC 다운로드 → SNAP → 언래핑**부터 갑니다. 단계마다 찍힙니다:")
+    P(doc, "트랙이 없으므로 **⓪ SLC 다운로드(3.3 폴더로) → SNAP → 언래핑**부터 갑니다. 단계마다 찍힙니다:")
     CODE(doc, ["⓪ SLC → InSAR      ← 대부분의 시간 (다운로드 GB 단위 · SNAP 수십 분)",
                "① 제원  ② 데크선  ③ 지면  ④ 점 선택  ⑤ 잔차고도",
                "⑥ IFC 트윈  ⑦ PINN·CRI  ⑧ 브리프  ⑨ 감사  ⑩ 결과 문서"])
-    P(doc, "확인: `docs\\bridges\\마포대교\\결과.md` — 각 단계가 무엇을 어디서 가져왔는지, 못 한 것은 왜인지.")
+    P(doc, "중간에 죽으면 같은 명령을 다시 — 받아 둔 SLC 는 재사용합니다. 여러 교량은 `--batch docs\\bridges\\batch.json`.")
+    CHECK(doc, "`docs\\bridges\\마포대교\\결과.md` — 각 단계가 무엇을 어디서 가져왔는지, 못 한 것은 왜인지. 4장에서 읽는 법.")
 
     H(doc, "3.8 결과 보기", 2)
     TABLE(doc, [
-        ["파일", "무엇"],
-        ["twin.viewer.html", "3D 트윈(변위 속도 채널) — 더블클릭, 인터넷 불필요"],
-        ["twin_cri.viewer.html", "3D 트윈(CRI 위험도 채널)"],
-        ["brief.png", "건기연 형식 4단 그림 (a)(b)(c)(d)"],
-        ["결과.md", "수치 표 · 출처 · 감사 판정 · 적어 둘 것 · 원리상 못 하는 것"],
-        ["*_proxy.ifc", "IFC4 프록시 교량 — Revit·BlenderBIM 에서 열림"],
-    ], widths=[4.5, 11.5])
+        ["파일 (docs\\bridges\\<교량>\\)", "무엇", "여는 법"],
+        ["twin.viewer.html", "3D 트윈(변위 속도 채널)", "더블클릭 — 인터넷 불필요"],
+        ["twin_cri.viewer.html", "3D 트윈(CRI 위험도 채널)", "더블클릭"],
+        ["brief.png", "건기연 형식 4단 그림 (a)(b)(c)(d)", "더블클릭"],
+        ["결과.md", "수치 표 · 출처 · 감사 판정 · 적어 둘 것 · 원리상 못 하는 것", "메모장 · VS Code"],
+        ["<교량>_proxy.ifc", "IFC4 프록시 교량", "Revit · BlenderBIM"],
+    ], widths=[4.8, 7.2, 4.0])
+    P(doc, "화면으로 보려면 대시보드: `python start.py --dashboard` (또는 `.venv\\Scripts\\streamlit run src\\inframon\\dashboard\\app.py`) → "
+           "브라우저 http://localhost:8501. 왼쪽에서 교량을 고르고, 본문 ① 준비 상태 → ② 교량 선택 → ③ 📋 계획 보기 → ▶ 전체 실행 순으로 누릅니다.")
 
     # 4. 결과 읽기
     doc.add_page_break()
@@ -295,7 +346,7 @@ def build() -> Path:
     # 6. 막히면
     H(doc, "6. 막히면", 1)
     for t in [
-        "**⓪ '토큰 없음'** → 3.5 로. 발급은 urs.earthdata.nasa.gov (1분).",
+        "**⓪ '토큰 없음'** → 3.2 로. 발급은 urs.earthdata.nasa.gov (1분).",
         "**'SNAP gpt 없음'** → SNAP 설치 후 PATH 또는 환경변수 SNAP_HOME.",
         "**'snaphu 없음'** → WSL 에 snaphu. 언래핑이 실패하면 파라미터 사다리 4단계가 자동으로 돌고, 그래도 안 되면 unwrap_retry.json 에 사유.",
         "**OSM 504** → 자동 재시도 3회. 캐시(osm_roads_500m.json)가 있으면 캐시.",
