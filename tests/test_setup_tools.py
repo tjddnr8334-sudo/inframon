@@ -159,3 +159,47 @@ def test_run_setup은_골라서_할_수_있다(monkeypatch):
     monkeypatch.setattr(st, "setup_snaphu", lambda log: pytest.fail("snaphu 는 안 골랐다"))
     res = st.run_setup("snap", log=lambda s: None, interactive=False)
     assert res == {"snap": True}
+
+
+# ── 토큰 만료·갱신 ────────────────────────────────────────────────────────
+def _jwt(exp_in_days: float) -> str:
+    import base64
+    import datetime as dt
+    import json as _json
+    exp = int((dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=exp_in_days)).timestamp())
+    body = base64.urlsafe_b64encode(_json.dumps({"type": "User", "exp": exp}).encode()).decode().rstrip("=")
+    return f"eyJ0eXAiOiJKV1QifQ.{body}.sig"
+
+
+def test_토큰_만료일을_서명검증_없이_읽는다():
+    assert st.days_left(_jwt(30)) in (29, 30)
+    assert st.days_left(_jwt(-3)) < 0
+    assert st.days_left("not-a-jwt") is None
+
+
+def test_만료가_임박하면_붙여넣기_전에_자동_갱신한다(monkeypatch):
+    from inframon.insar import slc_download
+    old = _jwt(3)
+    slc_download.TOKEN_FILE.write_text(old)
+    monkeypatch.setattr(st, "renew_token", lambda t: ("NEWTOKEN", "만료 2027") if t == old else (None, "?"))
+    logs: list[str] = []
+    assert st.setup_earthdata(logs.append, ask=lambda p: pytest.fail("갱신됐으면 묻지 않는다")) is True
+    assert slc_download.TOKEN_FILE.read_text().strip() == "NEWTOKEN"
+    assert any("자동 갱신" in ln for ln in logs)
+
+
+def test_갱신_실패면_새로_붙여넣게_한다(monkeypatch):
+    from inframon.insar import slc_download
+    slc_download.TOKEN_FILE.write_text(_jwt(-1))
+    monkeypatch.setattr(st, "renew_token", lambda t: (None, "EDL 401"))
+    monkeypatch.setattr(st, "probe_token", lambda t: (True, "CMR 200"))
+    logs: list[str] = []
+    assert st.setup_earthdata(logs.append, ask=lambda p: "fresh", open_browser=False) is True
+    assert slc_download.TOKEN_FILE.read_text().strip() == "fresh"
+
+
+def test_status는_만료된_토큰을_ok로_치지_않는다(monkeypatch):
+    from inframon.insar import slc_download
+    slc_download.TOKEN_FILE.write_text(_jwt(-1))
+    s = st.status()
+    assert s["earthdata"]["ok"] is False and "만료" in s["earthdata"]["where"]

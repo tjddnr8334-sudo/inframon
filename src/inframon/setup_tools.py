@@ -42,6 +42,9 @@ EARTHDATA_TOKEN_URL = "https://urs.earthdata.nasa.gov/profile"      # 로그인 
 EARTHDATA_SIGNUP_URL = "https://urs.earthdata.nasa.gov/users/new"
 # 토큰 유효성: CMR 은 잘못된 Bearer 에 401 "Token does not exist", 맞으면 200.
 CMR_PROBE_URL = "https://cmr.earthdata.nasa.gov/search/collections.json?page_size=1&short_name=SENTINEL-1A_SLC"
+# EDL 토큰은 60일짜리(최대 2개). 만료 전에 renew_token 으로 갈아끼우면 사용자가 다시 붙여넣지 않아도 된다.
+EDL_RENEW_URL = "https://urs.earthdata.nasa.gov/api/users/renew_token"
+RENEW_BEFORE_DAYS = 7
 
 Log = Callable[[str], None]
 
@@ -122,13 +125,50 @@ def probe_token(token: str) -> tuple[bool, str]:
         return False, f"네트워크 오류 {e}"
 
 
+def token_expiry(token: str):
+    """JWT 페이로드의 exp — 서명 검증 없이 날짜만 읽는다(표시·갱신 판단용). 못 읽으면 None."""
+    import base64
+    import datetime as dt
+    try:
+        payload = token.strip().split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        exp = json.loads(base64.urlsafe_b64decode(payload)).get("exp")
+        return dt.datetime.fromtimestamp(int(exp), dt.timezone.utc) if exp else None
+    except (IndexError, ValueError, TypeError):
+        return None
+
+
+def days_left(token: str) -> int | None:
+    import datetime as dt
+    e = token_expiry(token)
+    return None if e is None else (e - dt.datetime.now(dt.timezone.utc)).days
+
+
+def renew_token(token: str) -> tuple[str | None, str]:
+    """EDL renew_token — 옛 토큰을 무효화하고 새 60일 토큰을 준다. (새 토큰|None, 사유)."""
+    req = urllib.request.Request(EDL_RENEW_URL, method="POST",
+                                 headers={"Authorization": f"Bearer {token.strip()}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            body = json.loads(r.read().decode("utf-8", "replace"))
+            new = body.get("access_token")
+            return (new, f"만료 {body.get('expiration_date')}") if new else (None, f"응답에 토큰 없음: {body}")
+    except urllib.error.HTTPError as e:
+        return None, f"EDL {e.code}: {e.read(200).decode('utf-8', 'replace')}"
+    except OSError as e:
+        return None, f"네트워크 오류 {e}"
+
+
 # ── 상태 ─────────────────────────────────────────────────────────────────
 def status() -> dict[str, dict]:
     """세 도구의 현재 상태 — doctor 와 같은 탐지기를 쓴다(따로 판단하면 어긋난다)."""
     out: dict[str, dict] = {}
     from .insar.slc_download import find_earthdata_token
     tok, src = find_earthdata_token()
-    out["earthdata"] = {"ok": bool(tok), "where": src}
+    d = days_left(tok) if tok else None
+    out["earthdata"] = {"ok": bool(tok) and (d is None or d >= 0),
+                        "where": src + (f" (만료 D-{d})" if d is not None and d >= 0 else " (만료됨)" if d is not None else ""),
+                        "days_left": d}
     try:
         from .insar.snap_backend import find_gpt
         out["snap"] = {"ok": True, "where": find_gpt()}
@@ -232,8 +272,17 @@ def setup_earthdata(log: Log = print, *, token: str | None = None,
     from .insar.slc_download import find_earthdata_token, save_earthdata_token
     have, src = find_earthdata_token()
     if have and token is None:
-        log(f"    이미 있음: {src}")
-        return True
+        d = days_left(have)
+        if d is None or d > RENEW_BEFORE_DAYS:
+            log(f"    이미 있음: {src}" + (f" (만료 D-{d})" if d is not None else ""))
+            return True
+        # 만료가 임박(또는 지남) — 사용자가 다시 붙여넣지 않게 서버에서 갱신을 먼저 시도
+        new, why = renew_token(have)
+        if new:
+            save_earthdata_token(new)
+            log(f"    토큰 만료 D-{d} → 자동 갱신 ✅ ({why})")
+            return True
+        log(f"    토큰 만료 D-{d}, 자동 갱신 실패({why}) → 새로 발급받아 붙여넣으세요.")
     if token is None:
         if ask is None:
             log("    토큰은 사람이 발급받아야 합니다 (비대화 모드라 건너뜀):")

@@ -236,8 +236,10 @@ def build() -> Path:
                "python scripts\\bridge_run.py --batch docs\\bridges\\batch.json   # 여러 교량 한 번에"])
 
     # 5
-    H(doc, "5. 외부 도구 — SNAP · snaphu · Earthdata 토큰 (한 번)", 1)
-    P(doc, "위성 원본(SLC)부터 돌리려면 셋이 필요합니다. 한 줄 설치기가 이미 했다면 건너뜁니다. 빠진 것만 채우려면:")
+    H(doc, "5. 외부 도구 — Earthdata 토큰 · SNAP · snaphu (한 번)", 1)
+    P(doc, "위성 원본(SLC)부터 돌리려면 셋이 필요합니다. 한 줄 설치기가 이미 했다면 건너뜁니다. 빠진 것만 채우는 방법 둘:")
+    FIG(doc, IMG / "ui_tools_panel.jpg", "그림 6. 대시보드 ① 준비 상태 아래 '🔧 외부 도구 준비' — 없는 것만 나타나고, 토큰은 붙여넣기·SNAP/snaphu 는 버튼.")
+    P(doc, "또는 터미널에서:")
     CODE(doc, ["python start.py --tools"])
     TABLE(doc, [
         ["도구", "프로그램이 하는 일", "사람이 할 일"],
@@ -246,8 +248,26 @@ def build() -> Path:
         ["Earthdata 토큰", "토큰 페이지를 브라우저로 열고, 붙여넣은 토큰을 NASA 서버에 확인한 뒤 저장", "**가입(무료)** → 로그인 → [Generate Token] → 복사 → 터미널에 붙여넣기"],
     ], widths=[3.0, 7.5, 5.5])
     CHECK(doc, "마지막 줄 `결과: snap ✅, snaphu ✅, earthdata ✅`. `python -m inframon --doctor` 의 [외부 도구] 세 줄이 전부 ✅.")
-    P(doc, "토큰만 따로 넣을 때: `python -m inframon --earthdata-save <토큰>`. 계정 가입은 https://urs.earthdata.nasa.gov/users/new — "
-           "프로그램이 대신 가입할 수 없는 유일한 것입니다.")
+
+    H(doc, "5-1. Earthdata 토큰 — 사람이 하는 3분", 2)
+    FIG(doc, IMG / "earthdata_signup.jpg", "그림 7. https://urs.earthdata.nasa.gov/users/new — Username(소문자·숫자·._ 4~30자) · 비밀번호 12자+ 대소문자·숫자·특수문자 · 이름 · 메일 · Country · Affiliation → CONTINUE → 메일 인증.", width_cm=15)
+    for t in [
+        "로그인 → 프로필(https://urs.earthdata.nasa.gov/profile) 위쪽 작은 메뉴 **Generate Token** → 아래 **GENERATE TOKEN** 버튼",
+        "가려진 토큰 → **Show Token** → `eyJ0eXAiOi…` 전체 복사",
+        "대시보드 칸(그림 6) 또는 `--tools` 프롬프트에 붙여넣고 Enter → 프로그램이 NASA 서버에 확인한 뒤 저장",
+    ]:
+        BUL(doc, t)
+    P(doc, "토큰은 60일짜리(최대 2개). 만료 7일 전부터 프로그램이 자동 갱신하니 다시 붙여넣을 일은 거의 없습니다. "
+           "토큰만 따로: `python -m inframon --earthdata-save <토큰>`. 첫 SLC 다운로드가 401/403 이면 "
+           "https://search.asf.alaska.edu 에 한 번 로그인해 ASF 앱을 승인합니다.", size=10)
+
+    H(doc, "5-2. SNAP · snaphu — 프로그램이 하는 것", 2)
+    TABLE(doc, [
+        ["", "자동", "수동 (자동이 안 될 때)"],
+        ["SNAP", "ESA 설치기 1.1 GB 내려받아 무인 설치 → AppData\Local\Programs\esa-snap. 3~10분", "step.esa.int 에서 Sentinel Toolboxes Windows 설치기 → 전부 Next. 다른 폴더면 INFRAMON_SNAP_GPT 에 gpt.exe 경로"],
+        ["snaphu", "WSL 있음 → Ubuntu 안에 apt 설치 1~3분. WSL 없음 → 관리자 승인 → 재부팅 → 한 번 더", "관리자 PowerShell `wsl --install -d Ubuntu` → 재부팅 → `wsl -d Ubuntu -u root -- apt-get install -y snaphu`"],
+    ], widths=[1.8, 7.0, 7.2])
+    P(doc, "각 도구의 '안 될 때' 표(오류 코드별 조치)는 docs/외부도구_준비.md 에 있습니다.", size=10)
     P(doc, "그다음 새 교량:")
     CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan   # 계획만(1분)",
                "python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366                           # 끝까지(1~3시간)"])

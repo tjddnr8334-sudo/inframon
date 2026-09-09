@@ -128,7 +128,14 @@ def _external_tools() -> dict[str, dict]:
     try:
         from .insar.slc_download import find_earthdata_token
         tok, src = find_earthdata_token()
-        out["earthdata"] = {"ok": bool(tok), "where": src,
+        try:
+            from .setup_tools import days_left
+            d = days_left(tok) if tok else None
+        except Exception:                        # noqa: BLE001
+            d = None
+        if d is not None:
+            src += f" (만료 D-{d})" if d >= 0 else " (만료됨 → python start.py --tools 로 갱신)"
+        out["earthdata"] = {"ok": bool(tok) and (d is None or d >= 0), "where": src,
                             "hint": ("Earthdata 토큰 없음 → SLC 다운로드 불가. "
                                      "`python start.py --tools` 가 토큰 페이지를 열어 주고 붙여넣으면 저장 "
                                      "(또는 `python -m inframon --earthdata-save <토큰>`)")}

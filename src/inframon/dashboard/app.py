@@ -2291,6 +2291,67 @@ def _env_checks() -> list[dict]:
     return rows
 
 
+def _render_tool_setup() -> None:
+    """외부 도구 세 가지를 **화면에서** 준비 — 터미널 없이. 없는 것만 보여 준다.
+
+    SNAP 은 1.1 GB 무인 설치, snaphu 는 WSL 안에 apt, Earthdata 는 사용자가 붙여넣은 토큰을
+    NASA 서버에 확인한 뒤 저장. 셋 다 setup_tools 의 같은 함수라 터미널(--tools)과 결과가 같다.
+    """
+    try:
+        from inframon import setup_tools as tools
+        stt = tools.status()
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"외부 도구 상태를 읽지 못함: {e}")
+        return
+    missing = [k for k in ("earthdata", "snap", "snaphu") if not stt[k]["ok"]]
+    if not missing:
+        return
+    label = {"earthdata": "Earthdata 토큰", "snap": "SNAP", "snaphu": "snaphu"}
+    with st.expander(f"🔧 외부 도구 준비 — {', '.join(label[k] for k in missing)} (여기서 바로)", expanded=True):
+        st.caption("터미널에서 `python start.py --tools` 로 해도 같습니다. 자세한 수동 설치는 "
+                   "[docs/외부도구_준비.md](https://github.com/tjddnr8334-sudo/inframon/blob/main/docs/외부도구_준비.md).")
+
+        if "earthdata" in missing:
+            st.markdown("**Earthdata 토큰** — 위성 원본(SLC)을 내려받는 NASA 자격. 프로그램이 대신 가입할 수 없는 유일한 것.")
+            st.markdown(f"1. 계정이 없으면 [가입(무료)]({tools.EARTHDATA_SIGNUP_URL})  →  "
+                        f"2. 로그인 후 [프로필]({tools.EARTHDATA_TOKEN_URL}) 에서 **Generate Token**  →  "
+                        "3. 긴 문자열을 아래에 붙여넣고 저장")
+            ct, cb = st.columns([4, 1])
+            tok = ct.text_input("토큰", key="tool_tok", type="password",
+                                placeholder="eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOi…", label_visibility="collapsed")
+            if cb.button("확인 후 저장", key="btn_tool_tok", use_container_width=True):
+                logs: list[str] = []
+                ok = bool(tok.strip()) and tools.setup_earthdata(
+                    logs.append, token=tok.strip(), ask=None, open_browser=False)
+                (st.success if ok else st.error)("  \n".join(logs) if logs else "토큰을 붙여넣으세요.")
+                if ok:
+                    st.rerun()
+
+        if "snap" in missing:
+            st.markdown(f"**SNAP** (ESA, InSAR 처리 엔진) — {tools.SNAP_SIZE_GB} GB 를 내려받아 "
+                        f"`{tools.snap_install_dir()}` 에 **무인 설치**합니다 (5~10분, 관리자 권한 불필요).")
+            if st.button("⬇ SNAP 내려받아 설치", key="btn_tool_snap"):
+                with st.status("SNAP 내려받는 중… (창을 닫지 마세요)", expanded=True) as box:
+                    ok = tools.setup_snap(lambda m: box.write(m))
+                    box.update(label="SNAP 설치 완료 ✅" if ok else "SNAP 설치 실패 — 위 메시지 확인",
+                               state="complete" if ok else "error")
+                if ok:
+                    st.rerun()
+
+        if "snaphu" in missing:
+            has_wsl = bool(tools._wsl_distros())
+            st.markdown("**snaphu** (위상 언래핑 — 없으면 InSAR 결과가 무의미) — Windows 빌드가 없어 **WSL(Ubuntu) 안에** 설치합니다. "
+                        + ("WSL 이 있으니 1~3분." if has_wsl else
+                           "WSL 이 없어 먼저 WSL 을 설치합니다 — 관리자 승인 창에서 '예', 끝나면 **재부팅** 후 이 버튼을 다시."))
+            if st.button("⬇ snaphu 설치" if has_wsl else "⬇ WSL 설치 걸기 (재부팅 필요)", key="btn_tool_snaphu"):
+                with st.status("설치 중…", expanded=True) as box:
+                    ok = tools.setup_snaphu(lambda m: box.write(m))
+                    box.update(label="snaphu 준비 완료 ✅" if ok else "아직 — 위 메시지대로 진행",
+                               state="complete" if ok else "error")
+                if ok:
+                    st.rerun()
+
+
 def tab_start(path: str) -> None:
     """⓪ 시작 — 새 컴퓨터·새 사용자를 위한 안내형 진입점(환경→교량→실행→트윈/BMAP)."""
     st.subheader("⓪ 시작 — 교량 하나를 골라 전 과정을 돌립니다")
@@ -2322,6 +2383,7 @@ def tab_start(path: str) -> None:
             st.markdown(f"{mark} **{r['name']}** — {r['why']}")
             if not r["ok"] and r["fix"]:
                 st.code(r["fix"], language="bash")
+    _render_tool_setup()
 
     st.divider()
 
