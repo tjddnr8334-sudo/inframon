@@ -133,19 +133,24 @@ def dashboard(py: Path) -> None:
          "--server.port", "8501"], check=False)
 
 
-def next_steps(py: Path, ran_demo: bool) -> None:
+def next_steps(py: Path, ran_demo: bool, tools_done: bool = False) -> None:
     p = py.relative_to(ROOT) if py.is_relative_to(ROOT) else py
     say(f"\n{LINE}\n  준비 완료 — 이제 할 수 있는 것\n{LINE}")
     if ran_demo:
         say("  · 방금 만든 결과      : demo.h5")
     say("  · 화면으로 보기        : python start.py --dashboard")
-    say(f"  · 임의 교량 계획 보기  : {p} -m inframon --pipeline 36.4507,126.8073 "
+    say(f"  · 실 교량 시연 44초    : {p} scripts\\demo_4pm.py")
+    say(f"  · 임의 교량 계획 보기  : {p} -m inframon --pipeline 37.5337,126.9366 "
         f"--pipeline-mode plan")
-    say(f"  · 이 PC 도구 상태      : {p} -m inframon --insar-tools")
-    say(f"  · 산출물 품질 감사     : {p} -m inframon --audit-artifacts")
+    say(f"  · 새 교량 끝까지       : {p} scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366")
+    say(f"  · 이 PC 도구 상태      : {p} -m inframon --doctor")
     say("")
-    say("  실위성 데이터로 돌리려면 SNAP·snaphu·Earthdata 토큰이 더 필요합니다 —")
-    say("  · 셋 다 자동 준비      : python start.py --tools")
+    if tools_done:
+        say("  외부 도구(SNAP·snaphu·Earthdata 토큰·SLC 폴더)는 위 [외부 도구·자격] 줄대로입니다 —")
+        say("  ❌ 가 남았으면        : python start.py --tools --no-demo  (빠진 것만 다시)")
+    else:
+        say("  실위성 데이터로 돌리려면 SNAP·snaphu·Earthdata 토큰·SLC 보관 폴더가 더 필요합니다 —")
+        say("  · 전부 자동 준비      : python start.py --tools --no-demo")
     say("  단계별 안내: docs/시작하기.md")
     say(LINE)
 
@@ -192,10 +197,10 @@ def main() -> None:
 
     if a.dashboard:
         step(n + 1, total, "대시보드")
-        next_steps(py, ran)
+        next_steps(py, ran, a.tools)
         dashboard(py)
         return
-    next_steps(py, ran)
+    next_steps(py, ran, a.tools)
 
 
 if __name__ == "__main__":
