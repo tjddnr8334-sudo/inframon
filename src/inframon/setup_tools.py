@@ -294,9 +294,12 @@ def setup_earthdata(log: Log = print, *, token: str | None = None,
             log(f"      1) 계정: {EARTHDATA_SIGNUP_URL}   2) 로그인 → {EARTHDATA_TOKEN_URL} → Generate Token")
             log("      3) python -m inframon --earthdata-save <토큰>")
             return False
-        log("    Earthdata 토큰 — 계정만 있으면 30초:")
-        log(f"      1) 계정이 없으면 가입: {EARTHDATA_SIGNUP_URL}")
-        log(f"      2) 로그인 → {EARTHDATA_TOKEN_URL} → [Generate Token] → 긴 문자열 복사")
+        log("    Earthdata 토큰 — 계정만 있으면 30초. 브라우저가 열립니다:")
+        log(f"      1) 계정이 없으면 가입(무료): {EARTHDATA_SIGNUP_URL}")
+        log(f"      2) 로그인 → 프로필 화면({EARTHDATA_TOKEN_URL})이 보이면")
+        log("         위쪽 작은 메뉴 [Generate Token] → 아래 [GENERATE TOKEN] 버튼")
+        log("         → 가려진 토큰 옆 [Show Token] 또는 복사 아이콘 → eyJ0eXAiOi… 로 시작하는 긴 문자열 전체 복사")
+        log("      ※ 토큰은 비밀번호와 같습니다 — 이 터미널에만 붙여넣고, 채팅·메일·문서에는 넣지 마세요.")
         if open_browser:
             try:
                 import webbrowser

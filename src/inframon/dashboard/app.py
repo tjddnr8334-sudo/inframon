@@ -2314,8 +2314,11 @@ def _render_tool_setup() -> None:
         if "earthdata" in missing:
             st.markdown("**Earthdata 토큰** — 위성 원본(SLC)을 내려받는 NASA 자격. 프로그램이 대신 가입할 수 없는 유일한 것.")
             st.markdown(f"1. 계정이 없으면 [가입(무료)]({tools.EARTHDATA_SIGNUP_URL})  →  "
-                        f"2. 로그인 후 [프로필]({tools.EARTHDATA_TOKEN_URL}) 에서 **Generate Token**  →  "
-                        "3. 긴 문자열을 아래에 붙여넣고 저장")
+                        f"2. 로그인 후 [프로필]({tools.EARTHDATA_TOKEN_URL}) 위쪽 작은 메뉴 **Generate Token** → "
+                        "아래 **GENERATE TOKEN** 버튼 → **Show Token**(또는 복사 아이콘) → `eyJ0eXAiOi…` 전체 복사  →  "
+                        "3. 아래 칸에 붙여넣고 **확인 후 저장**")
+            st.caption("토큰은 비밀번호와 같습니다 — 이 칸(또는 터미널)에만 붙여넣고 채팅·메일·문서에는 넣지 마세요. "
+                       "노출됐으면 같은 페이지에서 새로 발급하고 옛것은 Revoke.")
             ct, cb = st.columns([4, 1])
             tok = ct.text_input("토큰", key="tool_tok", type="password",
                                 placeholder="eyJ0eXAiOiJKV1QiLCJvcmlnaW4iOi…", label_visibility="collapsed")

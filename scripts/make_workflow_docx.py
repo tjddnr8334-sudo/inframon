@@ -199,6 +199,17 @@ def build() -> Path:
     P(doc, "확인: **판정: ✅ 코어 동작 가능** 과 **결과: snap ✅, snaphu ✅, earthdata ✅, slc_dir ✅**. "
            "`--full` 이 가상환경(.venv)을 만들고 torch·pyproj·scipy·matplotlib·ifcopenshell 까지 깝니다. "
            "`--tools` 가 SNAP·snaphu·토큰·SLC 폴더를 준비합니다. 토큰 프롬프트에서 그냥 Enter 로 건너뛰었으면 3.5 로.")
+    P(doc, "**토큰 프롬프트가 뜨면** (브라우저에 Earthdata 페이지가 함께 열립니다):")
+    for t in [
+        "계정이 없으면 가입(무료): https://urs.earthdata.nasa.gov/users/new → 메일 인증",
+        "로그인 → 프로필 화면(이름·Username·Email 이 보임) 위쪽 작은 메뉴 **Generate Token** → 아래 **GENERATE TOKEN** 버튼",
+        "가려진 토큰 옆 **Show Token** 또는 복사 아이콘 → `eyJ0eXAiOi…` 로 시작하는 긴 문자열 **전체** 복사",
+        "PowerShell 의 '여기 붙여넣고 Enter' 에 붙여넣고 Enter → `✅ Earthdata 토큰 확인 → …\\.inframon\\earthdata_token`",
+        "토큰은 비밀번호와 같습니다 — **터미널에만** 붙여넣고 채팅·메일·문서에는 넣지 않습니다. 60일마다 프로그램이 자동 갱신합니다.",
+    ]:
+        BUL(doc, t)
+    P(doc, "**SLC 보관 폴더를 물으면**: 드라이브별 여유 공간이 표시됩니다. 원하는 경로(예: `E:\\SLC`)를 치거나 Enter(가장 큰 드라이브). "
+           "이미 정해져 있으면 현재 위치를 보여 주고 Enter = 유지, 새 경로 = 변경.")
     P(doc, "**이후 명령은 `python` 이 아니라 `.venv\\Scripts\\python`** 으로 부릅니다 — start.py 가 시스템 파이썬이 아니라 "
            ".venv 안에 설치하기 때문입니다. 그냥 `python -m inframon` 은 새 컴퓨터에서 'No module named inframon' 이 납니다.")
 

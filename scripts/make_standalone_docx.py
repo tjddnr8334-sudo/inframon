@@ -262,7 +262,8 @@ def build() -> Path:
     for t in [
         "로그인 → 프로필(https://urs.earthdata.nasa.gov/profile) 위쪽 작은 메뉴 **Generate Token** → 아래 **GENERATE TOKEN** 버튼",
         "가려진 토큰 → **Show Token** → `eyJ0eXAiOi…` 전체 복사",
-        "대시보드 칸(그림 6) 또는 `--tools` 프롬프트에 붙여넣고 Enter → 프로그램이 NASA 서버에 확인한 뒤 저장",
+        "대시보드 칸(그림 6) 또는 `--tools` 프롬프트에 붙여넣고 Enter → 프로그램이 NASA 서버에 확인한 뒤 저장 (`✅ Earthdata 토큰 확인`)",
+        "토큰은 비밀번호와 같습니다 — **터미널(또는 대시보드 칸)에만** 붙여넣고, 채팅·메일·문서에는 넣지 않습니다",
     ]:
         BUL(doc, t)
     P(doc, "토큰은 60일짜리(최대 2개). 만료 7일 전부터 프로그램이 자동 갱신하니 다시 붙여넣을 일은 거의 없습니다. "
