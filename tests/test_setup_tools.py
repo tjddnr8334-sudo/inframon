@@ -142,13 +142,13 @@ def test_이미_있는_토큰은_다시_묻지_않는다(monkeypatch):
 def test_run_setup은_있는_것은_건너뛰고_없는_것만_한다(monkeypatch):
     monkeypatch.setattr(st, "status", lambda: {
         "snap": {"ok": True, "where": "gpt"}, "snaphu": {"ok": False, "where": "없음"},
-        "earthdata": {"ok": True, "where": "env"}})
+        "earthdata": {"ok": True, "where": "env"}, "slc_dir": {"ok": True, "where": "E:/SLC"}})
     called: list[str] = []
     monkeypatch.setattr(st, "setup_snap", lambda log: (called.append("snap"), True)[1])
     monkeypatch.setattr(st, "setup_snaphu", lambda log: (called.append("snaphu"), False)[1])
     res = st.run_setup("all", log=lambda s: None, interactive=False)
     assert called == ["snaphu"]
-    assert res == {"snap": True, "snaphu": False, "earthdata": True}
+    assert res == {"snap": True, "snaphu": False, "earthdata": True, "slc_dir": True}
 
 
 def test_run_setup은_골라서_할_수_있다(monkeypatch):
@@ -203,3 +203,40 @@ def test_status는_만료된_토큰을_ok로_치지_않는다(monkeypatch):
     slc_download.TOKEN_FILE.write_text(_jwt(-1))
     s = st.status()
     assert s["earthdata"]["ok"] is False and "만료" in s["earthdata"]["where"]
+
+
+# ── SLC 보관 폴더 ────────────────────────────────────────────────────────
+@pytest.fixture
+def _store_cfg(tmp_path, monkeypatch):
+    from inframon.insar import slc_store
+    monkeypatch.setattr(slc_store, "_CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.delenv("INFRAMON_SLC_DIR", raising=False)
+
+
+def test_SLC_폴더는_사용자가_고른_드라이브에_만들고_등록한다(_store_cfg, tmp_path):
+    from inframon.insar.slc_store import get_slc_dir
+    want = tmp_path / "E" / "SLC"
+    logs: list[str] = []
+    assert st.setup_slc_dir(logs.append, ask=lambda p: str(want)) is True
+    assert want.is_dir() and get_slc_dir() == want.resolve()
+    assert any("드라이브 여유" in ln for ln in logs) and any("새로 만듦" in ln for ln in logs)
+
+
+def test_SLC_폴더_Enter면_추천_위치(_store_cfg, tmp_path, monkeypatch):
+    from inframon.insar import slc_store
+    rec = tmp_path / "REC" / "SLC"
+    monkeypatch.setattr(slc_store, "suggest_dir", lambda: rec)
+    assert st.setup_slc_dir(lambda s: None, ask=lambda p: "") is True
+    assert rec.is_dir()
+
+
+def test_SLC_폴더_대시로_건너뛴다(_store_cfg):
+    logs: list[str] = []
+    assert st.setup_slc_dir(logs.append, ask=lambda p: "-") is False
+    assert any("건너뜀" in ln for ln in logs)
+
+
+def test_SLC_폴더_비대화면_명령만_남긴다(_store_cfg):
+    logs: list[str] = []
+    assert st.setup_slc_dir(logs.append, ask=None) is False
+    assert any("--slc-dir" in ln for ln in logs)

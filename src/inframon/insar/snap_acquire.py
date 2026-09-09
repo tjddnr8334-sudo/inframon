@@ -151,13 +151,24 @@ def acquire(
         picked = cand.scenes[:count]
         # 사용자 SLC 보관 폴더(--slc-dir/INFRAMON_SLC_DIR)에 이미 있는 장면은
         # 하드링크/복사로 끌어와 다운로드를 건너뛴다(장당 수 GB 재다운로드 방지).
+        from .slc_store import download_target
         from .slc_store import provide as _store_provide
-        from_store = _store_provide([s["name"] for s in picked], slc_dir)
+        names = [s["name"] for s in picked]
+        from_store = _store_provide(names, slc_dir)
+        # 보관 폴더가 설정돼 있으면 새 다운로드도 그곳(<보관>/<프레임>/)에 받고 SLC 폴더엔
+        # 링크만 — 큰 드라이브에 쌓이고 다음 교량이 재사용한다. 없으면 예전처럼 SLC 폴더로.
+        target = download_target(cand.label(), slc_dir)
+
+        def _fetch(urls: list[str]) -> None:
+            download_fn(urls, str(target), session)
+            if target != slc_dir:
+                _store_provide(names, slc_dir)
+
         ref = picked[0]
         # 기준영상만 먼저 받아 burst 포함 검증
         ref_zip = slc_dir / f"{ref['name']}.zip"
         if not (ref_zip.exists() and ref_zip.stat().st_size > 0):
-            download_fn([ref["url"]], str(slc_dir), session)
+            _fetch([ref["url"]])
         burst = find_bridge_burst(str(ref_zip), lat, lon)
         if verify and not burst.contained:
             # 이 프레임은 커버리지 밖 → 다음 후보(기준영상은 남겨둠)
@@ -166,7 +177,7 @@ def acquire(
         rest = [s["url"] for s in picked[1:]
                 if not (slc_dir / f"{s['name']}.zip").exists()]
         if rest:
-            download_fn(rest, str(slc_dir), session)
+            _fetch(rest)
         got = [str(slc_dir / f"{s['name']}.zip") for s in picked
                if (slc_dir / f"{s['name']}.zip").exists()]
         return AcquireResult(cand, str(slc_dir), got, burst.contained, burst, considered,

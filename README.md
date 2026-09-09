@@ -58,7 +58,8 @@ python start.py --full --tools --dashboard                  # 3. 전부 설치 �
 | 새 교량 명령 한 줄 | `python scriptsridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
 | SNAP·snaphu·Earthdata 토큰 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기 (`python -m inframon --earthdata-save <토큰>` 도 됨) |
 | 이 PC 에 뭐가 없나 | `python -m inframon --doctor` |
-| Earthdata 토큰·SNAP·snaphu 자세히 | [docs/외부도구_준비.md](docs/외부도구_준비.md) — 가입 화면, 토큰 발급 클릭 순서, 자동/수동, 오류별 조치 |
+| SLC 를 어느 드라이브에 쌓을지 | 대시보드 🔧 패널 **SLC 보관 폴더** (드라이브 고르면 폴더를 만들어 줌) 또는 `python -m inframon --slc-dir E:\SLC` |
+| Earthdata 토큰·SNAP·snaphu·SLC 폴더 자세히 | [docs/외부도구_준비.md](docs/외부도구_준비.md) — 가입 화면, 토큰 발급 클릭 순서, 자동/수동, 오류별 조치 |
 | 단계별 안내 | [docs/시작하기.md](docs/시작하기.md) · **[혼자 돌리기 (docx·pdf, 9쪽 · 화면별 클릭 순서)](docs/inframon_혼자_돌리기.pdf)** · [워크플로우 안내서](docs/inframon_워크플로우_안내서.pdf) |
 
 ## 🔄 전체 흐름 · Workflow

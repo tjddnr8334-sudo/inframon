@@ -8,6 +8,10 @@
 `slc_dir`(CLI `--slc-dir DIR` 로 저장 — 대시보드 config 와 같은 파일, 병합 저장).
 어느 쪽도 없으면 조용히 no-op(기존 동작 그대로).
 
+보관 폴더가 설정돼 있으면 **새 다운로드도 그곳(`<보관>/<궤도 프레임>/`)에 떨어진다** —
+장당 4~8 GB 라 C: 가 아니라 사용자가 고른 큰 드라이브에 쌓여야 하고, 한 번 받은 장면이
+다음 교량에서 그대로 재사용되려면 다운로드가 보관 폴더를 채워야 한다(`download_target`).
+
 하드링크는 같은 드라이브에서 디스크 추가 사용 0 — 다른 드라이브면 복사로 폴백한다.
 """
 
@@ -38,16 +42,54 @@ def get_slc_dir() -> Path | None:
     return p if p.is_dir() else None
 
 
-def set_slc_dir(path: str | Path) -> Path:
-    """보관 폴더를 config 에 저장(다른 키 보존·병합). 폴더가 없으면 ValueError."""
+def set_slc_dir(path: str | Path, *, create: bool = False) -> Path:
+    """보관 폴더를 config 에 저장(다른 키 보존·병합). 없으면 ValueError — create=True 면 만든다."""
     p = Path(path).resolve()
     if not p.is_dir():
-        raise ValueError(f"SLC 보관 폴더가 없습니다: {p}")
+        if not create:
+            raise ValueError(f"SLC 보관 폴더가 없습니다: {p}")
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise ValueError(f"SLC 보관 폴더를 만들 수 없습니다: {p} ({e})") from e
     cfg = _config_load()
     cfg["slc_dir"] = str(p)
     _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     _CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     return p
+
+
+def drives() -> list[dict]:
+    """쓸 수 있는 드라이브와 여유 공간(GB) — 사용자가 큰 드라이브를 고르게. 여유 큰 순."""
+    import string
+    if os.name == "nt":
+        roots = [Path(c + ":\\") for c in string.ascii_uppercase if Path(c + ":\\").exists()]
+    else:
+        roots = [Path("/"), Path.home()]
+    out = []
+    for r in roots:
+        try:
+            u = shutil.disk_usage(r)
+        except OSError:
+            continue
+        out.append({"root": str(r), "free_gb": round(u.free / 1e9, 1), "total_gb": round(u.total / 1e9, 1)})
+    return sorted(out, key=lambda d: -d["free_gb"])
+
+
+def suggest_dir() -> Path:
+    """추천 보관 위치 — 여유가 가장 큰 드라이브의 SLC 폴더."""
+    d = drives()
+    return Path(d[0]["root"]) / "SLC" if d else Path.home() / "SLC"
+
+
+def download_target(frame_label: str, fallback: str | Path) -> Path:
+    """다운로드가 떨어질 폴더 — 보관 폴더가 있으면 `<보관>/<프레임>/`, 없으면 fallback."""
+    root = get_slc_dir()
+    if root is None:
+        return Path(fallback)
+    sub = root / frame_label.replace(" ", "_")
+    sub.mkdir(parents=True, exist_ok=True)
+    return sub
 
 
 def scan(root: str | Path | None = None) -> list[Path]:

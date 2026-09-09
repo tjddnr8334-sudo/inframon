@@ -236,7 +236,7 @@ def build() -> Path:
                "python scripts\\bridge_run.py --batch docs\\bridges\\batch.json   # 여러 교량 한 번에"])
 
     # 5
-    H(doc, "5. 외부 도구 — Earthdata 토큰 · SNAP · snaphu (한 번)", 1)
+    H(doc, "5. 외부 도구 — Earthdata 토큰 · SNAP · snaphu · SLC 폴더 (한 번)", 1)
     P(doc, "위성 원본(SLC)부터 돌리려면 셋이 필요합니다. 한 줄 설치기가 이미 했다면 건너뜁니다. 빠진 것만 채우는 방법 둘:")
     FIG(doc, IMG / "ui_tools_panel.jpg", "그림 6. 대시보드 ① 준비 상태 아래 '🔧 외부 도구 준비' — 없는 것만 나타나고, 토큰은 붙여넣기·SNAP/snaphu 는 버튼.")
     P(doc, "또는 터미널에서:")
@@ -268,6 +268,14 @@ def build() -> Path:
         ["snaphu", "WSL 있음 → Ubuntu 안에 apt 설치 1~3분. WSL 없음 → 관리자 승인 → 재부팅 → 한 번 더", "관리자 PowerShell `wsl --install -d Ubuntu` → 재부팅 → `wsl -d Ubuntu -u root -- apt-get install -y snaphu`"],
     ], widths=[1.8, 7.0, 7.2])
     P(doc, "각 도구의 '안 될 때' 표(오류 코드별 조치)는 docs/외부도구_준비.md 에 있습니다.", size=10)
+
+    H(doc, "5-3. SLC 보관 폴더 — 원하는 드라이브에", 2)
+    P(doc, "위성 원본은 장당 4–8 GB, 교량 하나에 200–400 GB 까지 갑니다. C: 에 두면 곧 차니 **큰 드라이브**를 고릅니다. "
+           "🔧 패널 맨 아래 **SLC 보관 폴더**: 드라이브 드롭다운(여유 공간 큰 순) → 폴더(자동 `\SLC`) → **폴더 만들고 저장**. "
+           "터미널이면 `python -m inframon --slc-dir E:\SLC` (없으면 만듦).")
+    P(doc, "이후 다운로드는 `E:\SLC\<궤도_프레임>\` 에 떨어지고, 같은 프레임을 쓰는 다음 교량은 다운로드를 건너뜁니다. "
+           "이미 받아둔 zip 이 있는 폴더를 지정하면 그대로 인식합니다.", size=10)
+    CHECK(doc, "🔧 패널에 `현재: E:\SLC (0장)` 처럼 표시. `--doctor` 의 SLC 보관 폴더 ✅.")
     P(doc, "그다음 새 교량:")
     CODE(doc, ["python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan   # 계획만(1분)",
                "python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366                           # 끝까지(1~3시간)"])

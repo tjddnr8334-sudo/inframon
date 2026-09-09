@@ -2303,11 +2303,11 @@ def _render_tool_setup() -> None:
     except Exception as e:  # noqa: BLE001
         st.caption(f"외부 도구 상태를 읽지 못함: {e}")
         return
-    missing = [k for k in ("earthdata", "snap", "snaphu") if not stt[k]["ok"]]
-    if not missing:
-        return
-    label = {"earthdata": "Earthdata 토큰", "snap": "SNAP", "snaphu": "snaphu"}
-    with st.expander(f"🔧 외부 도구 준비 — {', '.join(label[k] for k in missing)} (여기서 바로)", expanded=True):
+    missing = [k for k in ("earthdata", "snap", "snaphu", "slc_dir") if not stt[k]["ok"]]
+    label = {"earthdata": "Earthdata 토큰", "snap": "SNAP", "snaphu": "snaphu", "slc_dir": "SLC 폴더"}
+    title = ("🔧 외부 도구 준비 — " + ", ".join(label[k] for k in missing) + " (여기서 바로)"
+             if missing else "🔧 외부 도구 · SLC 보관 폴더")
+    with st.expander(title, expanded=bool(missing)):
         st.caption("터미널에서 `python start.py --tools` 로 해도 같습니다. 자세한 수동 설치는 "
                    "[docs/외부도구_준비.md](https://github.com/tjddnr8334-sudo/inframon/blob/main/docs/외부도구_준비.md).")
 
@@ -2350,6 +2350,29 @@ def _render_tool_setup() -> None:
                                state="complete" if ok else "error")
                 if ok:
                     st.rerun()
+
+        # SLC 보관 폴더 — 있어도 바꿀 수 있게 항상 보인다(드라이브가 차면 옮긴다).
+        from inframon.insar.slc_store import drives, get_slc_dir, scan, set_slc_dir, suggest_dir
+        cur = get_slc_dir()
+        st.markdown("**SLC 보관 폴더** — 위성 원본이 떨어지는 곳. 장당 4–8 GB, 교량 하나에 200–400 GB 까지 가므로 "
+                    "**여유가 큰 드라이브**에 둡니다. 한 번 받은 장면은 다음 교량에서 재사용됩니다."
+                    + (f"  현재: `{cur}` ({len(scan(cur))}장)" if cur else "  현재: 미설정 → 프로젝트 폴더에 쌓임"))
+        dl = drives()
+        cd, cp, cb = st.columns([1.2, 3, 1])
+        opts = [f"{d['root']}  여유 {d['free_gb']:.0f} GB" for d in dl] or ["(드라이브 없음)"]
+        i = cd.selectbox("드라이브", range(len(opts)), format_func=lambda k: opts[k], key="slc_drive")
+        default = str(Path(dl[i]["root"]) / "SLC") if dl else str(suggest_dir())
+        if st.session_state.get("slc_drive_last") != i:
+            st.session_state["slc_path"] = default
+            st.session_state["slc_drive_last"] = i
+        path = cp.text_input("폴더", key="slc_path")
+        if cb.button("폴더 만들고 저장", key="btn_slc_dir", use_container_width=True):
+            try:
+                saved = set_slc_dir(path, create=True)
+                st.success(f"SLC 보관 폴더: {saved} — 이후 다운로드가 그 안의 <궤도 프레임> 폴더에 떨어집니다.")
+                st.rerun()
+            except ValueError as e:
+                st.error(str(e))
 
 
 def tab_start(path: str) -> None:

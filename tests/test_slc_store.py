@@ -130,3 +130,63 @@ def test_acquire_reuses_store_and_downloads_only_missing(cfg, tmp_path, monkeypa
     assert sorted(res.from_store) == sorted([S1, S2])
     assert downloaded == [f"http://x/{S3}.zip"]           # 없는 1장만 다운로드
     assert len(res.downloaded) == 3                       # SLC 폴더엔 3장 전부 정리됨
+
+
+# ── 보관 폴더가 있으면 새 다운로드도 거기로 떨어진다 ──
+def test_acquire_downloads_into_store_and_links_into_slc_dir(cfg, tmp_path, monkeypatch):
+    from inframon.insar import snap_acquire
+
+    root = tmp_path / "bigdrive" / "SLC"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("INFRAMON_SLC_DIR", str(root))
+
+    scenes = [{"date": f"2024-01-{d:02d}", "name": n, "url": f"http://x/{n}.zip",
+               "bytes": 1, "direction": "ASCENDING", "path": 127, "frame": 115,
+               "geometry": {"coordinates": [[[126, 36], [128, 36], [128, 38],
+                                             [126, 38], [126, 36]]]}}
+              for d, n in ((7, S1), (19, S2))]
+
+    class _Burst:
+        contained = True
+        subswath, burst_index, distance_km = "IW2", 5, 3.0
+
+    targets: list[str] = []
+
+    def fake_download(urls, out_dir, session):
+        targets.append(out_dir)
+        for u in urls:
+            (Path(out_dir) / u.rsplit("/", 1)[1]).write_bytes(b"dl")
+
+    monkeypatch.setattr(snap_acquire, "find_bridge_burst", lambda *a, **k: _Burst())
+    res = snap_acquire.acquire(
+        37.0, 127.0, tmp_path / "out", count=2, start="2024-01-01", end="2024-02-01",
+        min_scenes=2, search_fn=lambda *a, **k: scenes, download_fn=fake_download,
+        session=object())
+
+    frame_dir = root / "ASC_path127_frame115"
+    assert all(Path(t) == frame_dir for t in targets), "다운로드는 보관 폴더의 프레임 하위폴더로"
+    assert sorted(p.name for p in frame_dir.glob("*.zip")) == sorted([f"{S1}.zip", f"{S2}.zip"])
+    assert len(res.downloaded) == 2                                  # 처리용 SLC 폴더엔 링크/복사
+    assert all(Path(p).parent == tmp_path / "out" / "SLC" for p in res.downloaded)
+    assert len(scan(root)) == 2                                      # 다음 교량이 재사용할 수 있게 보관됨
+
+
+def test_set_creates_dir_when_asked(cfg, tmp_path):
+    new = tmp_path / "D" / "SLC"
+    with pytest.raises(ValueError):
+        set_slc_dir(new)
+    assert set_slc_dir(new, create=True) == new.resolve()
+    assert new.is_dir() and get_slc_dir() == new.resolve()
+
+
+def test_drives_report_free_space_sorted():
+    from inframon.insar.slc_store import drives, suggest_dir
+    d = drives()
+    assert d and all(x["free_gb"] >= 0 for x in d)
+    assert [x["free_gb"] for x in d] == sorted((x["free_gb"] for x in d), reverse=True)
+    assert suggest_dir().name == "SLC"
+
+
+def test_download_target_falls_back_without_store(cfg, tmp_path):
+    from inframon.insar.slc_store import download_target
+    assert download_target("ASC path1 frame2", tmp_path / "SLC") == tmp_path / "SLC"

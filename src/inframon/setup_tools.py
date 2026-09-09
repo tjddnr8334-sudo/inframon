@@ -11,6 +11,8 @@ doctor 가 "프로그램이 대신 못 하는 것" 으로 분류하던 세 가�
               `wsl --install` 을 걸고 재부팅 뒤 다시 오라고 한다.
   · Earthdata — 브라우저를 토큰 페이지로 열고, 사용자가 붙여넣은 토큰을 CMR 에 한 번 찔러
               (Bearer 유효성) 확인한 뒤 ~/.inframon/earthdata_token 에 저장한다.
+  · SLC 폴더 — 장당 4~8 GB 라 C: 에 쌓이면 곧 찬다. 사용자가 고른 드라이브(기본: 여유가 가장
+              큰 드라이브의 SLC)에 폴더를 **만들고** 등록 — 이후 다운로드가 거기로 간다.
 
 `python -m inframon --setup-tools` · `python start.py --tools`. 네트워크·외부 프로세스는
 모두 이 모듈 안의 작은 함수로 격리해 테스트에서 monkeypatch 한다.
@@ -177,6 +179,9 @@ def status() -> dict[str, dict]:
     from .insar.snap_unwrap import find_snaphu
     t = find_snaphu()
     out["snaphu"] = {"ok": t is not None, "where": t.describe() if t else "없음"}
+    from .insar.slc_store import get_slc_dir, scan
+    d = get_slc_dir()
+    out["slc_dir"] = {"ok": d is not None, "where": f"{d} ({len(scan(d))}장)" if d else "없음"}
     return out
 
 
@@ -311,13 +316,46 @@ def setup_earthdata(log: Log = print, *, token: str | None = None,
     return True
 
 
+# ── SLC 보관 폴더 ────────────────────────────────────────────────────────
+def setup_slc_dir(log: Log = print, *, path: str | Path | None = None,
+                  ask: Callable[[str], str] | None = None) -> bool:
+    from .insar.slc_store import drives, get_slc_dir, scan, set_slc_dir, suggest_dir
+    cur = get_slc_dir()
+    if cur is not None and path is None:
+        log(f"    이미 있음: {cur} ({len(scan(cur))}장)")
+        return True
+    if path is None:
+        rec = suggest_dir()
+        if ask is None:
+            log(f"    미설정 — 다운로드가 프로젝트 폴더(C:)에 쌓입니다. 큰 드라이브에 두려면: "
+                f"python -m inframon --slc-dir {rec}")
+            return False
+        log("    드라이브 여유 공간:")
+        for d in drives():
+            log(f"      {d['root']:<4} 여유 {d['free_gb']:>8.1f} GB / {d['total_gb']:.0f} GB")
+        log("    SLC 는 장당 4~8 GB, 교량 하나에 30~50장(200~400 GB)까지 갑니다.")
+        path = ask(f"    SLC 보관 폴더 (Enter = {rec}, 건너뛰려면 '-'): ").strip() or str(rec)
+        if path == "-":
+            log("    건너뜀 — 나중에: python -m inframon --slc-dir <폴더>")
+            return False
+    try:
+        saved = set_slc_dir(path, create=True)
+    except ValueError as e:
+        log(f"    ❌ {e}")
+        return False
+    n = len(scan(saved))
+    log(f"    ✅ SLC 보관 폴더 — {saved}" + (f" (이미 {n}장)" if n else " (새로 만듦)"))
+    return True
+
+
 # ── 진입점 ───────────────────────────────────────────────────────────────
 def run_setup(which: str = "all", *, log: Log = print, interactive: bool | None = None,
               token: str | None = None) -> dict[str, bool]:
     """which: 'all' 또는 'snap,snaphu,earthdata' 부분집합. 결과 {도구: 준비됨}."""
     if interactive is None:
         interactive = sys.stdin.isatty()
-    wanted = {"snap", "snaphu", "earthdata"} if which in ("", "all") else {w.strip() for w in which.split(",")}
+    wanted = ({"snap", "snaphu", "earthdata", "slc_dir"} if which in ("", "all")
+              else {w.strip() for w in which.split(",")})
     st = status()
     res: dict[str, bool] = {}
     log("[외부 도구 준비]")
@@ -331,6 +369,9 @@ def run_setup(which: str = "all", *, log: Log = print, interactive: bool | None 
         log(f"  Earthdata   : {'✅ ' + st['earthdata']['where'] if st['earthdata']['ok'] else '❌ 토큰 없음'}")
         res["earthdata"] = st["earthdata"]["ok"] or setup_earthdata(
             log, token=token, ask=(input if interactive else None))
+    if "slc_dir" in wanted:
+        log(f"  SLC 폴더    : {'✅ ' + st['slc_dir']['where'] if st['slc_dir']['ok'] else '❌ 미설정 → 큰 드라이브에 만들기'}")
+        res["slc_dir"] = st["slc_dir"]["ok"] or setup_slc_dir(log, ask=(input if interactive else None))
     missing = [k for k, v in res.items() if not v]
     log("  결과: " + (", ".join(f"{k} {'✅' if v else '❌'}" for k, v in res.items())))
     if missing:
