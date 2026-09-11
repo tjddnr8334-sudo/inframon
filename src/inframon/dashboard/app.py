@@ -1984,7 +1984,8 @@ def _step_run_block(step: str, path: str) -> None:
                     rep = run_bridge_stage(step, float(b["lat"]), float(b["lon"]), out_dir=_pipeline_dir(),
                                            engine=b.get("engine") or "snap",
                                            engine_source=b.get("engine_source"),
-                                           earthdata_token=token, ifc=b.get("ifc"))
+                                           earthdata_token=token, ifc=b.get("ifc"),
+                                           bridge_name=b.get("name"))   # ① 이름 힌트(좌표·'현재 교량'은 안에서 버림)
                 st.session_state[f"step_report_{step}"] = [
                     {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
                 st.rerun()          # 진행 띠(✅/⬜)와 아래 결과를 새 project.h5 로 다시 그린다
@@ -2647,7 +2648,8 @@ def tab_start(path: str) -> None:
                     float(lat), float(lon), out_dir=out_dir,
                     mode="full" if run_full else "plan",
                     ifc=(ifc_in.strip() or None),
-                    engine=eng, engine_source=(src_in.strip() or None))
+                    engine=eng, engine_source=(src_in.strip() or None),
+                    bridge_name=st.session_state.get("start_name") or None)
             st.session_state["start_report"] = [
                 {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
             st.session_state["start_ctx"] = {

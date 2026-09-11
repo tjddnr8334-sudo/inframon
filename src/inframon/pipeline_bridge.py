@@ -112,9 +112,12 @@ def run_bridge_pipeline(
     ifc: str | Path | None = None, bim_elements: str | Path | None = None,
     registry: str | Path | None = None, bridge_id: str | None = None,
     twin_value: str = "cri", engine: str = "snap",
-    engine_source: str | Path | None = None,
+    engine_source: str | Path | None = None, bridge_name: str | None = None,
 ) -> PipelineReport:
     """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).
+
+    `bridge_name` 은 ① 교량선정 힌트(대시보드에서 고른 이름·CLI --pipeline-name). 좌표 근처
+    교량이 여럿일 때 전국교량표준데이터·OSM 에서 이 이름을 우선 매칭한다.
 
     do_adi=True 면 ⑨ PS/DS 를 코히런스 1차 대신 **진폭분산 ADI**(쌍별 진폭 ~20분 추가)로.
 
@@ -131,7 +134,7 @@ def run_bridge_pipeline(
     rep = PipelineReport(lat=lat, lon=lon)
     ctx = rep.context
 
-    _light_stages(rep, ctx, lat, lon, out, roi_sizes)
+    _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name)
 
     # ⑧⑨⑫⑬⑭ 중량 단계 — plan 이면 계획, full 이면 실행
     _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
@@ -179,24 +182,164 @@ def run_bridge_pipeline(
     return rep
 
 
-def _light_stages(rep, ctx, lat, lon, out, roi_sizes) -> None:
+_OSM_CACHE = "osm_bridge_cache.json"
+
+
+def _name_hint(name) -> str | None:
+    """① 이름 힌트로 쓸 수 있는 교량명만 — 좌표 문자열('37.3219,127.1083')·'현재 교량'·
+    OSM id('way/…') 는 버린다. 대시보드는 교량을 안 고르면 이름 자리에 좌표를 넣는다."""
+    s = str(name or "").strip()
+    if not s or s == "현재 교량" or s.startswith(("way/", "relation/")):
+        return None
+    if not any(c.isalpha() for c in s):          # 숫자·쉼표·점뿐 → 좌표
+        return None
+    return s
+
+
+def _osm_cache_key(lat: float, lon: float, name, length_m) -> str:
+    return f"{lat:.5f},{lon:.5f}|{name or ''}|{round(length_m) if length_m else ''}"
+
+
+def _osm_cache_get(out: Path, key: str) -> dict | None:
+    import json
+    try:
+        d = json.loads((Path(out) / _OSM_CACHE).read_text(encoding="utf-8"))
+        v = d.get(key)
+        return v if isinstance(v, dict) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _osm_cache_put(out: Path, key: str, value: dict) -> None:
+    import json
+    p = Path(out) / _OSM_CACHE
+    try:
+        d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        if not isinstance(d, dict):
+            d = {}
+        d[key] = value
+        p.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    except (OSError, ValueError, TypeError):
+        pass                                   # 캐시 실패가 파이프라인을 막으면 안 된다
+
+
+def _csv_bridge(out: Path, lat: float, lon: float, name: str | None):
+    """전국교량표준데이터(35,593건, data/national_bridge_standard*.csv)에서 좌표·이름으로 교량.
+
+    시점-종점 선분 거리 300 m 안(이름을 주면 5 km 안 이름 일치 우선). 없거나 CSV 가
+    없으면 None. 반환 (profile, csv_path).
+    """
+    try:
+        from .public_data import find_bridge_csv, nearest_bridge_profile
+        csv = find_bridge_csv(str(out))
+        if not csv:
+            return None, None
+        return nearest_bridge_profile(csv, lat, lon, max_km=0.3, name=name), csv
+    except Exception:  # noqa: BLE001 — 공공데이터 없어도 ① 은 OSM 으로 계속 간다
+        return None, None
+
+
+def _csv_summary(prof) -> dict:
+    x = prof.extra or {}
+    return {"name": prof.name, "length_m": prof.length_m, "width_m": prof.width_m,
+            "lat": x.get("lat"), "lon": x.get("lon"),
+            "lat_end": x.get("lat_end"), "lon_end": x.get("lon_end"),
+            "match_by": x.get("match_by"), "match_dist_m": x.get("match_dist_m"),
+            "address": x.get("address"), "road_route": x.get("road_route")}
+
+
+def _stage_bridge(rep, ctx, lat, lon, out, bridge_name: str | None = None):
+    """① 교량 선정 — 전국교량표준데이터(CSV) 로 이름·연장을 먼저 잡고, OSM 은 그에 맞는 way 를 고른다.
+
+    예전엔 OSM 반경 150 m 에서 **가장 가까운 절점** 하나를 그대로 써서
+      · 37.3219,127.1083 → 이름 없는 650 m 외곽선(man_made=bridge)이 실제 독정교(123 m)를 밀어냈고
+      · Overpass 가 504 를 내면 ① 이 ❌ 로 끝나 ③·⑪ 이 제원 없이 돌았다.
+    지금은
+      1. CSV(35,593 교량, 시점·종점 좌표) 에서 선분거리 300 m 안 교량 → 이름·연장·폭 확보
+      2. OSM 은 재시도·미러(osm_bridge._overpass_query) 로 조회하고 rank_key(차도→이름→연장→거리) 로 선택
+      3. OSM 이 끝내 실패하거나 반경 안에 없어도 CSV 가 있으면 CSV 시종점을 데크선으로 진행(◐)
+      4. 같은 좌표·이름의 OSM 결과는 <out>/osm_bridge_cache.json 에 두어 재실행 때 네트워크를 안 탄다.
+    반환: CSV profile(⑪ 에서 재사용) 또는 None.
+    """
+    bridge_name = _name_hint(bridge_name)
+    official, csv_path = _csv_bridge(out, lat, lon, bridge_name)
+    if official is not None:
+        ctx["bridge_csv"] = {**_csv_summary(official), "csv": str(csv_path)}
+    want_name = bridge_name or (official.name if official is not None else None)
+    want_len = official.length_m if official is not None else None
+    csv_txt = ""
+    if official is not None:
+        _d = (official.extra or {}).get("match_dist_m")
+        csv_txt = (f" · CSV {official.name} {round(official.length_m) if official.length_m else '?'}m"
+                   f"({(official.extra or {}).get('match_by') == 'name' and '이름' or '거리'}"
+                   f"{f' {_d:.0f}m' if _d is not None else ''})")
+
+    key = _osm_cache_key(lat, lon, want_name, want_len)
+    cached = _osm_cache_get(out, key)
+    b_dict: dict | None = None
+    osm_err: str | None = None
+    from_cache = False
+    if cached:
+        b_dict, from_cache = cached, True
+    else:
+        try:
+            from .insar.osm_bridge import confirm_bridge
+            b = confirm_bridge(lat, lon, name=want_name, length_m=want_len)
+            if b:
+                b_dict = {"name": b.name, "osm": b.osm_url, "length_m": round(b.length_m),
+                          "tags": dict(b.tags or {}), "geometry": [list(p) for p in b.geometry],
+                          "distance_m": getattr(b, "distance_m", None)}
+                _osm_cache_put(out, key, b_dict)
+        except Exception as e:  # noqa: BLE001 — OverpassError 등: 아래서 CSV 로 폴백
+            osm_err = str(e)[:70]
+
+    if b_dict:
+        name = b_dict.get("name") or ""
+        if name.startswith(("way/", "relation/")) and want_name:
+            name = want_name                       # OSM 에 이름이 없으면 CSV 이름
+        ctx["bridge"] = {**b_dict, "name": name, "source": "osm"}
+        warn = ""
+        if official is not None and want_len and b_dict.get("length_m"):
+            from .insar.osm_bridge import name_matches, Bridge as _B
+            _fake = _B("way", 0, b_dict.get("name") or "", None, b_dict.get("tags") or {}, [], (0, 0, 0, 0))
+            if (abs(b_dict["length_m"] - want_len) > 0.25 * want_len
+                    and not name_matches(_fake, want_name)):
+                warn = " ⚠️ OSM·CSV 불일치(이름·연장 모두 다름) — 좌표 확인"
+        rep.add(StageResult("①교량선정", "done",
+                            f"{name or b_dict.get('osm')} · {b_dict.get('length_m')}m"
+                            f"{' (캐시)' if from_cache else ''}{csv_txt}{warn}"))
+        return official
+
+    if official is not None:
+        x = official.extra or {}
+        geom = [[x["lat"], x["lon"]]] if x.get("lat") is not None and x.get("lon") is not None else []
+        if x.get("lat_end") is not None and x.get("lon_end") is not None:
+            geom.append([x["lat_end"], x["lon_end"]])
+        ctx["bridge"] = {"name": official.name, "osm": None,
+                         "length_m": round(official.length_m) if official.length_m else None,
+                         "tags": {"source": "national_bridge_standard",
+                                  "bridge": "yes", "highway": "road"},
+                         "geometry": geom, "source": "csv"}
+        why = f"OSM 실패({osm_err})" if osm_err else "OSM 반경 150m 에 교량 없음"
+        rep.add(StageResult("①교량선정", "partial",
+                            f"{official.name} · {ctx['bridge']['length_m']}m · 전국교량표준데이터 제원·시종점으로 진행 — {why}"))
+        return official
+
+    if osm_err:
+        rep.add(StageResult("①교량선정", "error",
+                            f"{osm_err} · CSV(data/national_bridge_standard*.csv) 도 없음"[:120]))
+    else:
+        rep.add(StageResult("①교량선정", "partial", "OSM 교량 미확인·CSV 없음(좌표만 사용)"))
+    return None
+
+
+def _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name: str | None = None) -> None:
     """경량 단계 — ①교량선정 ③ROI ②④SLC·트랙 ⑤⑥⑦(계획) ⑪교량메타. 네트워크 조회만, 수 초.
 
     ⓪ 전체 실행(plan/full)과 대시보드 ① InSAR 탭의 단계 실행이 같은 코드를 쓴다.
     """
-    # ① 교량 선정 (OSM)
-    try:
-        from .insar.osm_bridge import confirm_bridge
-        b = confirm_bridge(lat, lon)
-        if b:
-            ctx["bridge"] = {"name": b.name, "osm": b.osm_url, "length_m": round(b.length_m),
-                             "tags": b.tags, "geometry": b.geometry}
-            rep.add(StageResult("①교량선정", "done",
-                                f"{b.name or b.osm_id} · {round(b.length_m)}m"))
-        else:
-            rep.add(StageResult("①교량선정", "partial", "OSM 교량 미확인(좌표만 사용)"))
-    except Exception as e:  # noqa: BLE001
-        rep.add(StageResult("①교량선정", "error", str(e)[:80]))
+    # ① 교량 선정 (CSV → OSM → CSV 폴백)
+    official = _stage_bridge(rep, ctx, lat, lon, out, bridge_name)
 
     # ③ ROI 도심지 가중 (② SLC 조회보다 먼저: 조회 AOI 로 씀)
     try:
@@ -252,14 +395,9 @@ def _light_stages(rep, ctx, lat, lon, out, roi_sizes) -> None:
         water = water_context_for(cls, length)
         # 전국교량표준데이터에 실측 제원(연장·폭·주경간·등급)이 있으면 추정보다 우선.
         # OSM 만 보면 폭·경간이 비어 PINN 단면 가정이 부실해진다.
-        official = None
-        try:
-            from .public_data import find_bridge_csv, nearest_bridge_profile
-            _csv = find_bridge_csv(str(out))
-            if _csv:
-                official = nearest_bridge_profile(_csv, lat, lon, max_km=0.3)
-        except Exception:  # noqa: BLE001 — 공공데이터 없어도 ⑪ 는 계속 간다
-            official = None
+        # ① 에서 이미 찾은 CSV 제원(이름 힌트 반영)을 그대로 쓴다 — 두 번 읽지 않는다.
+        if official is None:
+            official, _ = _csv_bridge(out, lat, lon, _name_hint(bridge_name))
         meta = build_bridge_meta(lat, lon, tags, cls, length, water, official=official)
         ctx["bridge_meta"] = meta.as_dict()
         # 항목마다 출처 딱지를 따로 붙인다 — 표준데이터에 경간 컬럼이 없어 연장×비율로
@@ -600,6 +738,7 @@ def run_bridge_stage(
     ifc: str | Path | None = None, bim_elements: str | Path | None = None,
     registry: str | Path | None = None, bridge_id: str | None = None,
     twin_value: str = "cri", roi_sizes=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
+    bridge_name: str | None = None,
 ) -> PipelineReport:
     """한 단계만 실행 — 대시보드 ① InSAR · ② PINN · ③ FRAM · ④ 잔존수명 · 트윈 탭의 '▶ 이 단계 실행'.
 
@@ -627,7 +766,7 @@ def run_bridge_stage(
 
     try:
         if stage == "insar":
-            _light_stages(rep, ctx, lat, lon, out, roi_sizes)
+            _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name)
             deck_h5 = _stage_insar(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
                                    engine=engine, engine_source=engine_source)
             if deck_h5 is not None:

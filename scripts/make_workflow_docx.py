@@ -305,7 +305,7 @@ def build() -> Path:
     CODE(doc, [".venv\\Scripts\\python -m inframon --pipeline 37.5337,126.9366 --pipeline-mode plan --out docs\\bridges\\마포대교\\plan"])
     P(doc, "좌표만 주면 제원(파트너 CSV → OSM → 표준데이터)과, 어느 궤도에 SLC 가 몇 장 있는지를 검색합니다. 다운로드는 하지 않습니다. "
            "장면 수가 10장 미만이면 그 교량은 이 궤도로 어렵습니다 — 다른 교량이나 궤도를 봅니다.")
-    CHECK(doc, "**②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** 처럼 궤도·프레임·장면 수. ①의 ❌ 는 OSM 서버 일시 오류(504) — 다시 돌리면 됩니다.")
+    CHECK(doc, "**②④ SLC·트랙·프레임  ASC path127 frame120 · 41장** 처럼 궤도·프레임·장면 수. ①이 ◐ 면 OSM 이 응답하지 않아 전국교량표준데이터(CSV) 제원으로 진행한 것입니다 — 결과는 유효합니다.")
 
     H(doc, "3.8 새 교량 — 끝까지 (1~3시간)", 2)
     CODE(doc, [".venv\\Scripts\\python scripts\\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366"])
@@ -371,7 +371,7 @@ def build() -> Path:
         "**⓪ '토큰 없음'** → 3.2 로. 발급은 urs.earthdata.nasa.gov (1분).",
         "**'SNAP gpt 없음'** → SNAP 설치 후 PATH 또는 환경변수 SNAP_HOME.",
         "**'snaphu 없음'** → WSL 에 snaphu. 언래핑이 실패하면 파라미터 사다리 4단계가 자동으로 돌고, 그래도 안 되면 unwrap_retry.json 에 사유.",
-        "**OSM 504** → 자동 재시도 3회. 캐시(osm_roads_500m.json)가 있으면 캐시.",
+        "**OSM 504** → 미러 3곳 순환·자동 재시도 4회. ① 교량선정은 그래도 안 되면 전국교량표준데이터 CSV 로 진행(◐). 캐시(osm_roads_500m.json)가 있으면 캐시.",
         "**중간에 죽음** → 같은 명령 다시. 받은 SLC 는 재사용. 결과.md 에 '예외:' 줄이 남음.",
         "**'교면 위 점 0'** → 교량이 작거나 궤도 방향이 불리함. 계획(3.7)에서 장면 수·궤도를 먼저 볼 것.",
     ]:

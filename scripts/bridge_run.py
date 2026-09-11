@@ -251,10 +251,10 @@ def acquire_track(b: Bridge, out: Path) -> str | None:
     pdir = out / "pipeline"
     print(f"      SLC 검색·다운로드 → SNAP → 언래핑 (오래 걸린다) → {pdir}")
     prep = run_bridge_pipeline(b.lat, b.lon, out_dir=pdir, mode="full",
-                               earthdata_token=token, snap_count=12)
+                               earthdata_token=token, snap_count=12, bridge_name=b.name)
     for r in prep.stages:
         mark = {"done": "✅", "partial": "🟡", "skip": "⏭", "error": "❌"}.get(r.status, "·")
-        print(f"      {mark} {r.stage}: {r.detail[:90]}")
+        print(f"      {mark} {r.step}: {r.detail[:90]}")
     prep.write_json(pdir / "pipeline_report.json")
     eng = prep.context.get("insar_engine") or {}
     track = eng.get("track_h5")

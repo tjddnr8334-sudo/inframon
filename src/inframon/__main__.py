@@ -232,6 +232,9 @@ def main() -> None:
                         "(Open-Meteo) 자동수집 후 형식별 PDE. 키 불필요 경로.")
     p.add_argument("--pipeline", default=None, metavar="LAT,LON",
                    help="표준 교량 파이프라인(①교량→③ROI→②④트랙→⑤ERA5→⑥~⑫) 순서대로 실행/계획하고 상태 보고.")
+    p.add_argument("--pipeline-name", default=None, metavar="교량명",
+                   help="--pipeline ① 교량선정 힌트(예 독정교). 전국교량표준데이터·OSM 에서 이 이름을 "
+                        "우선 매칭 — 좌표 근처에 교량이 여럿일 때 엉뚱한 것이 잡히는 것을 막는다.")
     p.add_argument("--pipeline-mode", default="plan", choices=["plan", "full"],
                    help="--pipeline: plan(경량단계만)|full(SNAP·PINN·FRAM 전체 실행).")
     p.add_argument("--pipeline-engine", default="snap",
@@ -1086,7 +1089,8 @@ def main() -> None:
                                   registry=args.registry, bridge_id=args.bridge_id,
                                   twin_value=args.gltf_value,
                                   engine=args.pipeline_engine,
-                                  engine_source=args.pipeline_source)
+                                  engine_source=args.pipeline_source,
+                                  bridge_name=args.pipeline_name)
         print(rep.summary())
         return
 

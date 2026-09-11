@@ -22,7 +22,9 @@ class _FakeFrame:
 
 def _patch_light(monkeypatch):
     monkeypatch.setattr("inframon.insar.osm_bridge.confirm_bridge",
-                        lambda lat, lon: _FakeBridge())
+                        lambda lat, lon, **k: _FakeBridge())
+    # ① 은 CSV(전국교량표준데이터)를 먼저 본다 — 단위테스트는 CSV 없음으로 고정
+    monkeypatch.setattr("inframon.public_data.find_bridge_csv", lambda *d: None)
     monkeypatch.setattr("inframon.insar.roi_selection.select_roi",
                         lambda lat, lon, **k: RoiResult((127.09, 37.31, 127.11, 37.33),
                                                         2.0, (37.32, 127.10), 1224, 306.0, True))

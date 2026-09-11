@@ -353,6 +353,10 @@ def bridge_profile_from_record(record: dict) -> BridgeProfile:
                "design_load_factor": design_load_factor(design_load), # 활하중 배율
                "inspect_grade": _pick(record, f.get("inspect_grade", [])),  # 최종안전점검 A~E
                "height_m": height_m,
+               # ── 등록 좌표(교량시작점·종료점) — OSM 이 죽었을 때 데크선·위치 근거 ──
+               "lat": _num(_pick(record, f["lat"])), "lon": _num(_pick(record, f["lon"])),
+               "lat_end": _num(_pick(record, f.get("lat_end", []))),
+               "lon_end": _num(_pick(record, f.get("lon_end", []))),
                "dataset": DATASETS["national_bridge_standard"]["id"]},
     )
 

@@ -62,8 +62,13 @@ def _elem_lonlat(el: dict):
 
 
 def fetch_builtup(lat: float, lon: float, radius_m: float, *, query_fn=_overpass_query,
-                  retries: int = 3):
-    """교량 주변 built-up 요소 중심점 목록 [(lon,lat), ...]. Overpass 504 등 일시오류 재시도."""
+                  retries: int = 2):
+    """교량 주변 built-up 요소 중심점 목록 [(lon,lat), ...]. Overpass 504 등 일시오류 재시도.
+
+    `_overpass_query` 가 이미 미러 순환·백오프로 4회 시도하므로 여기서는 2회만, 사이에
+    쉰다(예전엔 쉬지 않고 3연타라 막힌 서버에 그대로 3번 부딪혔다).
+    """
+    from . import osm_bridge as _ob
     ql = _builtup_query(lat, lon, radius_m)
     data = None
     for attempt in range(retries):
@@ -73,6 +78,7 @@ def fetch_builtup(lat: float, lon: float, radius_m: float, *, query_fn=_overpass
         except Exception:  # noqa: BLE001 — 504/timeout 등 → 재시도(마지막이면 전파)
             if attempt == retries - 1:
                 raise
+            _ob._sleep(5.0 * (attempt + 1))
     pts = []
     for el in data.get("elements", []):
         p = _elem_lonlat(el)
