@@ -68,6 +68,43 @@ def test_snap_engine_normalizes_result(tmp_path, monkeypatch):
     assert r.extra["slc_dir"] == _Acq.slc_dir
 
 
+def test_snap_engine_unwraps_when_snaphu_present(tmp_path, monkeypatch):
+    """snaphu 가 있으면 기본으로 언래핑한다 — 래핑이면 LOS 가 ±λ/4 에 갇혀
+    감사가 '보고 불가'로 막는다(상규교에서 실제로 그랬다)."""
+    h5 = tmp_path / "t.h5"
+    h5.write_bytes(b"x")
+
+    class _Res:
+        track_h5, n_points, reference = str(h5), 5, "20240314"
+        pairs = (type("P", (), {"ok": True})(),)
+        weather = None
+        rejected_slaves = ()
+
+    class _Acq:
+        slc_dir = str(tmp_path / "SLC")
+        downloaded = (str(tmp_path / "SLC" / "S1A_a.zip"),)
+        damaged = ()
+
+    seen = {}
+
+    def _fake_run(scenes, lat, lon, **kw):
+        seen.update(kw)
+        return _Res()
+
+    monkeypatch.setattr("inframon.insar.snap_acquire.acquire", lambda *a, **k: _Acq())
+    monkeypatch.setattr("inframon.insar.snap_backend.run", _fake_run)
+    monkeypatch.setattr("inframon.insar.snap_unwrap.find_snaphu", lambda *a, **k: object())
+    r = pe.run("snap", 37.0, 127.0, tmp_path, h5, token=None)
+    assert seen["unwrap"] is True
+    assert "언래핑" in r.detail
+
+    seen.clear()
+    monkeypatch.setattr("inframon.insar.snap_unwrap.find_snaphu", lambda *a, **k: None)
+    r = pe.run("snap", 37.0, 127.0, tmp_path, h5, token=None)
+    assert seen["unwrap"] is False                    # 없으면 예전 동작 + 사유
+    assert "snaphu 없음" in r.detail
+
+
 def test_hyp3_engine_normalizes_result(tmp_path, monkeypatch):
     h5 = tmp_path / "t.h5"
     h5.write_bytes(b"x")
