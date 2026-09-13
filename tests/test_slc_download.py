@@ -123,7 +123,9 @@ def test_download_recipe_flow(tmp_path, monkeypatch):
 def test_download_skips_existing(tmp_path, monkeypatch):
     _write_recipe(tmp_path, ["S1", "S2"])
     (tmp_path / "SLC").mkdir()
-    (tmp_path / "SLC" / "S1.zip").write_bytes(b"already")   # 기존 파일
+    import zipfile
+    with zipfile.ZipFile(tmp_path / "SLC" / "S1.zip", "w") as z:   # 온전한 기존 파일
+        z.writestr("measurement.dat", b"already")
     monkeypatch.setattr(sd, "build_session", lambda **k: (object(), "netrc"))
     monkeypatch.setattr(sd, "_granule_search", lambda names: [_prop("S1"), _prop("S2")])
     urls_downloaded = []

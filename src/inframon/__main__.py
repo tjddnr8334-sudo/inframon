@@ -648,6 +648,9 @@ def main() -> None:
                   f"(중심성 {acq.frame.centrality_km:+.1f}km, {acq.frame.n_scenes}장 중 {len(acq.downloaded)} 확보)")
             if acq.from_store:
                 print(f"  보관폴더 재사용: {len(acq.from_store)}장 (다운로드 생략 — --slc-dir)")
+            if acq.damaged:
+                print(f"  ⚠️ 손상 제외  : {len(acq.damaged)}장 — 다시 받아도 zip 이 깨져 "
+                      f"스택에서 뺐습니다: {', '.join(acq.damaged)}")
             print(f"  burst      : {acq.burst.subswath}#{acq.burst.burst_index} "
                   f"({'포함' if acq.contained else '⚠️ 밖'})")
             for c in acq.considered[:-1]:

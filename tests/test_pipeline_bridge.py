@@ -62,6 +62,9 @@ def test_pipeline_full_runs_9_12(monkeypatch, tmp_path):
 
     class _Acq:
         slc_dir = str(tmp_path / "SLC")
+        # 처리기는 폴더를 glob 하지 않고 **취득이 확정한 목록**만 쓴다
+        downloaded = (str(tmp_path / "SLC" / "S1A_IW_SLC__1SDV_20240107T093202_x.zip"),)
+        damaged = ()
     monkeypatch.setattr(sa, "acquire", lambda *a, **k: _Acq())
 
     _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
@@ -100,6 +103,9 @@ def test_pipeline_full_do_adi(monkeypatch, tmp_path):
 
     class _Acq:
         slc_dir = str(tmp_path / "SLC")
+        # 처리기는 폴더를 glob 하지 않고 **취득이 확정한 목록**만 쓴다
+        downloaded = (str(tmp_path / "SLC" / "S1A_IW_SLC__1SDV_20240107T093202_x.zip"),)
+        damaged = ()
     monkeypatch.setattr(sa, "acquire", lambda *a, **k: _Acq())
     _res = sb.SnapRunResult("20240107", sb.BurstLoc("IW2", 1, 5.4, 37.34, 127.13, contained=True),
                             [sb.SnapPairResult("20240107", "20240119", "p.tif", True)])

@@ -131,13 +131,21 @@ def _run_snap(lat, lon, out_dir, out_h5, *, token=None, count=8,
     from .snap_backend import run as snap_run
 
     acq = acquire(lat, lon, str(out_dir), count=count, start=start, end=end, token=token)
-    scenes = [str(x) for x in Path(acq.slc_dir).glob("*.zip")]
+    # 취득이 **이번 프레임으로 확정한** 장면만 넘긴다. 폴더를 glob 하면 같은 작업
+    # 폴더를 쓴 이전 교량의 다른 궤도·프레임 zip 까지 한 스택에 섞여 들어간다.
+    scenes = list(acq.downloaded)
+    if not scenes:
+        raise RuntimeError(
+            f"{acq.frame.label()}: 쓸 수 있는 SLC 가 없습니다 "
+            f"(손상 {len(acq.damaged)}장). 다시 실행하면 조각을 지우고 받습니다.")
     res = snap_run(scenes, lat, lon, out_dir=str(out_dir), out_h5=str(out_h5),
                    era5_master=True)
     ok = sum(p.ok for p in res.pairs)
+    # 뺀 장면은 세지 않으면 사라진다 — 보고서에 남겨 "왜 쌍이 적은지"가 드러나게.
+    dmg = f" · 손상제외 {len(acq.damaged)}장" if acq.damaged else ""
     return EngineResult(engine="snap", track_h5=str(res.track_h5),
                         n_points=int(getattr(res, "n_points", 0) or 0),
-                        detail=f"{res.reference} · 쌍 {ok}/{len(res.pairs)}",
+                        detail=f"{res.reference} · 쌍 {ok}/{len(res.pairs)}{dmg}",
                         native=res, extra={"slc_dir": acq.slc_dir})
 
 

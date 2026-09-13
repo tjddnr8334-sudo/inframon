@@ -57,6 +57,8 @@ def test_snap_engine_normalizes_result(tmp_path, monkeypatch):
 
     class _Acq:
         slc_dir = str(tmp_path / "SLC")
+        downloaded = (str(tmp_path / "SLC" / "S1A_a.zip"),)   # 처리기는 이 목록만 쓴다
+        damaged = ()
 
     monkeypatch.setattr("inframon.insar.snap_acquire.acquire", lambda *a, **k: _Acq())
     monkeypatch.setattr("inframon.insar.snap_backend.run", lambda *a, **k: _Res())
