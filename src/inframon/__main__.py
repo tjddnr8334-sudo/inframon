@@ -250,6 +250,14 @@ def main() -> None:
                    help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
                         "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
                         "부재 테이블(JSON)만 있으면 --gltf-elements 로 줘도 된다.")
+    p.add_argument("--pipeline-count", type=int, default=8, metavar="N",
+                   help="--pipeline full: 내려받아 처리할 SLC 장면 수(기본 8). 시계열 품질은 "
+                        "장면 수·기간이 정한다 — 의미 있는 속도는 25장·1년 이상 권장. "
+                        "장당 ~7GB.")
+    p.add_argument("--pipeline-start", default=None, metavar="YYYY-MM-DD",
+                   help="--pipeline 조회 시작일(기본 2024-01-01). 장면 수를 늘리려면 기간부터 넓힌다.")
+    p.add_argument("--pipeline-end", default=None, metavar="YYYY-MM-DD",
+                   help="--pipeline 조회 종료일(기본 2025-07-01).")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
     p.add_argument("--export-bim", default=None, metavar="H5,OUT_PREFIX",
@@ -1093,7 +1101,10 @@ def main() -> None:
                                   twin_value=args.gltf_value,
                                   engine=args.pipeline_engine,
                                   engine_source=args.pipeline_source,
-                                  bridge_name=args.pipeline_name)
+                                  bridge_name=args.pipeline_name,
+                                  snap_count=args.pipeline_count,
+                                  **({"start": args.pipeline_start} if args.pipeline_start else {}),
+                                  **({"end": args.pipeline_end} if args.pipeline_end else {}))
         print(rep.summary())
         return
 

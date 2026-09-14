@@ -42,6 +42,13 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+# 한국어 Windows 콘솔(cp949)에서 '⓪' 같은 글자로 죽지 않게 — --help 조차 못 찍었다.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -231,7 +238,8 @@ def resolve_ground(b: Bridge) -> None:
 
 
 # ── ⓪ 트랙이 없으면 SLC 검색·다운로드 → InSAR 처리 → 언래핑 ──────────────────
-def acquire_track(b: Bridge, out: Path) -> str | None:
+def acquire_track(b: Bridge, out: Path, *, count: int = 12,
+                  start: str | None = None, end: str | None = None) -> str | None:
     """`run_bridge_pipeline(mode="full")` 로 SLC 부터 트랙까지. 단계별 진행을 그대로 찍는다.
 
     외부 의존: Earthdata 토큰(다운로드) · SNAP gpt(처리) · snaphu(언래핑). 없으면 어떤 것이
@@ -250,8 +258,10 @@ def acquire_track(b: Bridge, out: Path) -> str | None:
     token, _ = find_earthdata_token()
     pdir = out / "pipeline"
     print(f"      SLC 검색·다운로드 → SNAP → 언래핑 (오래 걸린다) → {pdir}")
+    _period = {k: v for k, v in (("start", start), ("end", end)) if v}
     prep = run_bridge_pipeline(b.lat, b.lon, out_dir=pdir, mode="full",
-                               earthdata_token=token, snap_count=12, bridge_name=b.name)
+                               earthdata_token=token, snap_count=count,
+                               bridge_name=b.name, **_period)
     for r in prep.stages:
         mark = {"done": "✅", "partial": "🟡", "skip": "⏭", "error": "❌"}.get(r.status, "·")
         print(f"      {mark} {r.step}: {r.detail[:90]}")
@@ -584,7 +594,8 @@ def write_results(b: Bridge, out: Path, tw, pinn, rh, aud, brief) -> None:
     (out / "결과.md").write_text(md, encoding="utf-8")
 
 
-def run_one(b: Bridge) -> dict:
+def run_one(b: Bridge, *, count: int = 12, start: str | None = None,
+            end: str | None = None) -> dict:
     out = Path(b.out or f"docs/bridges/{b.name}")
     out.mkdir(parents=True, exist_ok=True)
     print(f"\n━━ {b.name} ({b.lat}, {b.lon}) → {out}")
@@ -593,7 +604,7 @@ def run_one(b: Bridge) -> dict:
     try:
         if not b.track:
             print("  ⓪ SLC → InSAR (트랙 없음)")
-            b.track = acquire_track(b, out)
+            b.track = acquire_track(b, out, count=count, start=start, end=end)
         if not b.track:
             raise RuntimeError("트랙 없음 — ⓪ 실패")
         with h5py.File(b.track, "r") as f:
@@ -627,6 +638,11 @@ def main() -> None:
     ap.add_argument("--track"); ap.add_argument("--proc"); ap.add_argument("--master")
     ap.add_argument("--baselines", help="SARvey ifg_network 기선 JSON(잔차고도용)")
     ap.add_argument("--out"); ap.add_argument("--batch")
+    ap.add_argument("--count", type=int, default=12, metavar="N",
+                    help="⓪ 에서 내려받아 처리할 SLC 장면 수(기본 12·장당 ~7GB). "
+                         "의미 있는 속도·CI 는 25장·1년 이상이 필요하다.")
+    ap.add_argument("--start", default=None, metavar="YYYY-MM-DD", help="⓪ SLC 조회 시작일")
+    ap.add_argument("--end", default=None, metavar="YYYY-MM-DD", help="⓪ SLC 조회 종료일")
     a = ap.parse_args()
     if a.batch:
         items = json.loads(Path(a.batch).read_text(encoding="utf-8"))
@@ -636,7 +652,7 @@ def main() -> None:
             ap.error("--name --lat --lon (--track 은 선택: 없으면 SLC 부터 만든다) 또는 --batch")
         bridges = [Bridge(name=a.name, lat=a.lat, lon=a.lon, track=a.track, proc=a.proc,
                           master=a.master, baselines=a.baselines, out=a.out)]
-    results = [run_one(b) for b in bridges]
+    results = [run_one(b, count=a.count, start=a.start, end=a.end) for b in bridges]
     print("\n━━ 요약")
     print(f"{'교량':<10}{'판정':<10}{'점':>5}{'CRI':>8}  경로")
     for r in results:

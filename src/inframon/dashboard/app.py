@@ -1257,6 +1257,11 @@ def tab_insar(path: str, start: date) -> None:
     st.subheader("① InSAR — 변위 시계열 추출 (데이터 관문)")
     st.caption("**⓪ 시작 → ▶ 전체 실행** 이 만든 InSAR 결과(변위 맵·시계열·속도 지도)를 이 탭 **아래쪽**에서 봅니다. "
                "아래 펼침 항목(A~F)은 SLC 선별·SARvey 등을 **손으로 단계별로** 할 때만 씁니다 — 보통은 건드리지 않습니다.")
+    st.info("**두 레인은 서로 독립입니다** — 아래 A~F 가 만드는 레시피 JSON"
+            "(`bridge_target`·`track_selection`·`processing_manifest`)은 **SARvey/WSL2 레인**의 "
+            "계획서이고, **⓪ 전체 실행(SNAP 레인)은 그 파일을 읽지 않습니다** — 좌표·이름만 받아 "
+            "ASF·OSM 을 다시 조회합니다. 그래서 여기서 트랙을 골라 두어도 ⓪ 결과에 반영되지 "
+            "않습니다. SNAP 레인의 장면 수·기간은 **⓪ 시작 탭의 ③ 실행**에서 정하세요.", icon="ℹ️")
     _step_run_block("insar", path)
 
     # 교량 프로젝트(레시피 폴더) — 교량마다 다른 폴더를 쓰면 여러 교량을 따로 관리한다.
@@ -2542,6 +2547,17 @@ def _render_tool_setup() -> None:
                 st.error(str(e))
 
 
+def _period_months(start: str, end: str) -> float | None:
+    """조회 기간(개월). 형식이 틀리면 None — 사용자에게 되묻고 기본값으로 간다."""
+    from datetime import date
+    try:
+        a = date.fromisoformat(str(start).strip())
+        b = date.fromisoformat(str(end).strip())
+    except ValueError:
+        return None
+    return None if b <= a else (b - a).days / 30.44
+
+
 def tab_start(path: str) -> None:
     """⓪ 시작 — 새 컴퓨터·새 사용자를 위한 안내형 진입점(환경→교량→실행→트윈/BMAP)."""
     st.subheader("⓪ 시작 — 교량 하나를 골라 전 과정을 돌립니다")
@@ -2629,6 +2645,25 @@ def tab_start(path: str) -> None:
                    "**snap** 또는 **hyp3** 를 고르세요.")
         src_in = st.text_input(f"{eng} 산출물 경로", key="start_engine_source",
                                placeholder="예: work/sarvey/outputs/xxx_ts.h5")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    n_slc = c1.number_input("SLC 장면 수", min_value=3, max_value=60, value=12, step=1,
+                            key="start_count",
+                            help="내려받아 처리할 장면 수. 장당 ~7GB — 12장이면 약 84GB. "
+                                 "시계열 속도·95% CI 는 장면 수와 기간이 정한다: "
+                                 "**의미 있는 판정은 25장·1년 이상**이 필요하다. "
+                                 "적으면 파이프라인 확인용으로만 쓸 것.")
+    d_start = c2.text_input("조회 시작일", value="2024-01-01", key="start_from")
+    d_end = c3.text_input("조회 종료일", value="2025-07-01", key="start_to")
+    _months = _period_months(d_start, d_end)
+    if _months is None:
+        st.warning("날짜 형식은 YYYY-MM-DD 입니다 — 기본 기간으로 진행합니다.")
+    else:
+        _msg = f"{int(n_slc)}장 · {_months:.0f}개월 · 약 {int(n_slc) * 7} GB"
+        if int(n_slc) >= 25 and _months >= 12:
+            st.success(f"{_msg} — 속도·CI 판정 기준(25장·12개월) 충족")
+        else:
+            st.warning(f"{_msg} — 기준(25장·12개월) 미달. 파이프라인 확인용으로는 충분하나 "
+                       "변위·CRI 를 안전 판정으로 읽으면 안 된다(감사에 남는다).")
     ifc_in = st.text_input("IFC 파일 (선택 — 있으면 부재 GlobalId 로 결합)", key="start_ifc",
                            placeholder="없으면 비워두세요 — 점군 트윈으로 진행합니다")
     _remember_bridge(float(lat), float(lon), st.session_state.get("start_name"), eng,
@@ -2649,7 +2684,10 @@ def tab_start(path: str) -> None:
                     mode="full" if run_full else "plan",
                     ifc=(ifc_in.strip() or None),
                     engine=eng, engine_source=(src_in.strip() or None),
-                    bridge_name=st.session_state.get("start_name") or None)
+                    bridge_name=st.session_state.get("start_name") or None,
+                    snap_count=int(n_slc),
+                    **({"start": d_start.strip(), "end": d_end.strip()}
+                       if _months is not None else {}))
             st.session_state["start_report"] = [
                 {"step": s.step, "status": s.status, "detail": s.detail} for s in rep.stages]
             st.session_state["start_ctx"] = {
