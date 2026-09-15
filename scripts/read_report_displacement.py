@@ -53,16 +53,15 @@ CHARTS: list[dict] = [
      "quantity": "처짐(경사계)", "unit": "mm", "y_ticks": [20.0, 0.0, -20.0],
      "months": list(range(1, 13)), "years": [2022, 2023, 2024]},
     {"bridge": "원효대교", "page": 34, "xref": 1447, "title": "처짐(경사계) 추세",
-     "quantity": "처짐(경사계)", "unit": "mm", "y_ticks": None,
-     "months": list(range(1, 13)), "years": [2022, 2023, 2024]},
-    {"bridge": "청담대교", "page": 40, "xref": 1522, "title": "처짐(V-leg 경사변위)",
-     "quantity": "처짐(경사변위)", "unit": "mm", "y_ticks": None,
+     "quantity": "처짐(경사계)", "unit": "mm",
+     "y_ticks": [0.0, -25.0, -50.0, -75.0, -100.0, -125.0],
      "months": list(range(1, 13)), "years": [2022, 2023, 2024]},
     {"bridge": "올림픽대교", "page": 42, "xref": 1573, "title": "처짐(레이저처짐계)",
      "quantity": "처짐(레이저)", "unit": "mm", "y_ticks": [0.0, -100.0],
      "months": list(range(1, 13)), "years": [2022, 2023, 2024]},
-    {"bridge": "암사대교", "page": 46, "xref": 1633, "title": "레이저처짐계",
-     "quantity": "처짐(레이저)", "unit": "mm", "y_ticks": [400.0, 200.0, 0.0, -200.0],
+    {"bridge": "암사대교", "page": 46, "xref": 1634, "title": "신축변위계 JOINT_3",
+     "quantity": "신축변위", "unit": "mm",
+     "y_ticks": [20.0, 0.0, -20.0, -40.0, -60.0],
      "months": list(range(1, 13)), "years": [2022, 2023, 2024]},
 ]
 
@@ -153,61 +152,69 @@ def series_colors(img: np.ndarray, box, *, min_run: int = 10,
     return out
 
 
-def _bar_runs(cell_mask: np.ndarray, zr: int, zero_pad: int, min_px: int):
-    """열별로 0 선에 붙은 세로 구간을 찾아 **막대 덩어리**로 묶는다."""
-    far = []
-    for x in range(cell_mask.shape[1]):
-        ys = np.where(cell_mask[:, x])[0]
-        hit = None
+def strict_mask(sub: np.ndarray, color, tol: int, min_run: int = 6) -> np.ndarray:
+    """그 색이면서 **세로로 min_run 이상 이어지는** 화소만 남긴다.
+
+    앞선 실패의 핵심이 여기였다. 화소 하나씩 색만 보면 JPEG 압축이 막대 둘레에 뿌린
+    헤일로와 격자선 화소까지 걸려서, 마스크가 칸 전체로 번지고 값이 축 끝에 붙는다.
+    막대는 **세로로 두껍게** 이어진다 — 그 성질로 먼저 거른다.
+    """
+    m = (np.abs(sub - np.array(color)).max(axis=2) <= tol)
+    out = np.zeros_like(m)
+    h = m.shape[0]
+    for x in range(m.shape[1]):
+        ys = np.where(m[:, x])[0]
+        if len(ys) < min_run:
+            continue
         y = 0
         while y < len(ys):
             z = y
-            while z + 1 < len(ys) and ys[z + 1] - ys[z] <= 4:
+            while z + 1 < len(ys) and ys[z + 1] - ys[z] == 1:
                 z += 1
-            lo, hi = int(ys[y]), int(ys[z])
-            if lo - zero_pad <= zr <= hi + zero_pad:
-                hit = lo if abs(lo - zr) > abs(hi - zr) else hi
-                break
+            if z - y + 1 >= min_run:
+                out[ys[y]:ys[z] + 1, x] = True
             y = z + 1
-        far.append(hit)
-    runs, cur = [], []
-    for x, v in enumerate(far):
-        if v is None:
-            if len(cur) >= min_px:
-                runs.append(cur)
-            cur = []
-        else:
-            cur.append((x, v))
-    if len(cur) >= min_px:
-        runs.append(cur)
-    return runs
+    return out
 
 
 def read_months(img: np.ndarray, box, colors, zero_row: int, grid_rows,
-                n_months: int, *, tol: int = 10, zero_pad: int = 8,
-                min_px: int = 4) -> tuple[list[dict], str]:
-    """**막대를 먼저 찾고 12무리로 묶는다** — 칸을 x 로 등분하지 않는다.
+                n_months: int, *, tol: int = 12, zero_pad: int = 10,
+                min_px: int = 5) -> tuple[list[dict], str]:
+    """막대를 찾아 달 무리로 묶는다 — 마스크를 **세로 연속성**으로 먼저 거른다.
 
-    등분하면 달이 밀린다(막대 그래프는 축 양끝에 여백이 있다). 세로 격자선을 쓰려 해도
-    막대에 가려 안 잡힌다. 그래서 막대 자체를 쓴다 — 전체 막대를 x 순으로 늘어놓고
-    **가장 큰 틈 n_months−1 개**로 자르면 그것이 달 경계다. 무리 안에서는 x 가 작은
-    색이 앞 연도다(범례 순서).
+    막대는 0 선에 붙어 있다(0 선이 위에 덧그려져 중간이 끊겨도, 열 전체로 보면 0 선을
+    걸친다). 그래서 '그 열의 마스크가 0 선을 위아래로 감싸는가' 로 판정한다 —
+    연속 구간 하나가 0 선을 포함할 것을 요구하면 격자선에 끊겨 걸러진다.
     """
     r0, r1, c0, c1 = box
     sub = img[r0 + 2:r1 - 2, c0 + 3:c1 - 3].astype(int)
-    # 격자선을 지우지 않는다 — 지우면 막대가 그 줄에서 끊겨 값이 눈금에 붙어 버린다
-    # (가양대교에서 모든 큰 값이 +19.5 mm 로 잘렸다). 색이 달라 어차피 안 섞이고,
-    # 세로 구간을 이을 때 7 px 까지 건너뛰어 격자선 두께를 넘어간다.
     zr = zero_row - (r0 + 2)
 
-    per_color = {}
     allruns = []
     for ci, col in enumerate(colors):
-        m = (np.abs(sub - np.array(col)).max(axis=2) <= tol)
-        rs = _bar_runs(m, zr, zero_pad, min_px)
-        per_color[ci] = rs
-        for r in rs:
-            allruns.append((float(np.mean([p[0] for p in r])), ci, r))
+        m = strict_mask(sub, col, tol)
+        cols_ok = []
+        for x in range(m.shape[1]):
+            ys = np.where(m[:, x])[0]
+            if len(ys) < min_px:
+                cols_ok.append(None)
+                continue
+            lo, hi = int(ys.min()), int(ys.max())
+            if not (lo - zero_pad <= zr <= hi + zero_pad):
+                cols_ok.append(None)          # 0 선을 걸치지 않으면 막대가 아니다
+                continue
+            cols_ok.append(lo if abs(lo - zr) > abs(hi - zr) else hi)
+        run = []
+        for x, v in enumerate([*cols_ok, None]):
+            if v is None:
+                if len(run) >= min_px:
+                    xs = [t[0] for t in run]
+                    y = max((t[1] for t in run), key=lambda q: abs(q - zr))
+                    allruns.append((float(np.mean(xs)), ci, y))
+                run = []
+            else:
+                run.append((x, v))
+
     if len(allruns) < n_months:
         return [], f"막대 {len(allruns)}개 — {n_months}달로 못 나눈다"
     allruns.sort()
@@ -224,10 +231,9 @@ def read_months(img: np.ndarray, box, colors, zero_row: int, grid_rows,
     out = []
     for mi, g in enumerate(groups):
         rec = {"month": mi + 1, "series": [None] * len(colors), "x": {}}
-        for xm, ci, r in sorted(g):
-            y = max((p[1] for p in r), key=lambda t: abs(t - zr))
+        for xm, ci, y in sorted(g):
             if rec["series"][ci] is None:
-                rec["series"][ci] = y
+                rec["series"][ci] = y + (r0 + 2)
                 rec["x"][ci] = xm
         out.append(rec)
     return out, "막대 무리"
@@ -240,13 +246,40 @@ def digitize(spec: dict) -> dict:
     if not ticks or len(ticks) < 2:
         return {"error": f"y_ticks 가 없다({ticks}) — 눈금값을 그림에서 읽어 넣어야 한다"}
     grid = gridline_rows(img, box, len(ticks))
-    if len(grid) != len(ticks):
-        return {"error": f"격자선 {len(grid)}개 ≠ 눈금 {len(ticks)}개"}
-    A = np.vstack([np.ones(len(grid)), np.asarray(grid, float)]).T
-    coef, *_ = np.linalg.lstsq(A, np.asarray(ticks, float), rcond=None)
-    zero_row = int(round((0.0 - coef[0]) / coef[1]))
+    if len(grid) < 2:
+        return {"error": f"격자선 {len(grid)}개 — 척도를 만들 수 없다"}
+    # 막대가 격자선을 가려 몇 줄이 안 잡히는 일이 있다(원효대교 6줄 중 4줄). 눈금이
+    # 등간격이라는 것만 쓰면 되므로, **위에서부터 순서대로** 짝지어 척도를 만든다.
+    # 척도는 **격자선 간격**에서만 얻는다. 어느 줄이 몇 번째 눈금인지는 못 믿는다 —
+    # 막대가 위쪽 줄을 가리면 검출된 줄이 위에서부터가 아니게 되고(원효대교), 그러면
+    # 0 선이 통째로 엉뚱한 데로 간다.
+    dv = float(np.median(np.diff(np.asarray(ticks, float))))
+    dp = float(np.median(np.diff(np.asarray(grid, float))))
+    if abs(dp) < 1e-6:
+        return {"error": "격자선 간격을 못 구했다"}
+    scale = dv / dp                                   # 픽셀당 값
 
     cols = series_colors(img, box)
+    # 0 선은 **모든 막대가 공유하는 밑변**이다 — 색 구간의 양 끝을 모아 최빈값을 쓴다.
+    r0, r1, c0, c1 = box
+    sub0 = img[r0 + 2:r1 - 2, c0 + 3:c1 - 3].astype(int)
+    ends: Counter = Counter()
+    for col in cols:
+        m = strict_mask(sub0, col, 12)
+        for x in range(m.shape[1]):
+            ys = np.where(m[:, x])[0]
+            if len(ys) < 5:
+                continue
+            ends[int(ys.min())] += 1
+            ends[int(ys.max())] += 1
+    if not ends:
+        return {"error": "막대 색 화소를 못 찾았다"}
+    base = Counter()
+    for y, c in ends.items():                          # ±2 px 뭉개서 최빈 밑변
+        for d in (-2, -1, 0, 1, 2):
+            base[y + d] += c
+    zero_row = int(max(base.items(), key=lambda kv: kv[1])[0]) + (r0 + 2)
+    coef = [-scale * zero_row, scale]                  # value(y) = (y − zero)·scale
     cols = cols[:len(spec["years"])]
     # 범례 순서(연도)에 맞추려면 **칸 안에서 왼쪽에 오는 색이 앞 연도**다.
     months = spec["months"]
@@ -263,6 +296,16 @@ def digitize(spec: dict) -> dict:
     else:
         xorder = [(i, i) for i in range(len(cols))]
 
+    # 축 끝에 딱 붙은 값은 버린다 — 마스크가 번져 끝까지 칠해진 것이지 실제 값이 아니다.
+    top_v = float(coef[0] + coef[1] * (box[0] + 2))
+    bot_v = float(coef[0] + coef[1] * (box[1] - 2))
+    span = abs(top_v - bot_v)
+
+    def _ok(v: float | None) -> float | None:
+        if v is None:
+            return None
+        return None if min(abs(v - top_v), abs(v - bot_v)) < 0.02 * span else v
+
     out = {"bridge": spec["bridge"], "page": spec["page"], "title": spec["title"],
            "quantity": spec["quantity"], "unit": spec["unit"],
            "method": "digitized_from_chart", "y_ticks": ticks,
@@ -273,8 +316,8 @@ def digitize(spec: dict) -> dict:
         vals = {}
         for rec in probe:
             y = rec["series"][ci]
-            vals[str(months[rec["month"] - 1])] = (
-                None if y is None else round(float(coef[0] + coef[1] * (y + box[0] + 2)), 2))
+            v = None if y is None else round(float(coef[0] + coef[1] * y), 2)
+            vals[str(months[rec["month"] - 1])] = _ok(v)
         out["series"].append({"year": year, "color_rgb": list(cols[ci]),
                               "n_months": sum(1 for v in vals.values() if v is not None),
                               "monthly": vals})
