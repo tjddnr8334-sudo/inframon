@@ -510,20 +510,21 @@ def slide3(prs, bs, shm=None):
     if main:
         picture_fit(s, main["folder"] / "brief.png", 0.45, 1.12, 8.35, 5.75)
         text(s, 0.45, 1.12 - 0.0, 8.35, 0.2, [])
-    bullets(s, 9.05, 1.2, 3.85, 2.7, [
-        ("(a) 교축 좌표계 배치", (" — 측점을 교축 거리·직각 거리로 놓는다. "
-         "QC(95%CI ≤ 1 mm/yr) 통과 점만 유효 PS.")),
-        ("(b) DEM 대비 잔차고도", (" — 교면 위 점이 지면 점보다 유의하게 높은가(z>2). "
-         "'교면 위'를 고도로 증명하는 유일한 칸.")),
-        ("(c) LOS 변위속도 종단", " — 점마다 95% 신뢰구간. 교대 기준점으로 상대화."),
-        ("(d) 교면 점 LOS 시계열", " — 전체(회색)·중앙값(청색)·추세."),
-    ], fs=9.5, spacing=1.25)
-    box(s, 9.05, 2.92, 3.85, 0.88, fill=GRAY_L, line=LINE)
-    text(s, 9.22, 2.92, 3.55, 0.88,
-         [(("읽는 법 — 이 레인은 시점별 잡음이 σ≈14 mm 라 QC(95%CI ≤ 1 mm/yr)를 통과하는 "
-           "점이 거의 없다. 점 하나의 mm/yr 가 아니라 집단 중앙값 ±CI 까지가 이 데이터가 "
-           "말할 수 있는 것이다."), 8.5, False, NAVY)], anchor=MSO_ANCHOR.MIDDLE, spacing=1.22)
-    text(s, 9.05, 4.0, 3.85, 0.3,
+    bullets(s, 9.05, 1.2, 3.85, 1.95, [
+        ("(a) 점을 교량 위에", " — 가로=교대에서 잰 거리, 세로=중심선에서 벗어난 거리. "
+         "×는 정밀도 기준에 못 미쳐 뺀 점."),
+        ("(b) 교면 위가 맞나", " — 교면 위 점이 제방 점보다 유의하게 높아야 한다. "
+         "아니면 뒤 숫자를 믿으면 안 된다."),
+        ("(c) 어디가 얼마나", " — 점마다 mm/yr ± 95% CI. 초록 띠(±0.5) 안이면 '움직임 없음'."),
+        ("(d) 시간에 따라", " — 교면 점 중앙값 시계열. 흔들림은 계절(열), 기울기가 장기 변위."),
+    ], fs=9.5, spacing=1.20)
+    box(s, 9.05, 3.26, 3.85, 0.92, fill=GRAY_L, line=LINE)
+    text(s, 9.22, 3.26, 3.55, 0.92,
+         [(("한 줄로 — 이 레인은 시점별 잡음이 ±14 mm 라 **점 하나의 mm/yr 는 못 믿는다.** "
+            "그래서 (c)(d) 에서 점 하나가 아니라 **교면 점 전체의 중앙값 ± 신뢰구간**까지만 "
+            "말한다. 그 이상은 이 데이터가 답하지 못한다."), 8.5, False, NAVY)],
+         anchor=MSO_ANCHOR.MIDDLE, spacing=1.2)
+    text(s, 9.05, 4.34, 3.85, 0.3,
          [("현장 계측이 비워 둔 자리", 12.5, True, NAVY)])
     rows = [["교량", "SHM 감시항목(설치)", "위성 InSAR"]]
     colors = {}
@@ -535,9 +536,9 @@ def slide3(prs, bs, shm=None):
                      "·".join(nm.split("(")[0] + ("◯" if on else "✗") for nm, on in items) or "—",
                      ("처짐 대체" if miss else "교차검증")])
         colors[(i, 2)] = ORANGE if miss else GREEN
-    table(s, 9.05, 4.34, 3.85, rows, [0.9, 2.3, 1.0], row_h=0.44, head_h=0.3,
+    table(s, 9.05, 4.68, 3.85, rows, [0.9, 2.3, 1.0], row_h=0.40, head_h=0.3,
           fs=8, head_fs=8.5, colors=colors)
-    text(s, 9.05, 6.06, 3.85, 0.9,
+    text(s, 9.05, 6.30, 3.85, 0.72,
          [(("성수대교·한강대교는 감시항목 순위에 '처짐(경사)'이 올라 있는데 센서가 "
             "미설치다(2024 최종보고). 위성 InSAR 는 센서 없이 그 항목을 채우고, "
             "설치된 항목과는 결과가 서로 맞는지 대조된다."), 9, False, GRAY)], spacing=1.25)
@@ -609,6 +610,28 @@ def slide_gnss(prs, fig, trend_json):
               f"{sgf.get('ann', {}).get('v', 0):+.2f} mm/yr 로 보고서 GNSS 범위 안에 들지만, "
               "그건 같은 기간을 잰 값이 아니다. GNSS 대조는 코너리플렉터·고해상도 SAR 이 "
               "있어야 성립한다.")
+
+
+def slide_chain(prs, fig, name: str, b: dict | None):
+    """좌표 하나 → OSM 데크선 → PS 선별 → 트윈, 중간을 빼지 않고 보이는 장."""
+    s = blank(prs)
+    header(s, f"측점은 어디서 나오나 — {name} 전 과정을 한 장에",
+           "OSM 데크선 · 쉬프트 되돌림 · 데크 ±30 m 선별 · IFC 부재 결합")
+    if fig and Path(fig).exists():
+        picture_fit(s, fig, 0.45, 1.0, SW - 0.9, 4.98)
+    src = (b or {}).get("sources", {})
+    m = re.search(r"쉬프트\s*([0-9.]+)\s*m", src.get("points", ""))
+    m2 = re.search(r"안\s*(\d+)\s*/\s*(\d+)", src.get("points", ""))
+    w = (SW - 0.9 - 0.24 * 2) / 3
+    kpi(s, 0.45, 6.06, w, 0.84, (m2.group(2) if m2 else "?"), "점",
+        "트랙 전체(이 교량 반경 안 PS/DS 후보)", NAVY_L)
+    kpi(s, 0.45 + w + 0.24, 6.06, w, 0.84, (m.group(1) + " m" if m else "—"), "쉬프트",
+        "형하고 때문에 밀린 거리 δh/tanθ — 되돌려야 교면에 앉는다", ORANGE)
+    kpi(s, 0.45 + 2 * (w + 0.24), 6.06, w, 0.84, (m2.group(1) if m2 else "?"), "점",
+        "데크 ±30 m 안으로 남은 교면 측점", GREEN)
+    footer(s, "ⓐ→ⓑ 선별은 파이프라인 ④단계와 같은 코드다(geolocation.apply_correction + "
+              "deck_geometry.project_to_polyline) — 발표용으로 다시 고른 것이 아니다. "
+              "ⓒ→ⓓ 는 트윈 산출물(twin.viewer.html)을 그대로 읽는다.")
 
 
 def slide_twin_ps(prs, fig, summary: list):
@@ -827,8 +850,11 @@ def main() -> int:
     ap.add_argument("--gnss-fig", default="docs/img/gnss_insar_추세선.png")
     ap.add_argument("--gnss-json", default="docs/bridges/gnss_insar_추세.json",
                     help="GNSS↔InSAR 추세 수치(make_gnss_insar_trend.py)")
-    ap.add_argument("--twin-fig", default="docs/img/hangang_트윈_PS.png",
-                    help="디지털 트윈 위의 PS 점 — 전 교량 평면")
+    ap.add_argument("--twin-fig", default="docs/img/hangang_트윈_3D.png",
+                    help="디지털 트윈 위의 PS 점 — 전 교량 3D")
+    ap.add_argument("--root-bridges", default="docs/bridges")
+    ap.add_argument("--chain-bridge", default="암사대교",
+                    help="전 과정(OSM→선별→트윈) 한 장을 보일 교량")
     ap.add_argument("--shm-json", default="docs/bridges/hangang_shm_2024.json",
                     help="현장 SHM(한강교량 온라인 안전감시) 2024 판정·계측항목")
     ap.add_argument("--ondeck-fig", default="docs/img/ondeck_jeongjagyo.png")
@@ -869,7 +895,10 @@ def main() -> int:
     slide3(prs, bs, meta["shm"])
     slide_shm(prs, a.compare_fig, meta["shm"], meta["cmp_rows"])
     slide_gnss(prs, a.gnss_fig, meta["gnss"])
-    slide_twin_ps(prs, a.twin_fig, twin_summary(Path("docs/bridges"), meta["shm"]))
+    chain_b = Path(a.root_bridges) / a.chain_bridge / "bridge.json"
+    slide_chain(prs, Path(a.root_bridges) / a.chain_bridge / "chain.png", a.chain_bridge,
+                json.loads(chain_b.read_text(encoding="utf-8")) if chain_b.exists() else None)
+    slide_twin_ps(prs, a.twin_fig, twin_summary(Path(a.root_bridges), meta["shm"]))
     slide4(prs, bs, a.ondeck_fig)
     slide5(prs, a.tab_shot)
     slide6(prs)

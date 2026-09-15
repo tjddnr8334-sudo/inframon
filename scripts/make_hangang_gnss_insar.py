@@ -230,8 +230,9 @@ def fig_summary(rows: list[dict], out: Path) -> None:
     # 우: 판정 대조표
     b = fig.add_subplot(gs[1])
     b.axis("off")
-    xs = [0.000, 0.120, 0.480, 0.630, 0.858]
-    heads = ["교량", "보고서 감시항목(설치현황)", "보고서 판정", "위성 판정", "대조"]
+    xs = [0.000, 0.115, 0.515, 0.680, 0.885]
+    heads = ["교량", "보고서가 말하는 추세(2024)", "보고서 판정",
+             "위성이 본 추세", "대조"]
     top = 1.0
     row_h = 1.0 / (n + 1.8)
     for x, h in zip(xs, heads):
@@ -243,8 +244,10 @@ def fig_summary(rows: list[dict], out: Path) -> None:
         if i % 2 == 0:
             b.axhspan(yy - row_h * 0.48, yy + row_h * 0.48, color="#F2F5F8", zorder=0)
         b.text(xs[0], yy, r["name"] + ("◆" if r["gnss"] else ""), fontsize=9, va="center")
-        b.text(xs[1], yy, _wrap(r["items"], 34), fontsize=7.4, va="center",
-               color="#333", linespacing=1.25)
+        # 보고서가 **추세에 대해 뭐라고 했는지** 를 그대로 옮긴다 — 위성 mm/yr 와
+        # 나란히 놓아야 "어떻게 다른가" 가 읽힌다. 감시항목은 ④ 슬라이드에 있다.
+        b.text(xs[1], yy, _wrap(r["report_trend"] or "추세 서술 없음", 38),
+               fontsize=7.2, va="center", color="#333", linespacing=1.25)
         b.text(xs[2], yy, _wrap(r["verdict_short"], 12), fontsize=8.2, va="center",
                color=GREEN, linespacing=1.25)
         if d is None:
@@ -259,8 +262,9 @@ def fig_summary(rows: list[dict], out: Path) -> None:
             b.text(xs[4], yy, "○ 일치" if ok else "△ 불일치", fontsize=9.5,
                    fontweight="bold", va="center", color=GREEN if ok else ORANGE)
     b.set_xlim(0, 1); b.set_ylim(0, 1.06)
-    b.set_title("(b) 2024 현장 안전감시 보고 ↔ 위성 판정\n"
-                "위성 판정 = 데크 중앙값 시계열, 연주기 포함 적합, 95% CI", fontsize=12, pad=9)
+    b.set_title("(b) 보고서가 말하는 추세 ↔ 위성이 본 추세\n"
+                "위성 = 데크 중앙값 시계열에 직선+연주기 · 95% CI 가 0 을 포함하면 "
+                "'유의한 변위 없음'", fontsize=12, pad=9)
 
     miss = [r for r in rows if r["insar"] is None]
     if miss:
