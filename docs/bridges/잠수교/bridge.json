@@ -9,6 +9,7 @@
  "out": "docs/bridges/잠수교",
  "length_m": 795.0,
  "n_spans": 26,
+ "superstructure": true,
  "max_span_m": null,
  "span_layout": "auto",
  "width_m": 18.0,

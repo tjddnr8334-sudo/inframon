@@ -9,6 +9,7 @@
  "out": "docs/bridges/영동대교",
  "length_m": 946.4982425220451,
  "n_spans": 32,
+ "superstructure": true,
  "max_span_m": 50.0,
  "span_layout": "auto",
  "width_m": 6.0,

@@ -41,8 +41,13 @@ from matplotlib.patches import Rectangle
 
 from inframon.insar.chainage import _use_korean_font
 
-MEMBER_COLOR = {"deck": "#4A6B8A", "pier": "#8A8F96", "abutment": "#7A8288"}
-MEMBER_KO = {"deck": "슬래브(상판)", "pier": "교각", "abutment": "교대"}
+MEMBER_COLOR = {"deck": "#4A6B8A", "pier": "#8A8F96", "abutment": "#7A8288",
+                "pylon": "#5B7C99", "cable": "#C08A3E", "arch": "#7D6BA6",
+                "truss": "#6E8F6B"}
+MEMBER_KO = {"deck": "슬래브(상판)", "pier": "교각", "abutment": "교대",
+             "pylon": "주탑", "cable": "케이블", "arch": "아치리브·행어",
+             "truss": "트러스 상현·수직재"}
+MEMBER_ORDER = ("deck", "pier", "abutment", "pylon", "cable", "arch", "truss")
 RED, GRAY, NAVY = "#C03028", "#8A8F96", "#123A5E"
 
 
@@ -132,7 +137,8 @@ def read_twin(folder: Path) -> dict | None:
 
 def _draw_elements(ax, els, *, axis: str) -> None:
     """부재 AABB 를 직사각형으로. axis='plan' 이면 u×v, 'elev' 면 u×h."""
-    for e in sorted(els, key=lambda e: 0 if e["member"] == "deck" else 1):
+    for e in sorted(els, key=lambda e: MEMBER_ORDER.index(e["member"])
+                    if e["member"] in MEMBER_ORDER else 9):
         if axis == "plan":
             x, y, w, h = e["u"] - e["su"] / 2, e["v"] - e["sv"] / 2, e["su"], e["sv"]
         else:
@@ -169,7 +175,8 @@ def panel3d(ax, d: dict, *, s: float = 46, leaders: bool = True, ticks: bool = T
     deck = [e for e in els if e["member"] == "deck"]
     top = max((e["h"] + e["sh"] / 2 for e in deck), default=float(np.max(d["h"])))
     bot = min((e["h"] - e["sh"] / 2 for e in els), default=0.0)
-    for e in sorted(els, key=lambda e: 0 if e["member"] == "deck" else 1):
+    for e in sorted(els, key=lambda e: MEMBER_ORDER.index(e["member"])
+                    if e["member"] in MEMBER_ORDER else 9):
         lo = (e["u"] - e["su"] / 2, e["v"] - e["sv"] / 2, e["h"] - e["sh"] / 2)
         hi = (e["u"] + e["su"] / 2, e["v"] + e["sv"] / 2, e["h"] + e["sh"] / 2)
         _box3(ax, lo, hi, MEMBER_COLOR.get(e["member"], "#6C7A89"),
@@ -188,9 +195,11 @@ def panel3d(ax, d: dict, *, s: float = 46, leaders: bool = True, ticks: bool = T
     lo_v, hi_v = _vlim(d)
     ax.set_xlim(float(np.min(d["u"])) - span * .05, float(np.max(d["u"])) + span * .05)
     ax.set_ylim(lo_v, hi_v)
-    ax.set_zlim(bot - (top - bot) * .1, top + lift * 3.2)
-    ax.set_box_aspect((3.0, 1.0, 0.66))
-    ax.view_init(elev=24, azim=-64)
+    # 주탑·아치리브가 데크보다 훨씬 높다 — 상한은 **모든 부재**에서 잡아야 안 잘린다.
+    zmax = max([e["h"] + e["sh"] / 2 for e in els] + [top + lift * 3.2])
+    ax.set_zlim(bot - (top - bot) * .1, zmax + (zmax - bot) * .04)
+    ax.set_box_aspect((3.0, 1.0, 0.80))
+    ax.view_init(elev=22, azim=-64)
     if ticks:
         ax.set_xlabel("교축 [m]", fontsize=8, labelpad=1)
         ax.set_ylabel("횡축 [m]", fontsize=8, labelpad=-6)
@@ -259,7 +268,7 @@ def fig_one(name: str, d: dict, out: Path) -> None:
     c.set_title("③ 3D 트윈 — 슬래브·교각·교대 위에 점이 앉는다" + "\n" + made,
                 fontsize=11, pad=2)
     c.legend(handles=[Patch(color=MEMBER_COLOR[k], alpha=.5, label=MEMBER_KO[k])
-                      for k in ("deck", "pier", "abutment") if k in n_mem],
+                      for k in MEMBER_ORDER if k in n_mem],
              fontsize=8.2, loc="upper left", framealpha=.9)
 
     cb = fig.colorbar(sc, ax=[a, b], fraction=0.03, pad=0.012)
@@ -306,9 +315,10 @@ def fig_grid3d(items: list[tuple[str, dict | None, str]], out: Path) -> None:
     if sc is not None:
         cb = fig.colorbar(sc, ax=fig.axes, fraction=0.012, pad=0.012)
         cb.set_label("LOS 변위속도 [mm/yr] (교량별 범례 폭은 각자 다름)", fontsize=9)
+    seen = {e["member"] for _, d, _ in items if d for e in d["elements"]}
     fig.legend(handles=[Patch(color=MEMBER_COLOR[k], alpha=.5, label=MEMBER_KO[k])
-                        for k in ("deck", "pier", "abutment")],
-               ncol=3, fontsize=9.5, loc="lower left",
+                        for k in MEMBER_ORDER if k in seen],
+               ncol=7, fontsize=9.5, loc="lower left",
                bbox_to_anchor=(0.012, 0.004), framealpha=.9)
     fig.suptitle("한강교량 디지털 트윈 — 슬래브·교각·교대 위에 PS 점이 앉는다\n"
                  "IFC 4.3 프록시 부재(표준데이터 실측 제원) + Sentinel-1 측점 · "

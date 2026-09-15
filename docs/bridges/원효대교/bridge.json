@@ -9,6 +9,7 @@
  "out": "docs/bridges/원효대교",
  "length_m": 2171.277302318879,
  "n_spans": 72,
+ "superstructure": true,
  "max_span_m": 100.0,
  "span_layout": "auto",
  "width_m": 20.0,

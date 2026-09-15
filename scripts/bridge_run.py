@@ -73,6 +73,7 @@ class Bridge:
     # 아래는 자동으로 채운다
     length_m: float | None = None
     n_spans: int | None = None
+    superstructure: bool = True        # 형식별 상부구조(주탑·케이블·아치·트러스)를 세울지
     max_span_m: float | None = None    # 최대경간장 실측 — 교각 비등간격 배치의 근거
     span_layout: str = "auto"          # auto | equal | measured (proxy_model.span_edges)
     width_m: float | None = None
@@ -816,15 +817,24 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     from inframon.bim.georef import MapConversion
     from inframon.bim.ifc_io import read_elements, read_map_conversion
     from inframon.bim.ifc_write import write_elements
-    from inframon.bim.proxy_model import bridge_elements, span_edges
+    from inframon.bim.proxy_model import (BIND_MEMBERS, bridge_elements,
+                                          span_edges, superstructure_elements)
     from inframon.insar.gltf_export import (export_insar_gltf, guid_map_from_alignment,
                                             write_3dtiles_tileset, write_web_viewer)
     els = bridge_elements(length_m=b.length_m, width_m=b.width_m, n_spans=b.n_spans,
                           clearance_m=b.clearance_m, max_span_m=b.max_span_m,
-                          span_layout=b.span_layout, name=b.name)
+                          span_layout=b.span_layout, bridge_type=b.bridge_type,
+                          superstructure=b.superstructure, name=b.name)
     _, used, why = span_edges(b.length_m, b.n_spans or 1, max_span_m=b.max_span_m,
                               layout=b.span_layout)
     b.sources["span_layout"] = f"{used} — {why}"
+    made = superstructure_elements(lambda *a, **k: None, bridge_type=b.bridge_type,
+                                   length_m=b.length_m, width_m=b.width_m,
+                                   main_span_m=float(b.max_span_m or 0.0),
+                                   z_deck_bot=0.0, z_deck_top=0.0)
+    if made:
+        b.sources["superstructure"] = made
+        note(b, f"형식별 상부구조: {made}")
     # 프록시 원점은 **데크선 중점** 이다. 조회 좌표(b.lat/lon)를 쓰면 그 좌표가 교량
     # 중심에서 벗어난 만큼 부재가 통째로 밀려 PS 점이 부재 밖에 앉는다(청담 ~97 m).
     olat, olon = _deck_midpoint(b)
@@ -836,6 +846,13 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     ifc = out / f"{b.name}_proxy.ifc"
     write_elements(els, ifc, map_conversion=mc, project_name=f"{b.name} 프록시 교량")
     els2, mc2 = read_elements(ifc), read_map_conversion(ifc)
+    # IFC 왕복에서 부재 라벨이 엔티티 타입으로 다시 추론된다 — 케이블(IfcMember)이
+    # 'deck' 으로, 주탑(IfcColumn)이 'pier' 로 돌아온다. 그러면 결합 필터가 무력해져
+    # 케이블이 데크 측점을 가져간다. 우리가 쓴 라벨을 GUID 로 되돌린다.
+    _label = {e.guid: e.member for e in els}
+    for e in els2:
+        if _label.get(e.guid):
+            e.member = _label[e.guid]
     ej = out / f"{b.name}_elements.json"
     ej.write_text(json.dumps({"elements": [
         {"guid": e.guid, "name": e.name, "ifc_type": e.ifc_type, "member": e.member,
@@ -847,7 +864,10 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     from inframon.insar.track_reader import import_track_h5
     with ProjectStore(proj, mode="w") as store:
         import_track_h5(store, sub, geometry_latlon=b.geometry or None)
-    guids, ginfo = guid_map_from_alignment(proj, ej, map_conversion=mc2, ifc_crs=CRS,
+    # 결합은 **상판·교각·교대만** 본다. associate 가 평면 2D 최근접이라 주탑·케이블·
+    # 아치리브를 같이 넣으면 데크 위 측점을 그것들이 가져간다.
+    bind = [e for e in els2 if (e.member or "") in BIND_MEMBERS]
+    guids, ginfo = guid_map_from_alignment(proj, bind, map_conversion=mc2, ifc_crs=CRS,
                                            max_dist_m=DECK_SEL_M)
     r = export_insar_gltf(proj, out / "twin.glb", value="velocity", element_guids=guids,
                           element_z=ginfo["element_z"], z_source="deck",
@@ -1045,6 +1065,8 @@ def main() -> None:
     ap.add_argument("--track"); ap.add_argument("--proc"); ap.add_argument("--master")
     ap.add_argument("--baselines", help="SARvey ifg_network 기선 JSON(잔차고도용)")
     ap.add_argument("--out"); ap.add_argument("--batch")
+    ap.add_argument("--no-superstructure", action="store_true",
+                    help="형식별 상부구조(사장교 주탑·케이블 등)를 세우지 않고 상판+교각만")
     ap.add_argument("--span-layout", default="auto", choices=("auto", "equal", "measured"),
                     help="교각 배치 — auto(실측 최대경간장이 있으면 비등간격) · "
                          "equal(연장÷경간수 균등) · measured(주경간 실측 강제)")
@@ -1060,12 +1082,15 @@ def main() -> None:
         for _b in bridges:                      # 배치 파일에 없으면 CLI 값을 쓴다
             if _b.span_layout == "auto":
                 _b.span_layout = a.span_layout
+            if a.no_superstructure:
+                _b.superstructure = False
     else:
         if not (a.name and a.lat and a.lon):
             ap.error("--name --lat --lon (--track 은 선택: 없으면 SLC 부터 만든다) 또는 --batch")
         bridges = [Bridge(name=a.name, lat=a.lat, lon=a.lon, track=a.track, proc=a.proc,
                           master=a.master, baselines=a.baselines, out=a.out,
-                          span_layout=a.span_layout)]
+                          span_layout=a.span_layout,
+                          superstructure=not a.no_superstructure)]
     results = [run_one(b, count=a.count, start=a.start, end=a.end) for b in bridges]
     print("\n━━ 요약")
     print(f"{'교량':<10}{'판정':<10}{'점':>5}{'CRI':>8}  경로")

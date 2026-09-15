@@ -9,6 +9,7 @@
  "out": "docs/bridges/천호대교",
  "length_m": 1149.234572180022,
  "n_spans": 38,
+ "superstructure": true,
  "max_span_m": 50.0,
  "span_layout": "auto",
  "width_m": 35.0,

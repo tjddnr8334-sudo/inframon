@@ -9,6 +9,7 @@
  "out": "docs/bridges/행주대교",
  "length_m": 1460.0,
  "n_spans": 49,
+ "superstructure": true,
  "max_span_m": null,
  "span_layout": "auto",
  "width_m": 14.5,

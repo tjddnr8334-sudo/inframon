@@ -9,6 +9,7 @@
  "out": "docs/bridges/청담대교",
  "length_m": 982.4344251238199,
  "n_spans": 33,
+ "superstructure": true,
  "max_span_m": 90.0,
  "span_layout": "auto",
  "width_m": 13.5,

@@ -9,6 +9,7 @@
  "out": "docs/bridges/샛강문화다리",
  "length_m": 327.35152435717174,
  "n_spans": 11,
+ "superstructure": true,
  "max_span_m": 66.0,
  "span_layout": "auto",
  "width_m": 5.5,

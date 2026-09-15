@@ -9,6 +9,7 @@
  "out": "docs/bridges/가양대교",
  "length_m": 1700.0,
  "n_spans": 30,
+ "superstructure": true,
  "max_span_m": 180.0,
  "span_layout": "auto",
  "width_m": 34.0,

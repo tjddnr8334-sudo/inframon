@@ -1,6 +1,46 @@
 {
  "elements": [
   {
+   "guid": "2KR2Z9J351T0XF739120TC",
+   "name": "PY1X",
+   "ifc_type": "IfcBeam",
+   "member": "pylon",
+   "bbox_min": [
+    -70.2,
+    -15.0,
+    49.8
+   ],
+   "bbox_max": [
+    -67.8,
+    15.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "BEAM"
+   }
+  },
+  {
+   "guid": "0NAWN3H$5YL3ZOCD8X5SA1",
+   "name": "PY2X",
+   "ifc_type": "IfcBeam",
+   "member": "pylon",
+   "bbox_min": [
+    67.8,
+    -15.0,
+    49.8
+   ],
+   "bbox_max": [
+    70.2,
+    15.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "BEAM"
+   }
+  },
+  {
    "guid": "3DL18FXGKHX95Y1$R9Z075",
    "name": "P1C",
    "ifc_type": "IfcBuildingElementProxy",
@@ -1050,6 +1090,11030 @@
    "extra": {
     "bbox_source": "geometry",
     "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "156XKXM4RRBLTW1HBL9N1Q",
+   "name": "PY1-1",
+   "ifc_type": "IfcColumn",
+   "member": "pylon",
+   "bbox_min": [
+    -71.0,
+    -15.0,
+    0.0
+   ],
+   "bbox_max": [
+    -67.0,
+    -11.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "3HFB4F0A28OO2Q$8703D3X",
+   "name": "PY1-2",
+   "ifc_type": "IfcColumn",
+   "member": "pylon",
+   "bbox_min": [
+    -71.0,
+    11.0,
+    0.0
+   ],
+   "bbox_max": [
+    -67.0,
+    15.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "3BB0CKNWSFK1XF8B6ZL6WN",
+   "name": "PY2-1",
+   "ifc_type": "IfcColumn",
+   "member": "pylon",
+   "bbox_min": [
+    67.0,
+    -15.0,
+    0.0
+   ],
+   "bbox_max": [
+    71.0,
+    -11.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "2S9$$89WYICJBB62V4NNEX",
+   "name": "PY2-2",
+   "ifc_type": "IfcColumn",
+   "member": "pylon",
+   "bbox_min": [
+    67.0,
+    11.0,
+    0.0
+   ],
+   "bbox_max": [
+    71.0,
+    15.0,
+    52.8
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "1AZGN2CQY$T72WTT6D2BN3",
+   "name": "CB1A1-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -77.78846153846155,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "198GBS4PQQT9_J2FF$69WO",
+   "name": "CB1A1-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -86.32692307692308,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -77.28846153846153,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "209E2U$484SPQOXI5VE16R",
+   "name": "CB1A1-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -94.86538461538461,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -85.82692307692307,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "12XA1MHLCOYTH90I1QU6JQ",
+   "name": "CB1A1-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -94.36538461538461,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2_EE0P_JL$U7545N6XJZP5",
+   "name": "CB1A1-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -111.94230769230768,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1RV066TL6I3YWRFAFOZN4Z",
+   "name": "CB1A1-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -111.44230769230768,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0USYC01S9D0C7X7EXLNOEX",
+   "name": "CB1A1-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -129.01923076923077,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2JN7WCYTNULHY_DLA62KBS",
+   "name": "CB1A1-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -128.51923076923077,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0CPANZO0P7MQGWYN2C0D0V",
+   "name": "CB1A1-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -146.09615384615387,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2I9SNUF9XMQCH5MIR3H59Z",
+   "name": "CB1A1-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -145.5961538461538,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2GZ0W7M73I13E1BALXZ26X",
+   "name": "CB1A1-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -163.1730769230769,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1BRSNX$YE18263A898CKRS",
+   "name": "CB1A1-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -162.6730769230769,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2T85Z7OL7G3$S62_U5IE7H",
+   "name": "CB1A1-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -77.78846153846155,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2Z8A3PMIETBW8$3NXNBBX6",
+   "name": "CB1A1-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -86.32692307692308,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -77.28846153846153,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2_I7D2BWVNEM08AT9JXZ3M",
+   "name": "CB1A1-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -94.86538461538461,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -85.82692307692307,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "33SW$J3_NYXPZIYW2JV4TB",
+   "name": "CB1A1-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -94.36538461538461,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IQC7XA_44KJZ7XEIGF9DX",
+   "name": "CB1A1-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -111.94230769230768,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "03AK5B6C4YKS0PVCS37V00",
+   "name": "CB1A1-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -111.44230769230768,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3E116SQHCI$SC_$YH0EDA0",
+   "name": "CB1A1-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -129.01923076923077,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "22_RUPH69DBUZEP873WS2N",
+   "name": "CB1A1-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -128.51923076923077,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1CAL311AJK_NLJX$189QYD",
+   "name": "CB1A1-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -146.09615384615387,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "066IR1HH8PHIKECX9L3S6P",
+   "name": "CB1A1-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -145.5961538461538,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IEH9_WYTLG5ON$F48ANXT",
+   "name": "CB1A1-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -163.1730769230769,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "36F43YIY_HSMV37ZO75S_R",
+   "name": "CB1A1-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -162.6730769230769,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0SVTBFX1KAK$LN0XVIMWSK",
+   "name": "CB1A2-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -86.3269230769231,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0EZ_L5IYXUJBEZUCR94NKN",
+   "name": "CB1A2-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -85.82692307692307,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2$IUUS2GLSOFTHGQRUTBTX",
+   "name": "CB1A2-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "097N$8XXG6ELNQP6HNK3F6",
+   "name": "CB1A2-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UL7O_307ZMR2360IMV8F4",
+   "name": "CB1A2-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27AAUDMT6$DZINNXTD3D7K",
+   "name": "CB1A2-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "33VT0$8TT$4YG5KRLXY4FJ",
+   "name": "CB1A2-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -188.78846153846155,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2KX4GZNOP_I4DJJI64$ZTB",
+   "name": "CB1A2-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -205.86538461538464,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -188.28846153846155,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1T$$L6Z9U8LF5FAHYW7KR8",
+   "name": "CB1A2-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -205.36538461538458,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2L60PA$6LJ_GOHUUQYN2YK",
+   "name": "CB1A2-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.01923076923077,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1_SVZJX6ATQ2N529PFN3AU",
+   "name": "CB1A2-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -257.0961538461538,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -239.51923076923072,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "161QBVOWF39TJUQNQ8WQ7F",
+   "name": "CB1A2-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -256.5961538461538,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0DK4QQG95K9CPHBVZ$_C0E",
+   "name": "CB1A2-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -86.3269230769231,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2F6K89NTF6OYO3VL$9Q5IH",
+   "name": "CB1A2-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -85.82692307692307,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "03Z15ZW1LOSIAFPTGBO4VR",
+   "name": "CB1A2-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2UFJDGA0OFZRKQ7JR4OVTD",
+   "name": "CB1A2-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2VMMP01I9AZ51VKNRIE1VO",
+   "name": "CB1A2-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "32Z1BG507MJOZOZ4AJB_G6",
+   "name": "CB1A2-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1MLR700_9BDU6ZHR2PTD61",
+   "name": "CB1A2-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -188.78846153846155,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2MQJ5GXA1PJ6YIOBSTM_PM",
+   "name": "CB1A2-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -205.86538461538464,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -188.28846153846155,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "23ZHO3$5VO4HS$5YV9268O",
+   "name": "CB1A2-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -205.36538461538458,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IM$MZXXV95071EXAQKNIX",
+   "name": "CB1A2-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.01923076923077,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0M7CB$B2IA$Z72ZFLHPF$D",
+   "name": "CB1A2-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -257.0961538461538,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -239.51923076923072,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1GI_$SV6TCXMEY3YRPDGXN",
+   "name": "CB1A2-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -256.5961538461538,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "09UX55D6PKU1_8DJITDGNP",
+   "name": "CB1A3-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -94.86538461538461,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2F4YQIAQJQMEI0KRNNKFR2",
+   "name": "CB1A3-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -94.36538461538461,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2L_PHM4G$SJCEWTC3XRID0",
+   "name": "CB1A3-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -146.09615384615387,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -119.98076923076924,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FM3PHCZAEU$WP49WMGMH1",
+   "name": "CB1A3-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -145.5961538461538,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2NKVBG103$5W2QRRVRY55N",
+   "name": "CB1A3-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -197.3269230769231,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2M5E9PP_X3VCNG2PL2OSST",
+   "name": "CB1A3-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -196.82692307692304,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MM$IFTCTEUS8B3F$JIXPQ",
+   "name": "CB1A3-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -248.55769230769232,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FSB9FC5YFPI6Q7Z832JQ4",
+   "name": "CB1A3-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -248.05769230769226,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3ERS26D_Q_C280P9LZIWFL",
+   "name": "CB1A3-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -299.78846153846155,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0N7MGKD5OP7P$Q0Q130Z_O",
+   "name": "CB1A3-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538461,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -299.28846153846155,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39KU1CHR94RC06NKYH4NUI",
+   "name": "CB1A3-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -351.0192307692308,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -324.90384615384613,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1OPA8FXTMQXR6AGQ8HI07Z",
+   "name": "CB1A3-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.63461538461536,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -350.51923076923083,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1ITZ8GU5XXKKKV61_R1$5A",
+   "name": "CB1A3-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -94.86538461538461,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0G_DIQ4OTGHA$ENJ6TBZ8L",
+   "name": "CB1A3-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -94.36538461538461,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "255IOMM1094_GOFG93ZBRP",
+   "name": "CB1A3-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -146.09615384615387,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -119.98076923076924,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "04CI9D9AOJUK5KBABZHA6B",
+   "name": "CB1A3-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -145.5961538461538,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1ACDCQK$YKHZGJM$TJ_B3$",
+   "name": "CB1A3-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -197.3269230769231,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0RKJKESNG0OEGO1YKYEBC7",
+   "name": "CB1A3-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -196.82692307692304,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2DQXHNUIHU0DZ4QMGQEVA_",
+   "name": "CB1A3-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -248.55769230769232,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "31P32I3WT42IRX$LNI165F",
+   "name": "CB1A3-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -248.05769230769226,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2XC7Y_8QWWIVTF2JPD1ZIH",
+   "name": "CB1A3-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -299.78846153846155,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "18C2OG2MP$7K8UP9E0H$IA",
+   "name": "CB1A3-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538461,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -299.28846153846155,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1DQI4XC2YSIJ246ZVXV_TK",
+   "name": "CB1A3-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -351.0192307692308,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -324.90384615384613,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "295UZEVLT1Y4ATGB5MB0LV",
+   "name": "CB1A3-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.63461538461536,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -350.51923076923083,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2P6RV3BH_2Q2X0SI4ISRXK",
+   "name": "CB1A4-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0KB2QAR_A8C4X72DXQ9ZC1",
+   "name": "CB1A4-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "090O8TMGH49JI2652AH7CJ",
+   "name": "CB1A4-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2SVOTST_T_ORK7F_QO09V_",
+   "name": "CB1A4-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -205.86538461538464,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0N3IRH_42TEEC2GLEVBDEC",
+   "name": "CB1A4-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.0192307692308,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -205.3653846153846,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0A3R87304KL231CPY1AF7Z",
+   "name": "CB1A4-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -239.51923076923083,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2EU8S4W5F4YJVLPT1POIPJ",
+   "name": "CB1A4-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -308.3269230769231,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1CIIII58O_LTFEMZNJ3T6O",
+   "name": "CB1A4-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -342.4807692307693,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -307.8269230769231,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "11O9PBB1TWF9_ZBRZM54D6",
+   "name": "CB1A4-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.6346153846154,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -341.9807692307692,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2UYJTWL_9R27Z96MQQVTLJ",
+   "name": "CB1A4-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -410.7884615384616,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -376.1346153846154,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39YAY1B$I0ITFEZTR6SWWR",
+   "name": "CB1A4-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -444.9423076923077,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -410.2884615384616,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0QP2W0N8SLARRGPYJ$7S1S",
+   "name": "CB1A4-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -479.09615384615387,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -444.4423076923077,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "24R6E1QVK6TFMGBW504NK2",
+   "name": "CB1A4-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -103.40384615384616,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3B7W88YOHYB14TPI6_T8LR",
+   "name": "CB1A4-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -137.55769230769232,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -102.90384615384616,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2W8GWGWGGK_FVRU__IE4DL",
+   "name": "CB1A4-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -137.05769230769232,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3HGDWC3N5MP_1X9G55K_TP",
+   "name": "CB1A4-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -205.86538461538464,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "185CG8PZECRXUG915VKJ5B",
+   "name": "CB1A4-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.0192307692308,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -205.3653846153846,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "12UY876VIKFQW50FUCJ7I9",
+   "name": "CB1A4-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -239.51923076923083,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1T8O3I6EVXY$79KZBW928Y",
+   "name": "CB1A4-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -308.3269230769231,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "11D4ZY67G8WIZIA5TM5KEG",
+   "name": "CB1A4-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -342.4807692307693,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -307.8269230769231,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "18HBK0EL7R5_3QA4EX8ZKJ",
+   "name": "CB1A4-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.6346153846154,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -341.9807692307692,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IWHTMPI0V_U4U2NHJH5TP",
+   "name": "CB1A4-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -410.7884615384616,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -376.1346153846154,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "10XH9EF1HCAVGKMAEKMUA4",
+   "name": "CB1A4-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -444.9423076923077,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -410.2884615384616,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1RZB$7L_HW1G9WOB_1QBR6",
+   "name": "CB1A4-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -479.09615384615387,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -444.4423076923077,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34HS47W78J4Y_PHTNCQPFG",
+   "name": "CB1A5-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -111.94230769230768,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0WXVKGH2AFJE0ZAFYO21NI",
+   "name": "CB1A5-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -111.44230769230768,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TG8ACAGWQN066HG8691ZS",
+   "name": "CB1A5-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -197.3269230769231,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06HD1HWNPW51X3_THDPOFY",
+   "name": "CB1A5-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.01923076923075,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -196.82692307692307,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0R74QWA8XZAGM_74NANABK",
+   "name": "CB1A5-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -282.71153846153845,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -239.51923076923072,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1H2HCSX96ZCWQH8SMO2QG3",
+   "name": "CB1A5-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538461,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -282.21153846153845,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26I$BSL_YDTT6QCEXZWG8D",
+   "name": "CB1A5-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -368.0961538461538,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -324.9038461538462,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "38AJ853CH1$ECLDPMEBKLC",
+   "name": "CB1A5-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -410.78846153846143,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -367.5961538461538,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27M6Z0UW5TBKHCE3ZDBTWM",
+   "name": "CB1A5-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -453.4807692307692,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -410.2884615384615,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "04VJUIBLMP_KF6IJPIFV0D",
+   "name": "CB1A5-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -496.1730769230769,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -452.9807692307693,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1YQ9A86PS7$WJMEKT36CUZ",
+   "name": "CB1A5-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -538.8653846153845,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -495.6730769230769,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "08OKJH_3AIOSXRVCH95_ZX",
+   "name": "CB1A5-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -581.5576923076922,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -538.3653846153845,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "14CXC1NYFB3TA5A$9IXCKD",
+   "name": "CB1A5-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -111.94230769230768,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1023XW$VU8OEU1QLF4GA8W",
+   "name": "CB1A5-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -154.63461538461536,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -111.44230769230768,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "18KLP2YG$3Z5IYMT3CPLCT",
+   "name": "CB1A5-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -197.3269230769231,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -154.13461538461536,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34C43STAELA1QVC_XGREEB",
+   "name": "CB1A5-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -240.01923076923075,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -196.82692307692307,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "22LQ$W9VA7XA82G7AQTTUQ",
+   "name": "CB1A5-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -282.71153846153845,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -239.51923076923072,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0YV56A0AAMSFP8XFP21A3T",
+   "name": "CB1A5-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538461,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -282.21153846153845,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2UKV664E170S_1WM57_40T",
+   "name": "CB1A5-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -368.0961538461538,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -324.9038461538462,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2V$QORNLPRA8A4_JI$M_ZM",
+   "name": "CB1A5-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -410.78846153846143,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -367.5961538461538,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0YM5M5I2FQ3_5JY2MXPUVB",
+   "name": "CB1A5-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -453.4807692307692,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -410.2884615384615,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0XNLHKPFZ7TX30PE1OPG3F",
+   "name": "CB1A5-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -496.1730769230769,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -452.9807692307693,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1LPW55EY46L22NMA0RG$09",
+   "name": "CB1A5-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -538.8653846153845,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -495.6730769230769,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1QPH5WEF9VE3Y40$YP080D",
+   "name": "CB1A5-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -581.5576923076922,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -538.3653846153845,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UW6OTGN0E$1SH0D3F5O6X",
+   "name": "CB1A6-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "03792X1M8G2VX8QJJNW1KM",
+   "name": "CB1A6-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3DC7RAKH5L3U_4L98UXMBB",
+   "name": "CB1A6-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0QANFUDFG5D65ZJ18UMDKI",
+   "name": "CB1A6-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1W6Z4N5L9Y4KEWS8XRT7OP",
+   "name": "CB1A6-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538462,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0LEZJGIYZOFZ2EG0BVW6EH",
+   "name": "CB1A6-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.63461538461536,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -324.9038461538461,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "237AFM3S$ZX_JMRVW1L$75",
+   "name": "CB1A6-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -427.86538461538464,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -376.13461538461536,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3E630T$P9DNZGS$5DJXKQT",
+   "name": "CB1A6-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -479.0961538461538,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -427.3653846153845,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2Z8PH79S_G755BXOFLQNQW",
+   "name": "CB1A6-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -530.3269230769231,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -478.5961538461538,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26XEFDB7IG45P0L9Y64NRP",
+   "name": "CB1A6-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -581.5576923076922,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -529.8269230769231,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0FUJ3S5DD15HY0R06T6M33",
+   "name": "CB1A6-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -632.7884615384615,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -581.0576923076923,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3ER179IP5EEH6245DUVNGB",
+   "name": "CB1A6-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -684.0192307692307,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -632.2884615384617,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2CJUZI_YEFW_SMIQ110DH8",
+   "name": "CB1A6-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -120.48076923076923,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -68.75,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0TDA1W6SRWZA_KFOZO5ER8",
+   "name": "CB1A6-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -171.71153846153845,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -119.98076923076923,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UBR_4VR0PWPLJGEPIQOTG",
+   "name": "CB1A6-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -222.94230769230768,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -171.21153846153845,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1T6KNO5ILFO7UKSF57HM6V",
+   "name": "CB1A6-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -274.1730769230769,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -222.44230769230768,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0_F$SWOYN$M3_HN8EIK_IW",
+   "name": "CB1A6-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -325.4038461538462,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -273.6730769230769,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "37LH88B51A84H1O$VUQ02E",
+   "name": "CB1A6-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -376.63461538461536,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -324.9038461538461,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1LBVICEJGA2HX5M259Q78C",
+   "name": "CB1A6-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -427.86538461538464,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -376.13461538461536,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "18JDHZ7GPH39Q5MRV1ER6P",
+   "name": "CB1A6-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -479.0961538461538,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -427.3653846153845,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34XKDB_A6BSBQZ3PWITY0E",
+   "name": "CB1A6-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -530.3269230769231,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -478.5961538461538,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2YWXH1W9OV4EK1WV2ANQ2H",
+   "name": "CB1A6-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -581.5576923076922,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -529.8269230769231,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "068LYYOEAW7KYHPP0FOAQT",
+   "name": "CB1A6-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -632.7884615384615,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -581.0576923076923,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0GE8OK7UVUNJ76GVMYOSTT",
+   "name": "CB1A6-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -684.0192307692307,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -632.2884615384617,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1PEYGNF$YHH8VEFLG2D2B1",
+   "name": "CB1B1-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -67.86538461538461,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1HS2Q5_041XBYKK2UQX1G$",
+   "name": "CB1B1-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -68.36538461538461,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -66.98076923076923,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "17VGDDR$0AQF0VT2Y42290",
+   "name": "CB1B1-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -67.48076923076923,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -66.09615384615384,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0JQ31PFXWT9NF5SKQZ8ZWK",
+   "name": "CB1B1-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -66.59615384615384,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -65.21153846153848,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0X$8YUAEP44FX$NGRNRSUW",
+   "name": "CB1B1-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -64.32692307692308,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2WBSW4SBVMRCQHQ0_F7SGQ",
+   "name": "CB1B1-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -64.82692307692308,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -63.44230769230769,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IWEHN3ZC83565SG10SFR8",
+   "name": "CB1B1-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -62.55769230769231,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "367B8SB8P2FPVSM$2RE0FW",
+   "name": "CB1B1-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.05769230769231,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0_$7QGDWOYXK0_1ZESFX__",
+   "name": "CB1B1-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307693,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -60.78846153846154,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1EDWT_BKG_RT6ACKMROU6X",
+   "name": "CB1B1-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -61.28846153846154,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -59.90384615384615,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "21WT46XSQZV2ISVW5VS_D4",
+   "name": "CB1B1-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384616,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -59.019230769230774,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0J41TBEYKIE9TWQECXDOIJ",
+   "name": "CB1B1-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -59.519230769230774,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "08Z1_IGOHNHDFBMGEI_NBA",
+   "name": "CB1B1-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -67.86538461538461,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2$1CU_W46YTHLWAUS8XA1K",
+   "name": "CB1B1-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -68.36538461538461,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -66.98076923076923,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "109EHA2ZYQ_$ZYAA137PPU",
+   "name": "CB1B1-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -67.48076923076923,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -66.09615384615384,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "046I0$GTK$Y$THUWIY76TB",
+   "name": "CB1B1-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -66.59615384615384,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -65.21153846153848,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2LE9D6_DPEVY4O9CTTF63B",
+   "name": "CB1B1-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -64.32692307692308,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0DYIYKFTV4QOFU$2UQXYW8",
+   "name": "CB1B1-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -64.82692307692308,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -63.44230769230769,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3DJ974SEF66MU9AUYEBZH_",
+   "name": "CB1B1-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -62.55769230769231,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "22GX_1OV7802V6VJVZ8$XX",
+   "name": "CB1B1-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.05769230769231,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2RAE052C41_SWWUAEHNEEJ",
+   "name": "CB1B1-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307693,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -60.78846153846154,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1QA1AR3MYLWKLW1RB$02U4",
+   "name": "CB1B1-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -61.28846153846154,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -59.90384615384615,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0IO87L7T6JEWSH_DPLY3XQ",
+   "name": "CB1B1-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384616,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -59.019230769230774,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2CNY_PXS79IIJM1KOIQNQL",
+   "name": "CB1B1-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -59.519230769230774,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06HFGBLHGAX5XNS7OERAFK",
+   "name": "CB1B2-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -66.98076923076923,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "167VFCL3NDY$ZXNMCQEKF1",
+   "name": "CB1B2-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -67.48076923076923,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -65.21153846153845,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06KS4O6CV7F69S7TH0_ZPS",
+   "name": "CB1B2-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -63.44230769230769,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3GQLDOG2XXX5QK99Y_TYTI",
+   "name": "CB1B2-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0STZQ5_WY_EHG8L9IYSO7J",
+   "name": "CB1B2-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307693,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -59.90384615384615,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27_6_C$QFEOF7$I1SQMYAW",
+   "name": "CB1B2-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384616,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1$75P90$J6YEQJTKF5Q7HZ",
+   "name": "CB1B2-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -56.36538461538461,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0B8HG2767ZAGA875XW3XE4",
+   "name": "CB1B2-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -56.86538461538462,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -54.59615384615385,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1NN_2KO40LXR8YWGV6BI5Y",
+   "name": "CB1B2-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.096153846153854,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -52.82692307692308,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1W$QG4CNR_PMITTNM5BFT3",
+   "name": "CB1B2-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.32692307692308,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3BZDA2A9Z59XVOOGIII_Z0",
+   "name": "CB1B2-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -49.28846153846155,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1RQN2X6WLRD93WMEGHDUEB",
+   "name": "CB1B2-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -49.78846153846155,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "142MBA6SOSM6P9CZCTZH2I",
+   "name": "CB1B2-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -66.98076923076923,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1EYU5RLNG1N4IA2ZQYQ1L8",
+   "name": "CB1B2-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -67.48076923076923,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -65.21153846153845,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0FVN53V7M01HKZ52JNB2HZ",
+   "name": "CB1B2-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -63.44230769230769,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1ULPHVLL98LV2TVB_6G8RJ",
+   "name": "CB1B2-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1OASQX2ZF5G$HZ8Q5UX1OB",
+   "name": "CB1B2-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307693,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -59.90384615384615,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0GC2P560Z_6TP8NCFNRED4",
+   "name": "CB1B2-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384616,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "16WI$SVUF$T5PLUHPFTDVD",
+   "name": "CB1B2-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -56.36538461538461,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1XS8VBQU2F4KJ9118S3M1I",
+   "name": "CB1B2-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -56.86538461538462,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -54.59615384615385,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1N1FR3FSPS93X8__PYS$YB",
+   "name": "CB1B2-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.096153846153854,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -52.82692307692308,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2JWNRIM8EQTENO8_$26TT0",
+   "name": "CB1B2-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.32692307692308,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "21ZNVQIKNW7_2J52NRURX1",
+   "name": "CB1B2-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -49.28846153846155,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0BSBPTD$PUDP86AEFU2354",
+   "name": "CB1B2-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -49.78846153846155,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1UI7RMED4WM$S8KDL$S90F",
+   "name": "CB1B3-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -66.09615384615384,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1KSR8H1CC068HD2RWZQZ4O",
+   "name": "CB1B3-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -66.59615384615384,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -63.4423076923077,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "342$_MAUFK12F68SEFFXG9",
+   "name": "CB1B3-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -60.78846153846153,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34VQ6BJ1JMOGI7PENKXU02",
+   "name": "CB1B3-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -61.28846153846155,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "19N1U94BUGO2YQJHBD3ITZ",
+   "name": "CB1B3-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -55.480769230769226,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1ZCZ7IN$W$ASG75AAYHE9E",
+   "name": "CB1B3-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.98076923076923,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -52.82692307692307,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I0FM6$74I$F0SH5ZM$DPT",
+   "name": "CB1B3-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.32692307692308,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -50.17307692307692,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1XJ7QP42OM9X_4IAXSKQ9Z",
+   "name": "CB1B3-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -50.67307692307692,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "19WAAXOKF5UCNFM05OLJPU",
+   "name": "CB1B3-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -44.86538461538461,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "37P$QNPFP4K9ICOFSIYU__",
+   "name": "CB1B3-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -45.36538461538461,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1XB7TTEO98PLK3L0864LJX",
+   "name": "CB1B3-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -39.55769230769231,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2GKXTJ54RG3NUXUDZQJMKE",
+   "name": "CB1B3-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -40.05769230769231,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -36.903846153846146,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0M$B0FMLN1AXE0AKQPW1GQ",
+   "name": "CB1B3-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -66.09615384615384,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MOBF0_P0LYKPBF2QLQ1K4",
+   "name": "CB1B3-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -66.59615384615384,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -63.4423076923077,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27482FV03SQM$Z76NYUW6K",
+   "name": "CB1B3-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -60.78846153846153,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06FVIM2NWC$701Z3ODF2MZ",
+   "name": "CB1B3-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -61.28846153846155,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2_D2IJMS6Y$$$2MLOPFMW1",
+   "name": "CB1B3-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -55.480769230769226,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TGDF803BYRR552PBS0P_5",
+   "name": "CB1B3-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.98076923076923,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -52.82692307692307,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "306KQURJ8STG1ITQB78DX5",
+   "name": "CB1B3-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.32692307692308,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -50.17307692307692,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "30KN2WKVG6OE9AJC61YAML",
+   "name": "CB1B3-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -50.67307692307692,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0KRZ4CHKITLSXT3$$1R45I",
+   "name": "CB1B3-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -44.86538461538461,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3F5BMS5FG4O006L6AWQ3W2",
+   "name": "CB1B3-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -45.36538461538461,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "043A9$CVPWPE38EP68G61Q",
+   "name": "CB1B3-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -39.55769230769231,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0$M1UBK6PU$DGITMK5Q$J_",
+   "name": "CB1B3-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -40.05769230769231,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -36.903846153846146,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TH864_C4VD7ARBEZB13FT",
+   "name": "CB1B4-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -65.21153846153845,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "30$8IFWKM6B$GLF8FSU1KU",
+   "name": "CB1B4-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1N0KAF$J5UW4$QW5E5AQGF",
+   "name": "CB1B4-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307692,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0RUU0P8EDIHT4O03P9DOJ1",
+   "name": "CB1B4-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -54.59615384615384,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1HT12XC9ZQ4M4439BYX1O6",
+   "name": "CB1B4-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.096153846153854,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "25IZ4__YQ3UWODSH4VACLU",
+   "name": "CB1B4-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "37VLB3$NV01QDI_BMW8FA6",
+   "name": "CB1B4-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -43.980769230769226,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3GED5I1L22N0RZNB5DL$85",
+   "name": "CB1B4-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -44.480769230769226,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -40.44230769230769,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3D0NN9P29GZLCY3MBZJQI$",
+   "name": "CB1B4-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -40.94230769230769,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -36.90384615384616,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "31JN4XVJMABK68V274LJ0G",
+   "name": "CB1B4-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -37.40384615384616,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -33.36538461538461,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "32BH0CY8MC21_DAK61Y0F2",
+   "name": "CB1B4-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -33.86538461538462,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -29.82692307692308,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0VVDOSET69SULWR29S16AE",
+   "name": "CB1B4-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -30.32692307692308,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -26.28846153846154,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UOTLN78LUF1U_B$5PWCSO",
+   "name": "CB1B4-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -65.21153846153845,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "05T$HEXLB427T0A0P305AO",
+   "name": "CB1B4-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -65.71153846153847,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -61.67307692307692,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0TOEOUFWZLEMV4JRWEGJ05",
+   "name": "CB1B4-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -62.17307692307692,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2HT0_3S6VHHW26H3_MYSX$",
+   "name": "CB1B4-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -54.59615384615384,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "198HB2SKA0Q6FG$WAXYG_W",
+   "name": "CB1B4-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.096153846153854,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3BN_N95QR$JI82QQEV3P0V",
+   "name": "CB1B4-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2SRQ5ODB68G09QKLUNTI1S",
+   "name": "CB1B4-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -43.980769230769226,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2AGIH7JLNBVLU5773P7HLJ",
+   "name": "CB1B4-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -44.480769230769226,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -40.44230769230769,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2HPVMEJS7HNMQBVELBLJWE",
+   "name": "CB1B4-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -40.94230769230769,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -36.90384615384616,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3BJ7KTVR5N7Y$K5CN956ZY",
+   "name": "CB1B4-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -37.40384615384616,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -33.36538461538461,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "13CX67KSUYE$ZSUK7RNQSM",
+   "name": "CB1B4-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -33.86538461538462,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -29.82692307692308,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39SA1W7PAVMQTQUA1R2DO7",
+   "name": "CB1B4-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -30.32692307692308,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -26.28846153846154,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0OQEO7AYIU3UUMDVV5C64Y",
+   "name": "CB1B5-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -64.3269230769231,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1FAFUSIQ5PZ_ZW43SCGZP4",
+   "name": "CB1B5-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -64.82692307692308,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -59.903846153846146,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1G2QRA05AWOF68XXJ1TQ3H",
+   "name": "CB1B5-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384615,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -55.48076923076923,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2QDDCIXMJJFDNLQPDCKNR9",
+   "name": "CB1B5-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.98076923076924,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "33BJQ7FUDZNKKBP$MEI88U",
+   "name": "CB1B5-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -46.63461538461539,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FVAOYKFD397DTE294YBK6",
+   "name": "CB1B5-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -47.13461538461539,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2NC25$II5KYDGS8FXPMCMV",
+   "name": "CB1B5-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -37.78846153846153,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2RTGBVQIII76G85YI1NRXN",
+   "name": "CB1B5-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -38.28846153846153,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -33.36538461538461,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "194HYL_ET$PNT2CWVT_1JU",
+   "name": "CB1B5-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -33.86538461538461,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -28.942307692307686,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0IS9A07K0CJZGSPTE5U0DA",
+   "name": "CB1B5-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -29.442307692307686,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -24.519230769230766,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "14K$LS7GVK12CICNGLJKJ9",
+   "name": "CB1B5-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -25.019230769230766,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -20.09615384615384,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2$3RF_59T$KUP3450I34SO",
+   "name": "CB1B5-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -20.59615384615384,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -15.673076923076927,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3B3JOCP_S9UW_AEVEIWBQ$",
+   "name": "CB1B5-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -64.3269230769231,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "36LYD34NP8GALWJZ8C88K4",
+   "name": "CB1B5-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -64.82692307692308,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -59.903846153846146,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2ZBYKWKINC2DSMQ4_2E2UW",
+   "name": "CB1B5-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -60.40384615384615,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -55.48076923076923,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IOS1YWRL8$LHU_7D88EVK",
+   "name": "CB1B5-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -55.98076923076924,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -51.05769230769231,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1_809P2NBBV0IRHR4U4DTH",
+   "name": "CB1B5-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -51.55769230769231,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -46.63461538461539,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "29EP7EGCN8BINW9V6_7EBO",
+   "name": "CB1B5-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -47.13461538461539,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0FJ_OOUYE22$RTIMO5BMTW",
+   "name": "CB1B5-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -37.78846153846153,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3F2ZN76PS29IOC$68OSEHH",
+   "name": "CB1B5-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -38.28846153846153,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -33.36538461538461,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34NMM66J7JYDGSW32APBK_",
+   "name": "CB1B5-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -33.86538461538461,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -28.942307692307686,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "23WFZEG6A1T1T5OYO4KM6Z",
+   "name": "CB1B5-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -29.442307692307686,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -24.519230769230766,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1A3RX_MQ9U54DXVBQUG_FQ",
+   "name": "CB1B5-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -25.019230769230766,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -20.09615384615384,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0XEVJ9SGFZ007EP6R0KZO8",
+   "name": "CB1B5-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -20.59615384615384,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -15.673076923076927,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0Y18VTX8Y6CTV8WAUFBUTN",
+   "name": "CB1B6-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    -63.442307692307686,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "266V1KLW5H3797Q93DMN9X",
+   "name": "CB1B6-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I47LYKUVR0ZEEM9HV$RYL",
+   "name": "CB1B6-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    -52.826923076923066,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1R0S6E1H7HN5JLMPFA2UXX",
+   "name": "CB1B6-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.326923076923066,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IEG2CUAQWJ7902_OQQTVR",
+   "name": "CB1B6-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0SMWGOB5Q9T5ZGQYHL8JI1",
+   "name": "CB1B6-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    -36.903846153846146,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Q3EDOCOV3L8C_B1WRSPKA",
+   "name": "CB1B6-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -37.403846153846146,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    -31.59615384615385,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0LI98E08PFPPD43XF$VP50",
+   "name": "CB1B6-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -32.09615384615385,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    -26.28846153846154,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0_RH5SZNENMMR$NXT1XTVU",
+   "name": "CB1B6-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -26.78846153846154,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -20.980769230769226,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0RSJT7OD4YVJHK$_KN79CW",
+   "name": "CB1B6-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -21.480769230769226,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -15.673076923076927,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0FCQHHNOW5TZIJIQ4I86O0",
+   "name": "CB1B6-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -16.173076923076927,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    -10.365384615384613,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1BXV3VS8EMMXZ1IUFDRGAK",
+   "name": "CB1B6-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -10.865384615384613,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    -5.0576923076922995,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34O5FNL73K49Q6K9G7NS7W",
+   "name": "CB1B6-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -69.25,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    -63.442307692307686,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0HUF8MNZTZGWAO0QPKLOA_",
+   "name": "CB1B6-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -63.94230769230769,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    -58.13461538461539,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1QPCG5BQQWSP04I9YLBEG1",
+   "name": "CB1B6-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -58.63461538461539,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    -52.826923076923066,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0TAM5U61F_75Z_7IROQUGX",
+   "name": "CB1B6-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -53.326923076923066,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    -47.519230769230774,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3EKE1MQGNW2NTA06RWB95X",
+   "name": "CB1B6-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -48.019230769230774,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    -42.21153846153847,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FKYHG1DC93TO0$V8ESPIZ",
+   "name": "CB1B6-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -42.71153846153847,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    -36.903846153846146,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0HZIWB2QXOQ_A$HAN395_Q",
+   "name": "CB1B6-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -37.403846153846146,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    -31.59615384615385,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UUFP7AP56$6CGF6F7TUNL",
+   "name": "CB1B6-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -32.09615384615385,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    -26.28846153846154,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1E5X3$GYITVB9FVJJ0FS8X",
+   "name": "CB1B6-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -26.78846153846154,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    -20.980769230769226,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "07AC_5_6XJ0K9TVM9DKSL8",
+   "name": "CB1B6-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -21.480769230769226,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    -15.673076923076927,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2NSE99B3FNA1_FO0SOBDYF",
+   "name": "CB1B6-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -16.173076923076927,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    -10.365384615384613,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1PNOV0EZW_Q8N60X3_BR6T",
+   "name": "CB1B6-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    -10.865384615384613,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    -5.0576923076922995,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I2KNWQYLBGLA46S$70FGJ",
+   "name": "CB2A1-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    67.86538461538461,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0A6WL533L7TPH6I22RW0U1",
+   "name": "CB2A1-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.98076923076923,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    68.36538461538461,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2D_3P0BBLVLJ$N7Z76VAOV",
+   "name": "CB2A1-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.09615384615384,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    67.48076923076923,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0WGNLGI6LHJA5QGCE29EBM",
+   "name": "CB2A1-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153848,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    66.59615384615384,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1L5JCZ0OXDXJOG2PMO2HAD",
+   "name": "CB2A1-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    64.32692307692308,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2427AYN7J8HEELF$50J_MX",
+   "name": "CB2A1-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.44230769230769,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    64.82692307692308,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06P5MG7585H696DRYYIIGI",
+   "name": "CB2A1-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    62.55769230769231,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0P53RSXI2T$7IEJ$8736KA",
+   "name": "CB2A1-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    63.05769230769231,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0X345B$309I90VJBKKEUS6",
+   "name": "CB2A1-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    60.78846153846154,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    62.17307692307693,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "00GB_P7AYNEXQ939EBXA15",
+   "name": "CB2A1-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.90384615384615,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    61.28846153846154,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0NM3Q6XTVT2J2XDV6J1R0N",
+   "name": "CB2A1-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.019230769230774,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    60.40384615384616,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MFTBAWZLAY2OL$MQA1$SI",
+   "name": "CB2A1-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    59.519230769230774,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1VT6BQYOPRYDQ764E$GS3N",
+   "name": "CB2A1-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    67.86538461538461,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "385TQMN4M437RHHLUEGHIP",
+   "name": "CB2A1-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.98076923076923,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    68.36538461538461,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0Y9HWO0TVYS6WM1G8OCD02",
+   "name": "CB2A1-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.09615384615384,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    67.48076923076923,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1NRUTGK0FTRE77X$7H02DO",
+   "name": "CB2A1-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153848,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    66.59615384615384,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0S389JEP1M7X7ZMGCOBJD2",
+   "name": "CB2A1-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    64.32692307692308,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "25D4RKALSXXGNQ5HQO_1S7",
+   "name": "CB2A1-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.44230769230769,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    64.82692307692308,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "38_94BC_IEHVPR360W$16H",
+   "name": "CB2A1-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    62.55769230769231,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0NM5YXS6OY4WWYJ60NK$G4",
+   "name": "CB2A1-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    63.05769230769231,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "02OHP0$CCLZWFAT37VME21",
+   "name": "CB2A1-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    60.78846153846154,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    62.17307692307693,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0TNR3OGF8BT8GIZ6CV5S6H",
+   "name": "CB2A1-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.90384615384615,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    61.28846153846154,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "378DOEX9Y7DR2Y9N_FJGRL",
+   "name": "CB2A1-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.019230769230774,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    60.40384615384616,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1L01RHQKOY9VZBLAC3WDFH",
+   "name": "CB2A1-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    59.519230769230774,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1KZ7PVK2$YPL6O3XR4Y827",
+   "name": "CB2A2-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.98076923076923,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3D3UZDZ2J9BY6CCW6R8K$O",
+   "name": "CB2A2-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153845,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    67.48076923076923,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2EXK04TV4UOTW946_YB4K_",
+   "name": "CB2A2-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.44230769230769,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1GY084Z0MEKBAAW8TPUVE3",
+   "name": "CB2A2-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1KBFL3HAJL7AT5ELBY5KNQ",
+   "name": "CB2A2-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.90384615384615,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    62.17307692307693,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0VPUY2_0U5JHFI8NN1Q04E",
+   "name": "CB2A2-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    60.40384615384616,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2EBWJJGK317H71X5OT$9LD",
+   "name": "CB2A2-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    56.36538461538461,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1$XG1B8DUZ2ZZ0ZPJD23FJ",
+   "name": "CB2A2-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    54.59615384615385,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    56.86538461538462,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "000AYK9H430THM_S7U2IG0",
+   "name": "CB2A2-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.82692307692308,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    55.096153846153854,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0URQ4EN$VUOD63TWP96PIR",
+   "name": "CB2A2-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    53.32692307692308,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2Y_EQHD5CMUQ5CQC1E61B4",
+   "name": "CB2A2-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    49.28846153846155,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1X7GC402R56P4CT72LXGTO",
+   "name": "CB2A2-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    49.78846153846155,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06UVALKZ3CFZ3GD0GTFVJ2",
+   "name": "CB2A2-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.98076923076923,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2C052BRU2TYRCSKBT60JNA",
+   "name": "CB2A2-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153845,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    67.48076923076923,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Z3H_MANPFP8IUROJPKRMC",
+   "name": "CB2A2-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.44230769230769,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0NRTDSWB4AIJCFR3UQV84K",
+   "name": "CB2A2-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0I8Y03Z41I5NLIYE24ZD2L",
+   "name": "CB2A2-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.90384615384615,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    62.17307692307693,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "22US9B929XITZA54Z_WSBE",
+   "name": "CB2A2-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    60.40384615384616,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "03GEUF7FQTHZ_B9RVV3BM9",
+   "name": "CB2A2-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    56.36538461538461,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2J38SUYXGPP2UA0$814CE7",
+   "name": "CB2A2-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    54.59615384615385,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    56.86538461538462,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Z62NQVBV80361OS482E1I",
+   "name": "CB2A2-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.82692307692308,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    55.096153846153854,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0U0CCM$4ZQN5W$VKWFFTK6",
+   "name": "CB2A2-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    53.32692307692308,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2RS7O_866HN0$WPV$3VHHC",
+   "name": "CB2A2-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    49.28846153846155,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1J4202M_43LWANY8T85WU9",
+   "name": "CB2A2-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    49.78846153846155,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FQ_L_FKB$OSVDSXGYEY8W",
+   "name": "CB2A3-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.09615384615384,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2J87$9F1PLNPLEJM0ESR23",
+   "name": "CB2A3-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.4423076923077,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    66.59615384615384,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UK3RMMV856DWZQITEQR0X",
+   "name": "CB2A3-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    60.78846153846153,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2K7QJAGDH_M5BQ2X$YLIO2",
+   "name": "CB2A3-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    61.28846153846155,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1R8NLWJAE6$3T5YP71LCR6",
+   "name": "CB2A3-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    55.480769230769226,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0P1K169C59_R9CLV8HJLQG",
+   "name": "CB2A3-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.82692307692307,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    55.98076923076923,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FDZ_E56_BHK4XI$L$CGT6",
+   "name": "CB2A3-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    50.17307692307692,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    53.32692307692308,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "13FQDS81CFV8IUCAJGOBB1",
+   "name": "CB2A3-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    50.67307692307692,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1$DU9GHG4XMFKMTS$CEXN5",
+   "name": "CB2A3-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    44.86538461538461,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0ZMSIK5LREG800O$RSJZ0V",
+   "name": "CB2A3-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    45.36538461538461,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1ABYS_XFCP1OG_Q22P536O",
+   "name": "CB2A3-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    39.55769230769231,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0BGQQ4Z62R8A8$OP32M1XB",
+   "name": "CB2A3-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.903846153846146,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    40.05769230769231,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34VGLSSYQX8J65EZZAV9NV",
+   "name": "CB2A3-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    66.09615384615384,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IR91SKO8ZK8HI$J6VSKPH",
+   "name": "CB2A3-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.4423076923077,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    66.59615384615384,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0LJJ3Y0WBQBRM8NSM4S6ZW",
+   "name": "CB2A3-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    60.78846153846153,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "32I5LPURWF4PORHS3266UD",
+   "name": "CB2A3-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    61.28846153846155,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1$PZJ9QHSW6HBLYUDSGW80",
+   "name": "CB2A3-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    55.480769230769226,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "167C57DG$1PSMGQ_CDSG4M",
+   "name": "CB2A3-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.82692307692307,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    55.98076923076923,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "17_RL4O249RGOPW1L4H8TH",
+   "name": "CB2A3-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    50.17307692307692,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    53.32692307692308,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "04VLJCVL2JBUU823N5VCLL",
+   "name": "CB2A3-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    50.67307692307692,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26KRD7LQE3CM_1CKPUGPOX",
+   "name": "CB2A3-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    44.86538461538461,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2CBQU4N1NOME6QRUFVL3SM",
+   "name": "CB2A3-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    45.36538461538461,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "088WXSYWANT8$ZDMRSF6H1",
+   "name": "CB2A3-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    39.55769230769231,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2JM7ZN43MG9LOM98I1AMIF",
+   "name": "CB2A3-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.903846153846146,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    40.05769230769231,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1U71A88T$PDT591E50_WP4",
+   "name": "CB2A4-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153845,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "179F7Z1G8T393HFHHO_904",
+   "name": "CB2A4-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3EE8M$RV62ERA6ZDNC$B7Y",
+   "name": "CB2A4-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    62.17307692307692,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2FC$DVYEEL8F3NZB5N336G",
+   "name": "CB2A4-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    54.59615384615384,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1172YI2Q$U0NC$E8P2Y8I8",
+   "name": "CB2A4-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    55.096153846153854,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1A9IBS52_$WKNEG19MSY2W",
+   "name": "CB2A4-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MPD6ITSCR5J0VUO5W4J5O",
+   "name": "CB2A4-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    43.980769230769226,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2OO4LU3_R2T6HOV61GJQD_",
+   "name": "CB2A4-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    40.44230769230769,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    44.480769230769226,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3FGUT3_DT3_$P1ZPOT4KTA",
+   "name": "CB2A4-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.90384615384616,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    40.94230769230769,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "105KDA4QK1NRCU8WXOJZJ5",
+   "name": "CB2A4-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    33.36538461538461,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    37.40384615384616,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26TWH3IXCA6RAJ8$I$SELK",
+   "name": "CB2A4-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    29.82692307692308,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    33.86538461538462,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3B3KB1UZ5UJZ9WAEJLTOIB",
+   "name": "CB2A4-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    26.28846153846154,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    30.32692307692308,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "31RGTQGLQIUC2ER5827SJ5",
+   "name": "CB2A4-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    65.21153846153845,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "211O9H5TLI_$2NX525BDCV",
+   "name": "CB2A4-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    61.67307692307692,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    65.71153846153847,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0M0OU5QFO7UBFIGDG7FOEO",
+   "name": "CB2A4-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    62.17307692307692,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39KC8KI7Z0AS$TZEIDGP$M",
+   "name": "CB2A4-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    54.59615384615384,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1O0XN7Q0W3IE7IBCTAJW9P",
+   "name": "CB2A4-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    55.096153846153854,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1GPNXFSG54ZQM2G$UN0KWF",
+   "name": "CB2A4-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0GTXW0V7IVO7XYPZSO_WXL",
+   "name": "CB2A4-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    43.980769230769226,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MRWMQ8U$_D77NSAA905PX",
+   "name": "CB2A4-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    40.44230769230769,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    44.480769230769226,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MDLYROLQ83KBH_SXQ77B6",
+   "name": "CB2A4-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.90384615384616,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    40.94230769230769,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0Y_1CVEX2IZT9NP0AOX5SS",
+   "name": "CB2A4-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    33.36538461538461,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    37.40384615384616,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UPCXINH0WVSAZYQ22E15N",
+   "name": "CB2A4-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    29.82692307692308,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    33.86538461538462,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "30O_I9O41YYV9OGU7I6YZD",
+   "name": "CB2A4-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    26.28846153846154,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    30.32692307692308,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "09WXT7VHF_KRWJTG4GK2L3",
+   "name": "CB2A5-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    64.3269230769231,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1WJ$MVM7S4505Y08M5DZTP",
+   "name": "CB2A5-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.903846153846146,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    64.82692307692308,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1WWLHUPLSISJIDBX18_Q_L",
+   "name": "CB2A5-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    55.48076923076923,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    60.40384615384615,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "34U5X3PQWAWX3SUSPB34TU",
+   "name": "CB2A5-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    55.98076923076924,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2CBOVS7TKYWJWIS5LHR657",
+   "name": "CB2A5-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    46.63461538461539,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "21NI4UDYTMIP4L7TN45PSH",
+   "name": "CB2A5-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    47.13461538461539,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1BX727T4LDN8RMEWVTEZK_",
+   "name": "CB2A5-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    37.78846153846153,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "33L3JSIDHEH2C_17JWAJDS",
+   "name": "CB2A5-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    33.36538461538461,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    38.28846153846153,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0W9TU73LV1GUT2X_UIGKAD",
+   "name": "CB2A5-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    28.942307692307686,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    33.86538461538461,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "339OOD2D1VWVT56SWM6GZ1",
+   "name": "CB2A5-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    24.519230769230766,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    29.442307692307686,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "28YW9WS0_YQNO1VHIAXXUU",
+   "name": "CB2A5-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    20.09615384615384,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    25.019230769230766,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TKRT1N01MT7UH9BKDSDBH",
+   "name": "CB2A5-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    15.673076923076927,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    20.59615384615384,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3FZYEZO_Y73CHFJIA6PDQ4",
+   "name": "CB2A5-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    64.3269230769231,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0TAVPKNNWF08KJNHCLSDWV",
+   "name": "CB2A5-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    59.903846153846146,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    64.82692307692308,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "35F5NRSYSZGAQ0PRUKCOSU",
+   "name": "CB2A5-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    55.48076923076923,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    60.40384615384615,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2AL1SCI73$$ENP87HCCL0D",
+   "name": "CB2A5-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    51.05769230769231,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    55.98076923076924,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1C1U4DYB3S6N8XI3FLD3VY",
+   "name": "CB2A5-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    46.63461538461539,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    51.55769230769231,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06Q3$NI0VLQWKSHIQC2D1M",
+   "name": "CB2A5-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    47.13461538461539,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2KI4RLSJIO5SMJC72BEUD9",
+   "name": "CB2A5-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    37.78846153846153,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3EP5678GWD7993NGL$TCUK",
+   "name": "CB2A5-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    33.36538461538461,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    38.28846153846153,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2P5GIAETAEJDVHNK4_U58V",
+   "name": "CB2A5-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    28.942307692307686,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    33.86538461538461,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "31UCWDW9AJTK5BGVH4MZU1",
+   "name": "CB2A5-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    24.519230769230766,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    29.442307692307686,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2GTWW2YDAIKYXTZX_QQ5SS",
+   "name": "CB2A5-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    20.09615384615384,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    25.019230769230766,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "06FW$6EW4R5KIA1HFE03_H",
+   "name": "CB2A5-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    15.673076923076927,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    20.59615384615384,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "04EQ2G5P7KU$T0FKWNQ4EF",
+   "name": "CB2A6-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.442307692307686,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "331NJ4PXS21OD00U8P1H1W",
+   "name": "CB2A6-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2KLG9H88ODIIOEDO65LACE",
+   "name": "CB2A6-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.826923076923066,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "13QO16A4Y80EDN9H61Y4JB",
+   "name": "CB2A6-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    53.326923076923066,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "022ECP7G08LAF88R4W4XBP",
+   "name": "CB2A6-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1P194IVMPLL9BBWD$DSTB_",
+   "name": "CB2A6-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.903846153846146,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3C3VXO58QKPVAVO_7OSKW0",
+   "name": "CB2A6-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    31.59615384615385,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    37.403846153846146,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1SBXQO6$IIX48KZD01F8TB",
+   "name": "CB2A6-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    26.28846153846154,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    32.09615384615385,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Z9OQJM55MUPMR__7$JLEO",
+   "name": "CB2A6-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    20.980769230769226,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    26.78846153846154,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39U8XBOB$$LSB3C2N5X7U8",
+   "name": "CB2A6-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    15.673076923076927,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    21.480769230769226,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "083S97$P75VQPK1QDRS4QR",
+   "name": "CB2A6-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    10.365384615384613,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    16.173076923076927,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1QI333FMIW4Z83_V$_C66I",
+   "name": "CB2A6-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    5.0576923076922995,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    10.865384615384613,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IJSWXA5YXBHC5095BEHXN",
+   "name": "CB2A6-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    63.442307692307686,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    69.25,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "239PNM3DPPRG6H2RKFZXF6",
+   "name": "CB2A6-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    58.13461538461539,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    63.94230769230769,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0_ZKT66WMAPHG9O$WK6V73",
+   "name": "CB2A6-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    52.826923076923066,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    58.63461538461539,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3DZSKDMJXTQFAFZ73LKL$6",
+   "name": "CB2A6-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    47.519230769230774,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    53.326923076923066,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "02LFO20LVZMSQ6J510_9E4",
+   "name": "CB2A6-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    42.21153846153847,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    48.019230769230774,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IC8XMNQFU6X04KW0PQ0_F",
+   "name": "CB2A6-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    36.903846153846146,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    42.71153846153847,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2U470O9ZOSZJXAVC$87LI5",
+   "name": "CB2A6-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    31.59615384615385,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    37.403846153846146,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1O0W0HQ317GUB63CM_5ZC0",
+   "name": "CB2A6-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    26.28846153846154,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    32.09615384615385,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0AUTEXSQHWFDL1$OMTLDO1",
+   "name": "CB2A6-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    20.980769230769226,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    26.78846153846154,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "005SUGRNUQF0NUT_XNLTRC",
+   "name": "CB2A6-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    15.673076923076927,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    21.480769230769226,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TO1EG31TULURFKL88F1GG",
+   "name": "CB2A6-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    10.365384615384613,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    16.173076923076927,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3F5YSRO8JIA_PJ1$I8R40U",
+   "name": "CB2A6-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    5.0576923076922995,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    10.865384615384613,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "18FPUKY3DMM50Y0G8MA5V3",
+   "name": "CB2B1-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    77.78846153846155,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0I2Q_HANIX53SM0ZEVRM75",
+   "name": "CB2B1-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    77.28846153846153,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    86.32692307692308,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1UOKI78SI757R63187_2$8",
+   "name": "CB2B1-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    85.82692307692307,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    94.86538461538461,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I7D10J7V31O0GTPZSYOVY",
+   "name": "CB2B1-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    94.36538461538461,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1MOSSYA33FMQJ2H4W3UP3G",
+   "name": "CB2B1-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    111.94230769230768,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1DNY1S$8$_$WRBK41GJEUZ",
+   "name": "CB2B1-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    111.44230769230768,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Q4QCFVU872PHA1CATE$43",
+   "name": "CB2B1-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    129.01923076923077,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0BBW6X_QZ9SEOLSSTK0LMR",
+   "name": "CB2B1-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    128.51923076923077,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1SL6H8XUJLF5CQMHN2RVPC",
+   "name": "CB2B1-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    146.09615384615387,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1HP7D3Y97NA5L5_C7_52CA",
+   "name": "CB2B1-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    145.5961538461538,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "02R4D2MPMSNX9$NIMU$K_0",
+   "name": "CB2B1-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    163.1730769230769,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "30D9$9XG_D4QGXGL68J08N",
+   "name": "CB2B1-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    162.6730769230769,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2XEO84UKRQTGSTJH8VK3MS",
+   "name": "CB2B1-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    77.78846153846155,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2Y7Y5D1EWP1WIV$G1RJ5X7",
+   "name": "CB2B1-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    77.28846153846153,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    86.32692307692308,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2X8UWSNH7W6PHZ98UXQPHN",
+   "name": "CB2B1-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    85.82692307692307,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    94.86538461538461,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27IOT11SX9EFYKHDKCFXNL",
+   "name": "CB2B1-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    94.36538461538461,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26METOS8DXT3GHHT9HUX3C",
+   "name": "CB2B1-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    111.94230769230768,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "09VVY5CAP6VQM0WHPD0LLE",
+   "name": "CB2B1-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    111.44230769230768,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1E_6GOWZ2SQ1LN_67KE269",
+   "name": "CB2B1-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    129.01923076923077,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1FA199RPRQ3479VDY91UC1",
+   "name": "CB2B1-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    128.51923076923077,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0PZ2ORIL3EZ6X_UYBZGDZ$",
+   "name": "CB2B1-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    146.09615384615387,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0D2G0OXNY41T9W$44UFN57",
+   "name": "CB2B1-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    145.5961538461538,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "09F74N7PRNA2OFS7__J0YO",
+   "name": "CB2B1-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    163.1730769230769,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "066NEZKIM42H0$C$1ZAA4X",
+   "name": "CB2B1-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    162.6730769230769,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "30XNZ$RZ3SBLY$$KCEFITC",
+   "name": "CB2B2-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    86.3269230769231,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1F_B$E6M3G1X6SVXYMAWWQ",
+   "name": "CB2B2-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    85.82692307692307,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "14DBH9138UM2WYAFE6FQL9",
+   "name": "CB2B2-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "02ECOBLTNCYY0_B35HBFT9",
+   "name": "CB2B2-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2MDHRQLG_GLP75F$3_TGUV",
+   "name": "CB2B2-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2NJW7E6$PJ0SFGDRVIDUS1",
+   "name": "CB2B2-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I9ZYJTD3LU39WLI6$DF$W",
+   "name": "CB2B2-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    188.78846153846155,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0QCGI_5DUVVHV254$IL33D",
+   "name": "CB2B2-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    188.28846153846155,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    205.86538461538464,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1RTXP_I24JUG0BH4AOGFOG",
+   "name": "CB2B2-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    205.36538461538458,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2R$AZ_33DAOMEEQ6_3RLUY",
+   "name": "CB2B2-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    240.01923076923077,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2ZA8HVLUC3BWJYGWB0WEO4",
+   "name": "CB2B2-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923072,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    257.0961538461538,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0ZO82NAREZEPE9_27HBPCS",
+   "name": "CB2B2-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    256.5961538461538,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Y8G222AWFSRLR8TTBD36N",
+   "name": "CB2B2-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    86.3269230769231,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1R762T0M9188U778EXKXP6",
+   "name": "CB2B2-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    85.82692307692307,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "050GDK7MX6YGRH6Y28KXU0",
+   "name": "CB2B2-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2DC$I6Q6_CI9N$JHJ6VRZ4",
+   "name": "CB2B2-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26UOYJV4U65MNJ96JQSEBC",
+   "name": "CB2B2-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "15FWCS9AOOWJDJAREBX5SH",
+   "name": "CB2B2-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1E6Q$HLLLQ_T46KKOIB_LO",
+   "name": "CB2B2-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    188.78846153846155,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2OTP7RI224ZIH74_KTF13O",
+   "name": "CB2B2-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    188.28846153846155,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    205.86538461538464,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0M$NRWZG50$APR1XHYP9NQ",
+   "name": "CB2B2-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    205.36538461538458,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1_EOXRJVR4EN8J$TRXFZOW",
+   "name": "CB2B2-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    240.01923076923077,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2W5LBB$NRAJ2C88NEZU_M4",
+   "name": "CB2B2-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923072,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    257.0961538461538,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0DN0L87H90P_FKL0S_KS14",
+   "name": "CB2B2-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    256.5961538461538,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2$AE8SVAW4WOY_N0WEVMDJ",
+   "name": "CB2B3-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    94.86538461538461,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "05I5GM69CBTV153AZBAE9S",
+   "name": "CB2B3-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    94.36538461538461,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2I80ON7$F3OTNE5FODD6N7",
+   "name": "CB2B3-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076924,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    146.09615384615387,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2M8Z2J4RSLK8BXAGHM8CMD",
+   "name": "CB2B3-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    145.5961538461538,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1XLG3EK1U21KF5YI9CRE7O",
+   "name": "CB2B3-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    197.3269230769231,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2SIAFX8U8GR0ASTP4ZN4AU",
+   "name": "CB2B3-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    196.82692307692304,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0DP93M0G6962DQMM_ZKTT5",
+   "name": "CB2B3-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    248.55769230769232,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "36$58PLTIZT0XQPD$IDI7V",
+   "name": "CB2B3-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    248.05769230769226,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0BTXX4IG1Z4QUT_Y7OX8LG",
+   "name": "CB2B3-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    299.78846153846155,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3A__EX8GPGQJF8O$3_S6SE",
+   "name": "CB2B3-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    299.28846153846155,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    325.4038461538461,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3CXYPGPXZ2IX556QMJRY3_",
+   "name": "CB2B3-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.90384615384613,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    351.0192307692308,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "32KU003UWZHV_GV$H3DJE3",
+   "name": "CB2B3-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    350.51923076923083,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    376.63461538461536,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "27778PGGF35R8J0IRI8310",
+   "name": "CB2B3-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    94.86538461538461,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "39X9ASR15_0IK6BTJKQTMN",
+   "name": "CB2B3-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    94.36538461538461,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "09IKT6NXTF099Y$XXD5PRS",
+   "name": "CB2B3-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076924,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    146.09615384615387,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "19IX5R8OFJ0NP3CJ_EKYWO",
+   "name": "CB2B3-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    145.5961538461538,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2RRHV9AKO5I62$QBU9S29N",
+   "name": "CB2B3-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    197.3269230769231,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0URL2JO971Z$264TFS5UL0",
+   "name": "CB2B3-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    196.82692307692304,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0XGP5E8VLDDU6L6BWRZG17",
+   "name": "CB2B3-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    248.55769230769232,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2MXTE4L$L$BQCOGV_BW5ZL",
+   "name": "CB2B3-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    248.05769230769226,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1Y$KULAJ4L6Z6PMH2MCJMH",
+   "name": "CB2B3-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    299.78846153846155,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2L$WI78DDP3EB5UII2KREN",
+   "name": "CB2B3-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    299.28846153846155,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    325.4038461538461,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2PDM5KVH3H2NEEPN2FG0HP",
+   "name": "CB2B3-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.90384615384613,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    351.0192307692308,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "00Z0YZK_F25P_HPB_VNMYG",
+   "name": "CB2B3-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    350.51923076923083,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    376.63461538461536,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1XP78DYSWJI0OGLDYPWQ5Q",
+   "name": "CB2B4-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2976J1ME1SB_NDGFGO5ASJ",
+   "name": "CB2B4-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0IMVCGQEBEECSWJH1900$J",
+   "name": "CB2B4-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1$LI1F9OSVF3PSIJ6YH1R9",
+   "name": "CB2B4-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    205.86538461538464,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2HP2STWFDXMZ30$J5ZXQWZ",
+   "name": "CB2B4-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    205.3653846153846,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    240.0192307692308,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0HFR$ML9YWGN76PV1ZVGQA",
+   "name": "CB2B4-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923083,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "36$MZVNF7C$1D12Y2I4ME1",
+   "name": "CB2B4-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    308.3269230769231,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "16$TR$Q04I5F6Z_U0TZFIC",
+   "name": "CB2B4-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    307.8269230769231,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    342.4807692307693,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1RA53LIV$DLRCR2YSY3VQU",
+   "name": "CB2B4-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    341.9807692307692,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    376.6346153846154,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0U9WOT86GAHXTOLXILVLUS",
+   "name": "CB2B4-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    376.1346153846154,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    410.7884615384616,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2_5FLBUSB6CE069FXI_Q6P",
+   "name": "CB2B4-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    410.2884615384616,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    444.9423076923077,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0KCELZK92Q2XME9AFF4KLH",
+   "name": "CB2B4-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    444.4423076923077,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    479.09615384615387,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1LHI0GX29$3R_5XU2XU1FS",
+   "name": "CB2B4-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    103.40384615384616,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0JL5_WCQZGOV520WKVM3P_",
+   "name": "CB2B4-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    102.90384615384616,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    137.55769230769232,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3B4LU2GCOD0JYEC445D8MX",
+   "name": "CB2B4-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    137.05769230769232,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "37$MV1$127K5UF$VESWY5Y",
+   "name": "CB2B4-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    205.86538461538464,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "28BLQ$ZEK63FI7XU84GKQG",
+   "name": "CB2B4-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    205.3653846153846,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    240.0192307692308,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0G17OORJ14Z8TVXA0XBVB4",
+   "name": "CB2B4-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923083,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2JZJWHO03MBOM$PDK3U_9F",
+   "name": "CB2B4-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    308.3269230769231,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "22MGC$ZTFX01$0YVSL1OCM",
+   "name": "CB2B4-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    307.8269230769231,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    342.4807692307693,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2Q2G46U0R2XG828TJIUYXX",
+   "name": "CB2B4-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    341.9807692307692,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    376.6346153846154,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1AQK6UHIFLNGTC_BFXA$8F",
+   "name": "CB2B4-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    376.1346153846154,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    410.7884615384616,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0$BA70EU88UB6PSYVHESGL",
+   "name": "CB2B4-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    410.2884615384616,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    444.9423076923077,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2890EVS4E2A6WUX1ZBVLMT",
+   "name": "CB2B4-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    444.4423076923077,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    479.09615384615387,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2L4JFWL24C1R6KO9BCWA49",
+   "name": "CB2B5-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    111.94230769230768,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "26HY4K1JVV4UP3HOENJ3T9",
+   "name": "CB2B5-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    111.44230769230768,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2MC_VAVDER80PL9147$KUZ",
+   "name": "CB2B5-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    197.3269230769231,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1LRU7566P3C63G5X69VTNY",
+   "name": "CB2B5-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    196.82692307692307,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    240.01923076923075,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1I1ICZDV36NYC0UH4JJEHG",
+   "name": "CB2B5-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923072,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    282.71153846153845,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UZ7R9GHJYUB5B$4BLIVXR",
+   "name": "CB2B5-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    282.21153846153845,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    325.4038461538461,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0MW$ZDA85DV3K6MYR5IXEI",
+   "name": "CB2B5-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.9038461538462,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    368.0961538461538,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0PCIMH78LMHZBESV3DQ4X7",
+   "name": "CB2B5-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    367.5961538461538,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    410.78846153846143,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2$5B4M5WXWPUI5USYX7AH$",
+   "name": "CB2B5-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    410.2884615384615,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    453.4807692307692,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2EX59CBM0QFPAUN2IGILTK",
+   "name": "CB2B5-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    452.9807692307693,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    496.1730769230769,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0K$X4DCG_EJ6K65ENRVX1R",
+   "name": "CB2B5-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    495.6730769230769,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    538.8653846153845,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1IP7AAP549MQHGP0CY_RNU",
+   "name": "CB2B5-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    538.3653846153845,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    581.5576923076922,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2LCMA_1B34ZDQKY10X__UJ",
+   "name": "CB2B5-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    111.94230769230768,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "05LZIZZOICZKQLPHXW1U$S",
+   "name": "CB2B5-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    111.44230769230768,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    154.63461538461536,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "193QL0UKZ9LJA7SRPPFJ0P",
+   "name": "CB2B5-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    154.13461538461536,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    197.3269230769231,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "254TAQ58LT6F$G8NVCBP3M",
+   "name": "CB2B5-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    196.82692307692307,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    240.01923076923075,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2KH9WTB_9P$0XBY5EEIG77",
+   "name": "CB2B5-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    239.51923076923072,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    282.71153846153845,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IXBU2987W$L$HLMTDE_1U",
+   "name": "CB2B5-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    282.21153846153845,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    325.4038461538461,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2VWP4AEBL5QT69RTJB6SI$",
+   "name": "CB2B5-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.9038461538462,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    368.0961538461538,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "28JFY6YJPUTL8MTY_NP94O",
+   "name": "CB2B5-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    367.5961538461538,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    410.78846153846143,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2OBBFHT25YLMEO1AG3VTTB",
+   "name": "CB2B5-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    410.2884615384615,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    453.4807692307692,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1TW_HK6E1H9QN0N7$03SER",
+   "name": "CB2B5-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    452.9807692307693,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    496.1730769230769,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0F7QU60EGSV9A90J19B1NN",
+   "name": "CB2B5-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    495.6730769230769,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    538.8653846153845,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0V015ACNL$G6FD8BUKTU_T",
+   "name": "CB2B5-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    538.3653846153845,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    581.5576923076922,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UXHXSHVIRG3O7EUX5ME6A",
+   "name": "CB2B6-1-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    -13.25,
+    50.25
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    -12.75,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0KSC1HI$776STAF9Q4T4KL",
+   "name": "CB2B6-1-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    -13.25,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    -12.75,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2K6AXJGZEDNLE62KLF16BD",
+   "name": "CB2B6-1-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    -13.25,
+    45.65
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    -12.75,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1A83ID6KI_JIBMHD63PDYS",
+   "name": "CB2B6-1-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    -13.25,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    -12.75,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2SZHPZNMIMZHFLGWNDL8GL",
+   "name": "CB2B6-1-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    -13.25,
+    41.05
+   ],
+   "bbox_max": [
+    325.4038461538462,
+    -12.75,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1K6QTXNZYSCRZKXE3YH5ZM",
+   "name": "CB2B6-1-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.9038461538461,
+    -13.25,
+    38.75
+   ],
+   "bbox_max": [
+    376.63461538461536,
+    -12.75,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3D$8W68OH0MOK0QS8WOKTM",
+   "name": "CB2B6-1-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    376.13461538461536,
+    -13.25,
+    36.45
+   ],
+   "bbox_max": [
+    427.86538461538464,
+    -12.75,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1F56$69TA1BME8LOYR2E2V",
+   "name": "CB2B6-1-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    427.3653846153845,
+    -13.25,
+    34.15
+   ],
+   "bbox_max": [
+    479.0961538461538,
+    -12.75,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "17B8C3XL5PCSTRE$CQYEA5",
+   "name": "CB2B6-1-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    478.5961538461538,
+    -13.25,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    530.3269230769231,
+    -12.75,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1WILRZ5WY47D5MNFF5BT$A",
+   "name": "CB2B6-1-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    529.8269230769231,
+    -13.25,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    581.5576923076922,
+    -12.75,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0UECOWBQBYV7_Y9$AC_FXI",
+   "name": "CB2B6-1-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    581.0576923076923,
+    -13.25,
+    27.25
+   ],
+   "bbox_max": [
+    632.7884615384615,
+    -12.75,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "04180J3OWRKPQQ9XQVO3N4",
+   "name": "CB2B6-1-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    632.2884615384617,
+    -13.25,
+    24.95
+   ],
+   "bbox_max": [
+    684.0192307692307,
+    -12.75,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3H6UL78K5C3LFL2J44EX6O",
+   "name": "CB2B6-2-1",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    68.75,
+    12.75,
+    50.25
+   ],
+   "bbox_max": [
+    120.48076923076923,
+    13.25,
+    53.05
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "242NTUGJ71B2WANHWRQH7$",
+   "name": "CB2B6-2-2",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    119.98076923076923,
+    12.75,
+    47.949999999999996
+   ],
+   "bbox_max": [
+    171.71153846153845,
+    13.25,
+    50.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0L4TKKW9K9NVRLKEPK3SMP",
+   "name": "CB2B6-2-3",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    171.21153846153845,
+    12.75,
+    45.65
+   ],
+   "bbox_max": [
+    222.94230769230768,
+    13.25,
+    48.449999999999996
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2LNS7CTD9X9PS6W3ORP2W3",
+   "name": "CB2B6-2-4",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    222.44230769230768,
+    12.75,
+    43.349999999999994
+   ],
+   "bbox_max": [
+    274.1730769230769,
+    13.25,
+    46.15
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "218SL6HYQXRMWE_B8NFAIV",
+   "name": "CB2B6-2-5",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    273.6730769230769,
+    12.75,
+    41.05
+   ],
+   "bbox_max": [
+    325.4038461538462,
+    13.25,
+    43.849999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3243MH9J28W12L83DUU97G",
+   "name": "CB2B6-2-6",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    324.9038461538461,
+    12.75,
+    38.75
+   ],
+   "bbox_max": [
+    376.63461538461536,
+    13.25,
+    41.55
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2_22QZKSP6U0OLGHJY9$OV",
+   "name": "CB2B6-2-7",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    376.13461538461536,
+    12.75,
+    36.45
+   ],
+   "bbox_max": [
+    427.86538461538464,
+    13.25,
+    39.25
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1CO2P6XAN4XT$KX0TUZETX",
+   "name": "CB2B6-2-8",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    427.3653846153845,
+    12.75,
+    34.15
+   ],
+   "bbox_max": [
+    479.0961538461538,
+    13.25,
+    36.95
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "35$WYPG7AJKJQF$11H8LOQ",
+   "name": "CB2B6-2-9",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    478.5961538461538,
+    12.75,
+    31.849999999999994
+   ],
+   "bbox_max": [
+    530.3269230769231,
+    13.25,
+    34.65
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1EN7MPUCH_PDKUZ4SENHRY",
+   "name": "CB2B6-2-10",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    529.8269230769231,
+    12.75,
+    29.549999999999997
+   ],
+   "bbox_max": [
+    581.5576923076922,
+    13.25,
+    32.349999999999994
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "3HOSQX_$BPFFFD4$JA8HBC",
+   "name": "CB2B6-2-11",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    581.0576923076923,
+    12.75,
+    27.25
+   ],
+   "bbox_max": [
+    632.7884615384615,
+    13.25,
+    30.049999999999997
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2IWTCRGZR$CRY3AJA1C_KE",
+   "name": "CB2B6-2-12",
+   "ifc_type": "IfcMember",
+   "member": "cable",
+   "bbox_min": [
+    632.2884615384617,
+    12.75,
+    24.95
+   ],
+   "bbox_max": [
+    684.0192307692307,
+    13.25,
+    27.75
+   ],
+   "extra": {
+    "bbox_source": "geometry"
    }
   },
   {

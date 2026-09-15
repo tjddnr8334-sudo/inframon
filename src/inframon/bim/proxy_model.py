@@ -106,12 +106,15 @@ def bridge_elements(*, length_m: float, width_m: float, n_spans: int = 1,
                     clearance_m: float = 5.0, deck_depth_m: float | None = None,
                     deck_thickness_m: float = DEFAULT_DECK_THICKNESS_M,
                     max_span_m: float | None = None, span_layout: str = "auto",
+                    bridge_type: str = "girder", superstructure: bool = True,
                     name: str = "bridge") -> list[Element]:
     """실측 제원 → 부재 목록(IFC 로컬 좌표).
 
     length_m·width_m·n_spans·clearance_m(형하고)는 전국교량표준데이터에서 온다.
     deck_depth_m(형고)는 모르면 경간의 1/20 로 둔다.
     `span_layout` 은 교각 배치 — `span_edges()` 참고(기본 auto: 실측이 있으면 비등간격).
+    `bridge_type` 이 사장·현수·아치·트러스면 그 형식의 상부구조까지 세운다
+    (`superstructure_elements()`). `superstructure=False` 로 끄면 상판+교각만 나온다.
     """
     if length_m <= 0 or width_m <= 0:
         raise ValueError("연장·폭이 있어야 부재를 세울 수 있습니다.")
@@ -148,7 +151,127 @@ def bridge_elements(*, length_m: float, width_m: float, n_spans: int = 1,
     for i, xe in enumerate((x0 - ABUTMENT_LEN_M, x1), start=1):
         add("IfcBuildingElementProxy", f"A{i}", "abutment",
             (xe, y0, 0.0), (xe + ABUTMENT_LEN_M, y1, z_deck_bot))
+
+    # 형식별 상부구조 — 사장교는 주탑·케이블, 아치교는 아치리브, 트러스교는 상현재
+    if superstructure:
+        superstructure_elements(add, bridge_type=(bridge_type or "girder"),
+                                length_m=length_m, width_m=width_m,
+                                main_span_m=float(max_span_m or 0.0),
+                                z_deck_bot=z_deck_bot, z_deck_top=z_deck_top)
     return els
+
+
+# 상부구조를 따로 세우는 형식 — 나머지(거더·박스·슬래브·라멘)는 상판+교각으로 충분하다.
+SUPERSTRUCTURE_TYPES = ("cable_stayed", "suspension", "arch", "truss")
+# 결합에 쓰는 부재 — 상부구조(주탑·케이블·아치·트러스)는 평면에서 데크와 겹쳐
+# 측점을 뺏으므로 여기서 뺀다(associate 는 기본이 2D 최근접이다).
+BIND_MEMBERS = ("deck", "pier", "abutment", "bearing")
+
+
+CABLE_SEGMENTS = 12          # 케이블 한 본을 몇 토막으로 — 토막이 굵으면 계단으로 보인다
+
+
+def _seg_boxes(add, base: str, member: str, ifc_type: str,
+               pts: list[tuple[float, float, float]], half: float) -> None:
+    """꺾은선을 짧은 AABB 사슬로 — 경사재(케이블·아치리브)는 AABB 하나로 못 그린다.
+
+    토막 하나의 AABB 는 그 토막의 **가로×세로를 모두 덮는 상자**다. 그래서 토막이
+    길면 케이블이 굵은 계단처럼 보인다 — 토막 수로 두께가 정해지는 셈이라 넉넉히 쪼갠다.
+    """
+    for k, (p, q) in enumerate(zip(pts[:-1], pts[1:]), start=1):
+        lo = [min(p[i], q[i]) - half for i in range(3)]
+        hi = [max(p[i], q[i]) + half for i in range(3)]
+        add(ifc_type, f"{base}-{k}", member, lo, hi)
+
+
+def superstructure_elements(add, *, bridge_type: str, length_m: float, width_m: float,
+                            main_span_m: float, z_deck_bot: float,
+                            z_deck_top: float) -> str:
+    """형식에 맞는 상부구조 부재를 세운다 — 사장교는 주탑·케이블, 아치교는 아치리브.
+
+    지금까지 모든 교량을 **상판+교각 상자**로만 세웠다. 그러면 사장교(월드컵·올림픽)도
+    트러스교(성수)도 아치교(한강·암사·서강)도 전부 같은 모양이 나온다 — 트윈이라고
+    부르기 어렵다. 형식은 이미 CSV 상부구조형식에서 읽고 있으니(`parse_structure_ko`),
+    그 형식대로 세운다.
+
+    형상은 제원(연장·폭·주경간)에서 유도한 **프록시**다. 실 도면의 케이블 배치·아치
+    라이즈가 아니라 그 형식이 어떤 부재를 갖는지를 보이는 것이고, 산출물에 그렇게 적는다.
+    반환: 무엇을 세웠는지 한 줄.
+    """
+    if bridge_type not in SUPERSTRUCTURE_TYPES:
+        return ""
+    ms = float(main_span_m) if main_span_m and main_span_m > 0 else 0.0
+    if ms <= 0:
+        if bridge_type == "truss":
+            ms = length_m / 3.0          # 트러스는 전 연장을 덮으므로 주경간이 형상을 안 정한다
+        else:
+            # 사장·현수·아치는 **주경간이 형상 그 자체**다. 실측이 없다고 연장÷3 으로
+            # 지어내면 암사대교 아치 라이즈가 68 m(실제의 두 배 이상)로 나온다.
+            # 모르는 것은 세우지 않는다.
+            return (f"{bridge_type} — 최대경간장 실측이 없어 형식 상부구조를 세우지 않는다"
+                    "(주경간이 형상을 정하는 형식이라 추정으로 만들지 않는다)")
+    ms = min(ms, length_m * 0.95)
+    hw = width_m / 2
+    y_leg = max(hw - 2.0, hw * 0.55)             # 주탑 다리·아치 리브의 횡방향 위치
+
+    if bridge_type in ("cable_stayed", "suspension"):
+        h_p = max(0.20 * ms, 14.0)               # 데크 위 주탑 높이
+        z_top = z_deck_top + h_p
+        n_c = 6                                  # 한 주탑 한 쪽 케이블 수
+        for s, xp in ((1, -ms / 2), (2, ms / 2)):
+            for j, yl in ((1, -y_leg), (2, y_leg)):
+                add("IfcColumn", f"PY{s}-{j}", "pylon",
+                    (xp - 2.0, yl - 2.0, 0.0), (xp + 2.0, yl + 2.0, z_top))
+            add("IfcBeam", f"PY{s}X", "pylon",           # 주탑 가로보
+                (xp - 1.2, -y_leg - 2.0, z_top - 3.0), (xp + 1.2, y_leg + 2.0, z_top))
+            for d in (-1, 1):                            # 양 방향 케이블
+                reach = (ms / 2) if (xp * d < 0) else (length_m / 2 - abs(xp))
+                if reach <= 5:
+                    continue
+                for i in range(1, n_c + 1):
+                    xa = xp + d * reach * i / (n_c + 0.5)
+                    if abs(xa) > length_m / 2:
+                        continue
+                    for j, yl in ((1, -y_leg), (2, y_leg)):
+                        n_s = CABLE_SEGMENTS
+                        pts = [(xp + (xa - xp) * t / n_s, yl,
+                                z_top + (z_deck_top - z_top) * t / n_s)
+                               for t in range(n_s + 1)]
+                        _seg_boxes(add, f"CB{s}{'AB'[d > 0]}{i}-{j}", "cable",
+                                   "IfcMember", pts, 0.25)
+        kind = "사장교" if bridge_type == "cable_stayed" else "현수교"
+        return (f"{kind} — 주탑 2기(데크 위 {h_p:.0f} m) · 케이블 {8 * n_c}본 "
+                f"(주경간 {ms:.0f} m 기준)")
+
+    if bridge_type == "arch":
+        rise = max(0.18 * ms, 8.0)
+        n_seg, n_h = 24, 9
+        for j, yl in ((1, -y_leg), (2, y_leg)):
+            pts = []
+            for k in range(n_seg + 1):
+                x = -ms / 2 + ms * k / n_seg
+                z = z_deck_top + rise * (1 - (2 * x / ms) ** 2)
+                pts.append((x, yl, z))
+            _seg_boxes(add, f"AR{j}", "arch", "IfcBuildingElementProxy", pts, 0.8)
+            for i in range(1, n_h + 1):          # 행어(수직재)
+                x = -ms / 2 + ms * i / (n_h + 1)
+                z = z_deck_top + rise * (1 - (2 * x / ms) ** 2)
+                add("IfcMember", f"HG{j}-{i}", "arch",
+                    (x - 0.3, yl - 0.3, z_deck_top), (x + 0.3, yl + 0.3, z))
+        return f"아치교 — 아치리브 2련(라이즈 {rise:.0f} m) · 행어 {2 * n_h}본"
+
+    # truss — 상현재 + 수직재(사재는 프록시에서 생략)
+    h_t = max(0.10 * ms, 6.0)
+    z_top = z_deck_top + h_t
+    n_v = max(4, int(length_m / max(ms / 4, 20.0)))
+    for j, yl in ((1, -y_leg), (2, y_leg)):
+        add("IfcMember", f"TC{j}", "truss",
+            (-length_m / 2, yl - 0.5, z_top - 1.0), (length_m / 2, yl + 0.5, z_top))
+        for i in range(n_v + 1):
+            x = -length_m / 2 + length_m * i / n_v
+            add("IfcMember", f"TV{j}-{i}", "truss",
+                (x - 0.4, yl - 0.4, z_deck_top), (x + 0.4, yl + 0.4, z_top))
+    return f"트러스교 — 상현재 2련(데크 위 {h_t:.0f} m) · 수직재 {2 * (n_v + 1)}본"
 
 
 def elements_from_profile(profile, *, name: str = "bridge",
@@ -172,7 +295,9 @@ def elements_from_profile(profile, *, name: str = "bridge",
                            clearance_m=float(clearance),
                            deck_depth_m=getattr(profile, "section_depth_m", None),
                            max_span_m=float(ms) if ms else None,
-                           span_layout=span_layout, name=name)
+                           span_layout=span_layout,
+                           bridge_type=str(getattr(profile, "bridge_type", "") or "girder"),
+                           name=name)
 
 
 def save_elements_json(elements: list[Element], out_path: str | Path, *,
