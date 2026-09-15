@@ -180,25 +180,49 @@ def find_spec_csvs(root: str | Path = "data") -> list[Path]:
     return found
 
 
+# 본교가 아닌 부속 구조물. 한 교량이 램프·접속교·연결로로 여러 줄 올라와 있고, 본교보다
+# 가까운 줄이 흔하다 — 월드컵대교(주경간 855 m 사장교)에서 267 m 거리의
+# '월드컵대교 북단연결로 RAMP-E교'(352 m)가 잡혀 데크선이 북단 접속부 357 m 로 갔다.
+_AUX = ("램프", "RAMP", "U턴", "IC", "접속교", "연결로", "고가차도", "측도")
+
+
+def _is_aux(spec_name: str, want: str) -> bool:
+    """부속 구조물 이름인가 — 조회 이름 자체에 그 낱말이 있으면 부속이 아니다."""
+    return any(k in spec_name and k not in want for k in _AUX)
+
+
 def nearest_spec(specs: list[BridgeSpec], lat: float, lon: float, *,
                  name: str | None = None, max_km: float = 0.3,
                  name_max_km: float = 5.0) -> BridgeSpec | None:
-    """좌표(+이름)로 제원을 찾는다. 이름이 맞으면 좀 더 멀어도 받아들인다."""
+    """좌표(+이름)로 제원을 찾는다. 이름이 맞으면 좀 더 멀어도 받아들인다.
+
+    이름이 맞는 줄이 여럿이면 **가장 가까운 것이 아니라 본교**를 고른다 — 램프·접속교를
+    빼고 남은 것 중 **가장 긴 줄**이 본교다. 제원(연장·폭)이 하류의 데크선 선택 기준이라,
+    여기서 램프가 잡히면 교량 전체가 램프가 된다.
+    """
     want = (name or "").strip()
-    best = named = None
-    bestd = namedd = float("inf")
+    best = None
+    bestd = float("inf")
     k = math.cos(math.radians(lat))
+    hits: list[tuple[float, BridgeSpec]] = []
     for s in specs:
         d = math.hypot((s.lat - lat), (s.lon - lon) * k) * 111_320.0
         if d < bestd:
             bestd, best = d, s
-        if want and s.name:
+        if want and s.name and d <= name_max_km * 1000.0:
             n = s.name.strip()
-            if (n in want or want in n) and d < namedd:
-                namedd, named = d, s
-    if named is not None and namedd <= name_max_km * 1000.0:
-        named.dist_m = round(namedd, 1)
-        return named
+            if n in want or want in n:
+                hits.append((d, s))
+    if hits:
+        main = [(d, s) for d, s in hits if not _is_aux(s.name.strip(), want)]
+        pool = main or hits
+        # 본교 = 연장이 가장 긴 줄. 연장이 없는 줄뿐이면 가장 가까운 줄.
+        if any(s.length_m for _, s in pool):
+            d, s = max(pool, key=lambda ds: (ds[1].length_m or 0.0))
+        else:
+            d, s = min(pool, key=lambda ds: ds[0])
+        s.dist_m = round(d, 1)
+        return s
     if best is not None and bestd <= max_km * 1000.0:
         best.dist_m = round(bestd, 1)
         return best

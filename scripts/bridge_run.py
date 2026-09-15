@@ -54,6 +54,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 DECK_SEL_M = 30.0
 DEFAULT_CLEARANCE_M = 6.0
+CLEARANCE_MAX_M = 40.0        # 국내 하천 교량 형하고 상한(잔차고도 폭주 차단)
 FOOTWAY_HALF_M = 1.5
 CRS = "EPSG:5186"
 ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
@@ -127,6 +128,33 @@ def resolve_specs(b: Bridge) -> None:
         note(b, "제원 CSV 에 없음 → OSM 연장으로")
 
 
+def _warn_stack_predates_build(b: Bridge, epochs) -> None:
+    """스택이 준공보다 이른가 — 그러면 교면 PS 가 통째로 버려진다.
+
+    PS 선별은 **첫 쌍의 coherence** 로 한다. 다리가 없던 시절 영상과의 결맞음을 보면
+    교면 화소가 전부 탈락한다. 월드컵대교(주경간교 2021 준공)가 그랬다 — 2018~2025
+    스택에서 데크 ±30 m 안 PS 가 20000점 중 1점이었고 트윈·PINN 이 불가였다.
+    준공 이후(28장)로 다시 쌓으니 54점이 살아났다.
+
+    고치는 법은 SLC 재처리가 아니다 — 언래핑된 간섭도는 그대로 두고 기간만 자르면 된다:
+        python scripts/rebuild_track.py --proc <처리폴더> --out <새 트랙> \\
+            --lat .. --lon .. --since <준공일> --like <기존 트랙>
+    """
+    if epochs is None or len(epochs) == 0:
+        return
+    try:
+        from inframon.public_data import find_bridge_csv, nearest_bridge_profile
+        prof = nearest_bridge_profile(find_bridge_csv("data"), b.lat, b.lon, max_km=0.5)
+        year = int(str((prof.extra or {}).get("completion") or "")[:4])
+    except (TypeError, ValueError, AttributeError):
+        return
+    first = int(min(int(e) for e in epochs)) // 10000
+    if year and first and year > first:
+        note(b, f"스택 시작({first})이 준공({year})보다 이르다 — 다리가 없던 영상과의 "
+                f"결맞음으로 PS 를 고르면 교면이 통째로 탈락한다. 교면 점이 적으면 "
+                f"scripts/rebuild_track.py --since {year}-01-01 로 트랙을 다시 쌓을 것")
+
+
 def _fill_defaults(b: Bridge) -> None:
     """데크선을 못 구했을 때도 트윈·PINN 이 돌 수 있게 — 가정임을 적는다."""
     if b.length_m is None:
@@ -141,11 +169,278 @@ def _fill_defaults(b: Bridge) -> None:
 
 
 # ── ② 데크선 ─────────────────────────────────────────────────────────────
+# 본교가 아닌 부속 구조물 — 표준데이터에 본교 기록이 없는 교량에서 이것들이 대신 잡힌다
+# (천호대교 → '천호대교 북단U턴차로교' 35 m, 양화대교 → '양화대교북단램프교' 59 m).
+# 데크선으로 쓰면 33 m 짜리 선분에 교면 점을 맞추게 되므로 아예 빼는 편이 낫다.
+_NOT_MAIN = ("램프", "RAMP", "U턴", "IC", "접속교", "연결로", "고가차도")
+_NOT_MAIN_OK: tuple[str, ...] = ()              # 이름 자체에 그 낱말이 든 교량이 있으면 여기에
+
+
+def _std_main_record(b: Bridge, *, max_km: float = 3.0):
+    """전국교량표준데이터에서 그 교량의 **본교** 기록.
+
+    이름 매칭 + 최근접으로 고르면 램프교가 걸린다 — 천호대교에서 '천호대교 북단U턴차로교'
+    35 m 가, 양화대교에서 '양화대교북단램프교(F-1)' 59 m 가 잡혔다. 한 이름을 단
+    구조물 중 **가장 긴 것**이 본교다. 반경 안에서 그것을 고른다.
+    """
+    try:
+        import csv as _csv
+
+        from inframon.public_data import bridge_profile_from_record, find_bridge_csv
+        path = find_bridge_csv("data")
+        if not path:
+            return None
+        want = (b.name or "").strip()
+        if not want:
+            return None
+        best, best_len = None, 0.0
+        with open(path, encoding="utf-8-sig") as fh:
+            rows = list(_csv.DictReader(fh))
+        for r in rows:
+            nm = (r.get("교량명") or "").strip()
+            if not nm or not (nm in want or want in nm):
+                continue
+            if any(k in nm for k in _NOT_MAIN) and want not in _NOT_MAIN_OK:
+                continue                         # 램프·IC·U턴차로는 본교가 아니다
+            try:
+                la, lo = float(r["교량시작점위도"]), float(r["교량시작점경도"])
+                L = float(r["교량연장"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            d = math.hypot((lo - b.lon) * math.cos(math.radians(b.lat)), la - b.lat) * 111.32
+            if d <= max_km and L > best_len:
+                best, best_len = r, L
+        return bridge_profile_from_record(best) if best is not None else None
+    except Exception:                            # noqa: BLE001 — CSV 없으면 그냥 없는 것
+        return None
+
+
+def _std_deck(b: Bridge) -> list[list[float]] | None:
+    """전국교량표준데이터의 **교량시점–종점 선분**을 데크선으로.
+
+    한강 장대교는 OSM way 가 토막나 있다 — 한강대교는 '한강대교' 386 m·382 m 두 조각,
+    올림픽대교는 차도가 '강동대로' 915 m 로 잡힌다. 연장(841·1470 m)과 어느 것도
+    맞지 않아 데크선이 반쪽이 되거나 아예 빠진다. 표준데이터는 시점·종점 좌표를
+    실측으로 갖고 있고 그 선분 길이가 연장과 맞으므로, 맞을 때는 이쪽이 더 낫다.
+
+    선분 길이가 등록 연장과 ±35 % 안일 때만 쓴다 — 등록 시점·종점은 접속교를 포함하는
+    일이 있어(한강대교 1005 m vs 연장 841 m) 딱 맞지는 않는다. 차이는 출처에 적어 둔다.
+    직선 2점이라 곡선교는 근사다 — 그 경우 OSM way 가 있으면 OSM 이 낫다(여기는 폴백).
+    """
+    prof = _std_main_record(b)
+    if prof is None:
+        return None
+    e = getattr(prof, "extra", None) or {}
+    pts = [e.get("lat"), e.get("lon"), e.get("lat_end"), e.get("lon_end")]
+    if any(v is None for v in pts):
+        return None
+    la0, lo0, la1, lo1 = (float(v) for v in pts)
+    seg = math.hypot((lo1 - lo0) * math.cos(math.radians(la0)), la1 - la0) * 111_320.0
+    # 검증은 **그 기록 자신의 연장**과 한다. 파트너 CSV 연장과 대면 다른 구조물(접속교·램프)
+    # 값이 기준이 되어 멀쩡한 주경간교를 거부한다 — 월드컵대교가 그랬다(CSV 352 m vs
+    # 주경간교 855 m). 기록 안에서 시점–종점과 연장이 맞으면 그 기록을 믿는다.
+    own = prof.length_m
+    if not own or seg < 20.0 or abs(seg - own) > 0.35 * own:
+        return None
+    if b.length_m and abs(own - b.length_m) > 0.35 * b.length_m:
+        note(b, f"연장이 출처마다 다르다 — 파트너 CSV {b.length_m:.0f} m vs "
+                f"표준데이터 '{prof.name}' {own:.0f} m. 데크선은 표준데이터를 쓰고 연장도 그 값으로 맞춘다")
+        b.length_m, b.n_spans = float(own), None
+    b.sources["deck"] = (f"전국교량표준데이터 '{prof.name}' 시점–종점 선분 {seg:.0f} m "
+                         f"(등록 연장 {own:.0f} m · 차이 {100 * (seg - own) / own:+.0f} %)")
+    return [[la0, lo0], [la1, lo1]]
+
+
+def _to_xy(P: np.ndarray, lat0: float) -> np.ndarray:
+    """위경도 → 로컬 미터(동, 북). 교량 한 개 크기라 평면 근사로 충분하다."""
+    return np.stack([(P[:, 1] - P[0, 1]) * math.cos(math.radians(lat0)) * 111_320,
+                     (P[:, 0] - P[0, 0]) * 111_320], axis=1)
+
+
+def _open_deck(P: np.ndarray, lat0: float) -> tuple[np.ndarray, bool]:
+    """닫힌 way 를 한쪽 차도만 남긴 열린 선으로.
+
+    OSM 에서 교량이 **양방향 차도를 한 바퀴 도는 닫힌 way** 로 들어오는 일이 잦다
+    (양화·서강·잠수·영동대교). 그러면 첫점 = 끝점이라 첫→끝 방위가 atan2(0,0)=0° 가
+    되고, 등록 연장은 왕복 둘레(양화 3 km)가 된다. 트윈 프록시가 방위 0° 로 놓여
+    PS 점과 어긋나는 원인이 이것이다.
+
+    주축(가장 길게 퍼진 방향)으로 투영해 양 끝 꼭짓점을 찾고, 그 사이 한쪽 호만 남긴다.
+    곡선 교량의 선형은 그대로 보존된다.
+    """
+    if len(P) < 3 or not np.allclose(P[0], P[-1]):
+        return P, False
+    xy = _to_xy(P, lat0)
+    xy = xy - xy.mean(axis=0)
+    w, V = np.linalg.eigh(np.cov(xy.T))
+    t = xy @ V[:, int(np.argmax(w))]
+    i, j = int(np.argmin(t)), int(np.argmax(t))
+    lo, hi = (i, j) if i < j else (j, i)
+    arc = P[lo:hi + 1]
+    return (arc, True) if len(arc) >= 2 else (P, False)
+
+
+def _chord_dev(xy: np.ndarray) -> float:
+    """선의 양 끝을 잇는 현에서 가장 멀리 벗어난 거리 / 현 길이."""
+    ch = xy[-1] - xy[0]
+    chl = float(np.hypot(*ch))
+    if chl < 1e-6:
+        return 0.0
+    u = ch / chl
+    n = np.array([-u[1], u[0]])
+    return float(np.abs((xy - xy[0]) @ n).max()) / chl
+
+
+def _trim_ramp(P: np.ndarray, lat0: float, *, tol_deg: float = 30.0,
+               keep_frac: float = 0.55, dev_min: float = 0.08) -> tuple[np.ndarray, bool]:
+    """데크선 양 끝의 **곡선 접속램프**를 잘라낸다.
+
+    OSM 은 램프와 본교를 한 way 로 잇는 일이 있다 — 청담대교 way 1123 m 중 앞 378 m 가
+    남단 곡선 램프이고(현에서 최대 145 m 이탈), 본교는 뒤쪽 745 m 직선이다. 통째로 쓰면
+    프록시 데크가 램프 쪽으로 끌려가 교면 PS 20점 중 1점만 부재에 결합됐다.
+
+    구간별 방위를 보고 **길이가중 주방향에서 ±tol_deg 안에 드는 가장 긴 연속 구간**만
+    남긴다.
+
+    다만 **현에서 크게 벗어난 선에만** 적용한다(현 대비 dev_min 초과). 한강 교량 데크선의
+    현 이탈은 행주 0.0 % · 잠수 0.2 % · 서강 1.2 % · 가양 1.3 % · 원효 1.5 % · 천호 2.2 % ·
+    성산 2.8 % · 영동 4.0 % · 양화 5.9 % 인데 청담대교만 12.7 % 다. 게이트가 없으면
+    멀쩡한 교량의 데크선까지 잘라 측점이 줄어든다(서강 38→16, 원효 45→15 을 겪었다).
+    """
+    if len(P) < 3:
+        return P, False
+    xy = _to_xy(P, lat0)
+    if _chord_dev(xy) <= dev_min:
+        return P, False                              # 충분히 곧다 — 건드리지 않는다
+    d = np.diff(xy, axis=0)
+    L = np.hypot(*d.T)
+    if (L > 1e-6).sum() < 2 or L.sum() <= 0:
+        return P, False
+    ang = np.degrees(np.arctan2(d[:, 1], d[:, 0]))
+    a2 = np.radians(2 * ang)                        # 방위는 180° 주기 — 2배각으로 평균
+    dom = math.degrees(math.atan2(float((L * np.sin(a2)).sum()),
+                                  float((L * np.cos(a2)).sum()))) / 2
+    good = np.abs(((ang - dom + 90) % 180) - 90) <= tol_deg
+    best_i = best_j = 0
+    best_len = 0.0
+    i = 0
+    while i < len(good):
+        if not good[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(good) and good[j]:
+            j += 1
+        if float(L[i:j].sum()) > best_len:
+            best_i, best_j, best_len = i, j, float(L[i:j].sum())
+        i = j
+    if best_j <= best_i or best_j - best_i >= len(L):
+        return P, False                              # 전 구간이 주방향 — 곡선교라도 그대로
+    if best_len < keep_frac * float(L.sum()):
+        return P, False                              # 남는 게 너무 짧다 — 건드리지 않는다
+    return P[best_i:best_j + 1], True
+
+
+def _apply_deck(b: Bridge, geom: list[list[float]]) -> None:
+    """데크선 확정 — 방위·연장을 여기서만 계산한다(OSM·표준데이터 공통)."""
+    P = np.asarray([list(p) for p in geom], float)
+    lat0 = float(P[:, 0].mean())
+    P, cut = _open_deck(P, lat0)
+    P, trimmed = _trim_ramp(P, lat0)
+    if trimmed:
+        xy_t = _to_xy(P, lat0)
+        span_t = float(np.hypot(*np.diff(xy_t, axis=0).T).sum())
+        note(b, f"데크선 끝에 방위가 크게 꺾이는 구간이 있었다(곡선 접속램프) — "
+                f"본교 {span_t:.0f} m 만 남긴다")
+        b.length_m, b.n_spans = span_t, None
+        b.sources["deck_trim"] = f"곡선 램프 절단 → 본교 {span_t:.0f} m"
+    b.geometry = [list(map(float, p)) for p in P]
+    xy = _to_xy(P, lat0)
+    b.deck_az_deg = float(math.degrees(math.atan2(xy[-1, 1] - xy[0, 1],
+                                                  xy[-1, 0] - xy[0, 0])))
+    if cut:
+        span = float(np.hypot(*(xy[-1] - xy[0])))
+        note(b, f"OSM way 가 양방향 차도를 도는 닫힌 선이었다(첫점=끝점) — "
+                f"주축 양 끝으로 한쪽 차도만 남겨 방위 {b.deck_az_deg:.1f}° · "
+                f"연장 {span:.0f} m 로 잡는다")
+        b.length_m, b.n_spans = span, None
+        b.sources["deck_cut"] = f"닫힌 way → 주축 양 끝 절단 · 한쪽 차도 {len(P)}점"
+
+
+def _covers(outer, inner, *, tol_m: float = 25.0, frac: float = 0.9) -> bool:
+    """inner 의 꼭짓점 대부분이 outer 선 위(±tol_m)에 있는가 — 같은 길의 토막인가."""
+    A = np.asarray(inner.geometry, float)
+    B = np.asarray(outer.geometry, float)
+    if len(A) < 2 or len(B) < 2:
+        return False
+    lat0 = float(B[:, 0].mean())
+    k = math.cos(math.radians(lat0))
+    P = np.stack([(A[:, 1] - B[0, 1]) * 111_320 * k, (A[:, 0] - B[0, 0]) * 110_540], 1)
+    Q = np.stack([(B[:, 1] - B[0, 1]) * 111_320 * k, (B[:, 0] - B[0, 0]) * 110_540], 1)
+    best = np.full(len(P), np.inf)
+    for i in range(len(Q) - 1):
+        a, d = Q[i], Q[i + 1] - Q[i]
+        L2 = float(d @ d)
+        if L2 < 1e-9:
+            continue
+        t = np.clip(((P - a) @ d) / L2, 0.0, 1.0)
+        best = np.minimum(best, np.hypot(*(P - (a + t[:, None] * d)).T))
+    return float((best <= tol_m).mean()) >= frac
+
+
+def _whole_deck(b: Bridge, road, roads: list):
+    """토막난 way 를 **전체 데크**로 넓힌다.
+
+    OSM 은 한 교량을 여러 way 로 쪼개 놓는 일이 많고, 표준데이터·제원 CSV 는 그것을
+    '주경간교 / 접속교' 로 또 따로 등록한다. 둘을 연장으로 맞추면 반쪽만 잡힌다 —
+    월드컵대교에서 CSV '주경간교' 855 m 에 맞춰 1023 m way(남측 반쪽)를 골랐는데,
+    PS 는 하천 위 주경간이 아니라 북단 접속부에 몰려 있어 데크 ±30 m 안이 18점뿐이었다.
+    같은 이름 way 중 **고른 way 를 통째로 품는 더 긴 way** 가 있으면 그것이 데크 전체다
+    (1492 m · 54점).
+    """
+    def _closed(c) -> bool:
+        G = np.asarray(c.geometry, float)
+        return len(G) > 2 and bool(np.allclose(G[0], G[-1]))
+
+    # 닫힌 way 는 **양방향 차도를 한 바퀴 도는 선**이라 더 긴 데크가 아니다 — 삼키면
+    # 성산대교가 1079 m → 2999 m 로 부풀고, 한쪽 차도만 잘라 내도 실제 데크와 어긋난다.
+    # 넓히는 폭도 2배까지만 — 그 이상은 옆 도로를 물고 온 것으로 본다.
+    cand = [c for c in roads
+            if c is not road and road.length_m * 1.15 < c.length_m <= road.length_m * 2.0
+            and c.name and road.name and (c.name in road.name or road.name in c.name)
+            and not _closed(c) and _covers(c, road)]
+    if not cand:
+        return road
+    whole = max(cand, key=lambda c: c.length_m)
+    note(b, f"OSM way 가 토막나 있다 — 고른 '{road.name}' {road.length_m:.0f} m 를 "
+            f"통째로 품는 {whole.length_m:.0f} m way 가 있어 데크 전체로 넓힌다 "
+            f"(연장도 그 값으로 — CSV {b.length_m:.0f} m 는 주경간만이다)")
+    b.sources["deck_whole"] = (f"토막 {road.length_m:.0f} m → 포함 way "
+                               f"{whole.length_m:.0f} m · 연장을 데크선에 맞춘다")
+    b.length_m, b.n_spans = float(whole.length_m), None
+    return whole
+
+
 def resolve_deck(b: Bridge) -> None:
-    from inframon.insar.osm_bridge import _overpass_query, find_bridges_near
+    from inframon.insar.osm_bridge import find_bridges_near
+
+    # 데크선을 배치 파일에서 직접 준 경우 — OSM 을 보지 않는다. 보행교(샛강문화다리)처럼
+    # 데크가 footway 라 차도 필터에 걸리는 곳, OSM 이름이 보고서와 다른 곳에 필요하다.
+    if b.geometry and len(b.geometry) >= 2:
+        note(b, f"데크선을 직접 받았다({len(b.geometry)}점) — OSM 조회를 건너뛴다")
+        b.sources.setdefault("deck", "배치 파일에 지정한 데크선")
+        _apply_deck(b, b.geometry)
+        _finish_deck(b)
+        return
     try:
         cands = find_bridges_near(b.lat, b.lon, radius_m=250.0)
     except Exception as e:                       # noqa: BLE001
+        std = _std_deck(b)
+        if std:
+            note(b, f"OSM 조회 실패({type(e).__name__}) → 표준데이터 시점–종점 선분 사용")
+            _apply_deck(b, std)
+            _finish_deck(b)          # 폭도 표준데이터 실측을 쓴다(12 m 가정보다 낫다)
+            return
         note(b, f"OSM 조회 실패: {type(e).__name__} — 데크선 없음")
         _fill_defaults(b)
         return
@@ -162,12 +457,32 @@ def resolve_deck(b: Bridge) -> None:
     roads = [c for c in cands if _is_road(c)] or cands
     if b.length_m:
         fit = [c for c in roads if abs(c.length_m - b.length_m) <= 0.25 * b.length_m]
+        named_roads = [c for c in roads if c.name and b.name and b.name in c.name]
         if fit:
             named = [c for c in fit if c.name and b.name and b.name in c.name]
-            road = min(named or fit, key=lambda c: abs(c.length_m - b.length_m))
-            b.sources["deck_match"] = (f"CSV 연장 {b.length_m:.0f} m 에 맞는 way 선택"
-                                       f"({len(cands)}후보 중)")
+            if named:
+                road = min(named, key=lambda c: abs(c.length_m - b.length_m))
+                b.sources["deck_match"] = (f"CSV 연장 {b.length_m:.0f} m 에 맞는 "
+                                           f"'{b.name}' way 선택({len(cands)}후보 중)")
+            elif named_roads:
+                # 연장이 맞는 way 가 있어도 **이름 없는 way** 면 그 교량이 아닐 수 있다 —
+                # 행주대교에서 이름 없는 1669 m way 가 CSV 1460 m 에 걸려 잡혔다.
+                # 이름이 맞는 way 가 하나라도 있으면 그중 가장 긴 것이 데크다.
+                road = max(named_roads, key=lambda c: c.length_m)
+                note(b, f"연장 {b.length_m:.0f} m 에 맞는 way 는 이름이 없다 — "
+                        f"이름이 맞는 '{road.name}' {road.length_m:.0f} m 를 쓴다")
+            else:
+                road = min(fit, key=lambda c: abs(c.length_m - b.length_m))
+                b.sources["deck_match"] = (f"CSV 연장 {b.length_m:.0f} m 에 맞는 way 선택"
+                                           f"(이름 없음 · {len(cands)}후보 중)")
         else:
+            std = _std_deck(b)
+            if std:
+                note(b, f"OSM 어느 way 도 연장 {b.length_m:.0f} m 와 안 맞음 "
+                        f"(토막난 way) → 표준데이터 시점–종점 선분 사용")
+                _apply_deck(b, std)
+                _finish_deck(b)
+                return
             named = [c for c in roads if c.name and b.name and b.name in c.name]
             road = max(named or roads, key=lambda c: c.length_m)
             note(b, f"OSM 어느 way 도 CSV 연장 {b.length_m:.0f} m 와 안 맞음 — "
@@ -175,32 +490,61 @@ def resolve_deck(b: Bridge) -> None:
     else:
         named = [c for c in roads if c.name and b.name and b.name in c.name]
         road = max(named or roads, key=lambda c: c.length_m)
-    b.geometry = [list(p) for p in road.geometry]
+    road = _whole_deck(b, road, roads)
+    _apply_deck(b, road.geometry)
     if b.length_m is None:
         b.length_m = float(road.length_m)
         b.sources["length"] = f"OSM way {road.name}"
-    P = np.asarray(b.geometry, float)
-    lat0 = P[:, 0].mean()
-    dx = (P[-1, 1] - P[0, 1]) * math.cos(math.radians(lat0)) * 111_320
-    dy = (P[-1, 0] - P[0, 0]) * 111_320
-    b.deck_az_deg = float(math.degrees(math.atan2(dy, dx)))
     b.sources["deck"] = f"OSM '{road.name}' {road.length_m:.0f} m · 방위 {b.deck_az_deg:.1f}°"
+    _finish_deck(b, road=road)
+
+
+def _osm_footway_width(b: Bridge, lat0: float) -> tuple[float, float] | None:
+    """OSM 양측 보도 중심선 간격 → (폭, 간격). 보도 way 가 둘 미만이면 None.
+
+    등록 폭이 없는 교량(정자교)에서는 이게 유일한 근거다. 다만 반경 120 m 안의
+    '보도'가 그 교량 것이라는 보장이 없다 — 검증은 호출 측에서 한다.
+    """
+    from inframon.insar.osm_bridge import _overpass_query
+    try:
+        els = _overpass_query(f"[out:json][timeout:30];way(around:120,{b.lat},{b.lon})"
+                              f"[\"bridge\"][\"highway\"=\"footway\"];out geom;")["elements"]
+    except Exception:                            # noqa: BLE001 — 조회 실패는 '없음'과 같다
+        return None
+    offs = []
+    for el in els:
+        F = np.asarray([[g["lat"], g["lon"]] for g in el.get("geometry", []) if "lat" in g], float)
+        if len(F) >= 2:
+            offs.append(float(np.mean(F[:, 0] - lat0) * 111_320))
+    if len(offs) < 2:
+        return None
+    gap = float(max(offs) - min(offs))
+    return gap + 2 * FOOTWAY_HALF_M, gap
+
+
+def _finish_deck(b: Bridge, *, road=None) -> None:
+    """폭·경간수 마무리 — 데크선을 OSM 에서 얻었든 표준데이터에서 얻었든 같다.
+
+    폭 우선순위: **전국교량표준데이터 실측 교량폭 → OSM 보도 간격 → lanes → 12 m 가정**.
+    보도 간격을 먼저 쓰던 시절엔 한강 교량이 무너졌다 — 성수대교 11 m(실측 35 m),
+    올림픽대교 109 m(실측 30 m). 반경 120 m 안의 '보도'가 그 교량 것이 아니었다.
+    폭은 데크 ±폭/2 로 교면 점을 고르는 기준이라 틀리면 결과가 통째로 바뀐다.
+    """
+    lat0 = float(np.asarray(b.geometry, float)[:, 0].mean()) if b.geometry else b.lat
     if b.width_m is None:
-        try:
-            els = _overpass_query(f"[out:json][timeout:30];way(around:120,{b.lat},{b.lon})"
-                                  f"[\"bridge\"][\"highway\"=\"footway\"];out geom;")["elements"]
-            offs = []
-            for el in els:
-                F = np.asarray([[g["lat"], g["lon"]] for g in el.get("geometry", []) if "lat" in g], float)
-                if len(F) >= 2:
-                    offs.append(float(np.mean(F[:, 0] - lat0) * 111_320))
-            if len(offs) >= 2:
-                b.width_m = float(max(offs) - min(offs)) + 2 * FOOTWAY_HALF_M
-                b.sources["width"] = f"OSM 보도 간격 {max(offs) - min(offs):.1f} m + 보도 반폭"
-        except Exception:                        # noqa: BLE001
-            pass
+        w_std = _std_width(b)
+        w_osm = _osm_footway_width(b, lat0)
+        if w_std:
+            b.width_m = w_std
+            b.sources["width"] = f"전국교량표준데이터 교량폭 {w_std:g} m"
+            if w_osm and abs(w_osm[0] - w_std) > 0.5 * w_std:
+                note(b, f"OSM 보도 간격 {w_osm[1]:.1f} m 는 등록 교량폭 {w_std:g} m 와 "
+                        f"크게 달라 쓰지 않았다(그 교량 보도가 아닐 수 있다)")
+        elif w_osm:
+            b.width_m = w_osm[0]
+            b.sources["width"] = f"OSM 보도 간격 {w_osm[1]:.1f} m + 보도 반폭"
     if b.width_m is None:
-        lanes = getattr(road, "tags", {}).get("lanes")
+        lanes = (getattr(road, "tags", {}) or {}).get("lanes") if road is not None else None
         if lanes:
             b.width_m = float(lanes) * 3.5 + 3.0
             b.sources["width"] = f"OSM lanes={lanes} × 3.5 m + 여유(추정)"
@@ -211,6 +555,18 @@ def resolve_deck(b: Bridge) -> None:
     if b.n_spans is None:
         b.n_spans = max(1, int(round((b.length_m or 30) / 30.0)))
         note(b, f"경간수 없음 → 30 m 규칙으로 {b.n_spans} 가정")
+
+
+def _std_width(b: Bridge) -> float | None:
+    """전국교량표준데이터의 교량폭(실측). 없으면 None."""
+    try:
+        from inframon.public_data import find_bridge_csv, nearest_bridge_profile
+        csv = find_bridge_csv("data")
+        prof = nearest_bridge_profile(csv, b.lat, b.lon, max_km=0.5, name=b.name) if csv else None
+    except Exception:                            # noqa: BLE001
+        return None
+    w = getattr(prof, "width_m", None) if prof else None
+    return float(w) if w and float(w) > 0 else None
 
 
 # ── ③ 지면·형하고 ─────────────────────────────────────────────────────────
@@ -414,10 +770,39 @@ def residual_height(b: Bridge, sub: Path) -> dict | None:
         f.attrs["residual_height"] = json.dumps({**rh.meta, "group_test": g or {}}, ensure_ascii=False)
     if g and g.get("ok") and g["z"] < -2:
         note(b, g["verdict"])
-    if g and g.get("ok") and g["diff_m"] > 0 and g["z"] >= 1.0:
-        b.clearance_m = float(g["diff_m"])
-        b.sources["clearance"] = f"잔차고도 집단평균 {g['diff_m']:+.1f}±{g['se_diff_m']:.1f} m (z={g['z']:.2f})"
+    # z≥2 — z=1.1 짜리(월드컵대교 +37.1 ± 33.5 m)가 등록 교량높이 25 m 를 밀어내면 안 된다.
+    if g and g.get("ok") and g["diff_m"] > 0 and g["z"] >= 2.0:
+        # Sentinel-1 은 B⊥ 가 작아 Δh 가 쉽게 부풀고, 그 값이 그대로 형하고가 되면 트윈이
+        # 하늘로 뜬다(천호대교 +73 m → 데크 표고 79 m). 국내 하천 교량 형하고는 40 m 를
+        # 넘지 않는다 — 넘으면 채택하지 않고 이유를 남긴다.
+        if g["diff_m"] > CLEARANCE_MAX_M:
+            note(b, f"잔차고도 집단평균 {g['diff_m']:+.1f} m 는 형하고로 비현실적"
+                    f"(> {CLEARANCE_MAX_M:.0f} m) — 채택하지 않고 "
+                    f"{_f(b.clearance_m, ' m')} 를 유지한다")
+        else:
+            b.clearance_m = float(g["diff_m"])
+            b.sources["clearance"] = (f"잔차고도 집단평균 {g['diff_m']:+.1f}"
+                                      f"±{g['se_diff_m']:.1f} m (z={g['z']:.2f})")
     return g
+
+
+def _deck_midpoint(b: Bridge) -> tuple[float, float]:
+    """데크선의 **호길이 중점**(lat, lon). 데크선이 없으면 조회 좌표를 그대로 쓴다."""
+    P = np.asarray(b.geometry or [], float)
+    if len(P) < 2:
+        return b.lat, b.lon
+    lat0 = float(P[:, 0].mean())
+    xy = _to_xy(P, lat0)
+    seg = np.hypot(*np.diff(xy, axis=0).T)
+    cum = np.concatenate([[0.0], np.cumsum(seg)])
+    if cum[-1] <= 0:
+        return float(P[:, 0].mean()), float(P[:, 1].mean())
+    half = cum[-1] / 2
+    k = int(np.searchsorted(cum, half)) - 1
+    k = min(max(k, 0), len(P) - 2)
+    f = (half - cum[k]) / max(seg[k], 1e-9)
+    return (float(P[k, 0] + f * (P[k + 1, 0] - P[k, 0])),
+            float(P[k, 1] + f * (P[k + 1, 1] - P[k, 1])))
 
 
 # ── ⑥ IFC 트윈 ────────────────────────────────────────────────────────────
@@ -432,7 +817,10 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
                                             write_3dtiles_tileset, write_web_viewer)
     els = bridge_elements(length_m=b.length_m, width_m=b.width_m, n_spans=b.n_spans,
                           clearance_m=b.clearance_m, name=b.name)
-    e0, n0 = Transformer.from_crs("EPSG:4326", CRS, always_xy=True).transform(b.lon, b.lat)
+    # 프록시 원점은 **데크선 중점** 이다. 조회 좌표(b.lat/lon)를 쓰면 그 좌표가 교량
+    # 중심에서 벗어난 만큼 부재가 통째로 밀려 PS 점이 부재 밖에 앉는다(청담 ~97 m).
+    olat, olon = _deck_midpoint(b)
+    e0, n0 = Transformer.from_crs("EPSG:4326", CRS, always_xy=True).transform(olon, olat)
     az = math.radians(b.deck_az_deg or 0.0)
     mc = MapConversion(eastings=e0, northings=n0, orthogonal_height=b.ground_m,
                        x_axis_abscissa=math.cos(az), x_axis_ordinate=math.sin(az),
@@ -609,10 +997,21 @@ def run_one(b: Bridge, *, count: int = 12, start: str | None = None,
             raise RuntimeError("트랙 없음 — ⓪ 실패")
         with h5py.File(b.track, "r") as f:
             b.n_epochs = int(f["los_mm"].shape[1])
+            ep = f["epochs"][()] if "epochs" in f else None
         print("  ① 제원");   resolve_specs(b)
+        _warn_stack_predates_build(b, ep)
         print("  ② 데크선"); resolve_deck(b)
         print("  ③ 지면");   resolve_ground(b)
         print("  ④ 점 선택"); sub = select_points(b, out)
+        if sub is None:
+            # 데크선이 틀리면 점이 하나도 안 잡힌다 — 출처를 바꿔 한 번 더 본다.
+            # 월드컵대교가 그랬다: 파트너 CSV 연장 352 m(접속교)에 맞춰 OSM 이 357 m
+            # way 를 골랐고, 실제 주경간교(855 m)는 데크 ±30 m 밖이라 0/20000 이었다.
+            alt = _std_deck(b)
+            if alt and (not b.geometry or alt != [list(x) for x in b.geometry]):
+                note(b, "데크 ±30 m 안 0점 → 표준데이터 시점–종점 선분으로 데크선을 바꿔 재시도")
+                _apply_deck(b, alt)
+                print("  ④ 점 선택(재시도)"); sub = select_points(b, out)
         if sub is not None:
             print("  ⑤ 잔차고도"); rh = residual_height(b, sub)
             print("  ⑥ IFC 트윈"); tw = build_twin(b, sub, out)
