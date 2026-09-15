@@ -9,6 +9,8 @@
  "out": "docs/bridges/서강대교",
  "length_m": 1770.8790704948897,
  "n_spans": 59,
+ "max_span_m": 150.0,
+ "span_layout": "auto",
  "width_m": 6.8,
  "clearance_m": 6.0,
  "ground_m": 8.0,
@@ -102,6 +104,7 @@
   "width": "전국교량표준데이터 교량폭 6.8 m",
   "ground": "Open-Meteo DEM",
   "ground_offset": "처리 오프셋 ≈ 0 (|B| 0.0 m < 3 m · 지면 점 58 · 도로 양쪽 대칭)",
-  "points": "쉬프트 7.0 m(heading -13.3°) 보정 후 데크 ±30 m 안 38/20000"
+  "points": "쉬프트 7.0 m(heading -13.3°) 보정 후 데크 ±30 m 안 38/20000",
+  "span_layout": "measured — 주경간 150 m(실측)를 가운데, 나머지 58경간 28 m 균등"
  }
 }

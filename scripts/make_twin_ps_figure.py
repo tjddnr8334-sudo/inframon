@@ -89,6 +89,9 @@ def read_twin(folder: Path) -> dict | None:
     guids = _grab(html, "GUIDS") or []
     boxes = _grab(html, "BOXES") or []
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.exists() else {}
+    bj = folder / "bridge.json"
+    bsrc = (json.loads(bj.read_text(encoding="utf-8")).get("sources") or {}
+            if bj.exists() else {})
 
     P = np.asarray(pos, float)                      # x=동, y=표고, z=−북
     rot = float(boxes[0].get("rotY", 0.0)) if boxes else 0.0
@@ -123,6 +126,7 @@ def read_twin(folder: Path) -> dict | None:
         "deck_z": (meta.get("georef") or {}).get("deck_z_median_m"),
         "n_points": int(len(P)), "n_bound": int(bound.sum()),
         "n_elements": len(els),
+        "span_layout": bsrc.get("span_layout", ""),
     }
 
 
@@ -224,7 +228,7 @@ def fig_one(name: str, d: dict, out: Path) -> None:
 
     fig = plt.figure(figsize=(17.0, 7.8))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.02], height_ratios=[1.0, 0.78],
-                          left=0.052, right=0.90, top=0.885, bottom=0.085,
+                          left=0.052, right=0.90, top=0.865, bottom=0.085,
                           hspace=0.34, wspace=0.10)
 
     a = fig.add_subplot(gs[0, 0])
@@ -250,6 +254,8 @@ def fig_one(name: str, d: dict, out: Path) -> None:
         n_mem[e["member"]] = n_mem.get(e["member"], 0) + 1
     made = " · ".join(f"{MEMBER_KO.get(k, k)} {v}" for k, v in
                       sorted(n_mem.items(), key=lambda kv: -kv[1]))
+    if d.get("span_layout"):
+        made += "\n경간 배치: " + d["span_layout"]
     c.set_title("③ 3D 트윈 — 슬래브·교각·교대 위에 점이 앉는다" + "\n" + made,
                 fontsize=11, pad=2)
     c.legend(handles=[Patch(color=MEMBER_COLOR[k], alpha=.5, label=MEMBER_KO[k])

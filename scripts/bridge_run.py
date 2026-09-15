@@ -73,6 +73,8 @@ class Bridge:
     # 아래는 자동으로 채운다
     length_m: float | None = None
     n_spans: int | None = None
+    max_span_m: float | None = None    # 최대경간장 실측 — 교각 비등간격 배치의 근거
+    span_layout: str = "auto"          # auto | equal | measured (proxy_model.span_edges)
     width_m: float | None = None
     clearance_m: float | None = None
     ground_m: float | None = None
@@ -100,6 +102,8 @@ def resolve_specs(b: Bridge) -> None:
         note(b, f"제원 CSV 조회 실패: {type(e).__name__}")
     if sp and sp.length_m:
         b.length_m, b.n_spans, b.width_m = sp.length_m, sp.n_spans, sp.width_m
+        if sp.max_span_m:
+            b.max_span_m = float(sp.max_span_m)
         b.sources["specs"] = f"파트너 실측 CSV '{sp.name}' ({sp.dist_m:.0f} m)"
         if b.width_m is None:
             note(b, "CSV 에 폭 없음 → OSM 보도 간격으로")
@@ -812,11 +816,15 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     from inframon.bim.georef import MapConversion
     from inframon.bim.ifc_io import read_elements, read_map_conversion
     from inframon.bim.ifc_write import write_elements
-    from inframon.bim.proxy_model import bridge_elements
+    from inframon.bim.proxy_model import bridge_elements, span_edges
     from inframon.insar.gltf_export import (export_insar_gltf, guid_map_from_alignment,
                                             write_3dtiles_tileset, write_web_viewer)
     els = bridge_elements(length_m=b.length_m, width_m=b.width_m, n_spans=b.n_spans,
-                          clearance_m=b.clearance_m, name=b.name)
+                          clearance_m=b.clearance_m, max_span_m=b.max_span_m,
+                          span_layout=b.span_layout, name=b.name)
+    _, used, why = span_edges(b.length_m, b.n_spans or 1, max_span_m=b.max_span_m,
+                              layout=b.span_layout)
+    b.sources["span_layout"] = f"{used} — {why}"
     # 프록시 원점은 **데크선 중점** 이다. 조회 좌표(b.lat/lon)를 쓰면 그 좌표가 교량
     # 중심에서 벗어난 만큼 부재가 통째로 밀려 PS 점이 부재 밖에 앉는다(청담 ~97 m).
     olat, olon = _deck_midpoint(b)
@@ -1037,6 +1045,9 @@ def main() -> None:
     ap.add_argument("--track"); ap.add_argument("--proc"); ap.add_argument("--master")
     ap.add_argument("--baselines", help="SARvey ifg_network 기선 JSON(잔차고도용)")
     ap.add_argument("--out"); ap.add_argument("--batch")
+    ap.add_argument("--span-layout", default="auto", choices=("auto", "equal", "measured"),
+                    help="교각 배치 — auto(실측 최대경간장이 있으면 비등간격) · "
+                         "equal(연장÷경간수 균등) · measured(주경간 실측 강제)")
     ap.add_argument("--count", type=int, default=12, metavar="N",
                     help="⓪ 에서 내려받아 처리할 SLC 장면 수(기본 12·장당 ~7GB). "
                          "의미 있는 속도·CI 는 25장·1년 이상이 필요하다.")
@@ -1046,11 +1057,15 @@ def main() -> None:
     if a.batch:
         items = json.loads(Path(a.batch).read_text(encoding="utf-8"))
         bridges = [Bridge(**it) for it in items]
+        for _b in bridges:                      # 배치 파일에 없으면 CLI 값을 쓴다
+            if _b.span_layout == "auto":
+                _b.span_layout = a.span_layout
     else:
         if not (a.name and a.lat and a.lon):
             ap.error("--name --lat --lon (--track 은 선택: 없으면 SLC 부터 만든다) 또는 --batch")
         bridges = [Bridge(name=a.name, lat=a.lat, lon=a.lon, track=a.track, proc=a.proc,
-                          master=a.master, baselines=a.baselines, out=a.out)]
+                          master=a.master, baselines=a.baselines, out=a.out,
+                          span_layout=a.span_layout)]
     results = [run_one(b, count=a.count, start=a.start, end=a.end) for b in bridges]
     print("\n━━ 요약")
     print(f"{'교량':<10}{'판정':<10}{'점':>5}{'CRI':>8}  경로")
