@@ -50,17 +50,44 @@ def member_label(idx: int) -> str:
     return MEMBER_TYPES[i] if 0 <= i < len(MEMBER_TYPES) else "unknown"
 
 
-def xyz_to_latlon(xyz: np.ndarray, to_crs: str = WGS84) -> np.ndarray:
-    """[N,3] (EPSG:5179 easting,northing,elev) → [N,3] (lat, lon, elev).
+def xyz_frame_crs(xyz: np.ndarray) -> str:
+    """`xyz` 앞 두 열이 어느 좌표계인지 — 값의 크기로 판별한다.
 
-    Bmaps 지도가 EPSG:5179 타일이면 to_crs=SRC_CRS 로 호출 → 재투영 생략(easting/northing 유지).
+    계약은 xyz 를 EPSG:5179 미터로 적어 두었지만, 실 파이프라인의 트랙 취입 경로
+    (`track_reader.import_track_h5`)는 **WGS84 경위도(도)** 를 그대로 넣는다. 도 값을
+    5179 미터로 보고 재투영하면 정자교 12점이 전부 (19.69, 117.99) — 남중국해 한가운데
+    한 점으로 뭉쳤다(Bmaps 탭 지도가 실제로 그렇게 나왔다).
+
+    투영 미터(5179)는 동거리 ~10^5~10^6, 경위도는 |lon|≤180·|lat|≤90 이라 자릿수가
+    겹치지 않는다. 그래서 값만 보고 안전하게 가른다.
+    """
+    a = np.asarray(xyz, dtype=np.float64)
+    if a.size == 0:
+        return SRC_CRS
+    x, y = a[:, 0], a[:, 1]
+    if np.nanmax(np.abs(x)) <= 180.0 and np.nanmax(np.abs(y)) <= 90.0:
+        return WGS84
+    return SRC_CRS
+
+
+def xyz_to_latlon(xyz: np.ndarray, to_crs: str = WGS84,
+                  src_crs: str | None = None) -> np.ndarray:
+    """[N,3] (easting,northing,elev) 또는 (lon,lat,elev) → [N,3] (lat, lon, elev).
+
+    `src_crs` 를 안 주면 값으로 판별한다(`xyz_frame_crs`). Bmaps 지도가 EPSG:5179
+    타일이면 to_crs=SRC_CRS 로 호출 → 재투영 생략(easting/northing 유지).
     """
     xyz = np.asarray(xyz, dtype=np.float64)
-    if to_crs == SRC_CRS:
-        # 변환 생략: (x, y, z) 그대로 — 호출 측이 좌표계를 안다고 가정.
+    src = src_crs or xyz_frame_crs(xyz)
+    if to_crs == src:
+        # 같은 좌표계 — 5179 면 (x,y,z) 그대로, 4326 이면 (lon,lat)→(lat,lon) 만 바꾼다.
+        if src == WGS84:
+            return np.column_stack([xyz[:, 1], xyz[:, 0], xyz[:, 2]])
         return xyz
-    lonlat = reproject(xyz[:, :2], SRC_CRS, to_crs)  # always_xy → (lon, lat)
-    return np.column_stack([lonlat[:, 1], lonlat[:, 0], xyz[:, 2]])
+    lonlat = reproject(xyz[:, :2], src, to_crs)      # always_xy → (lon, lat)
+    if to_crs == WGS84:
+        return np.column_stack([lonlat[:, 1], lonlat[:, 0], xyz[:, 2]])
+    return np.column_stack([lonlat[:, 0], lonlat[:, 1], xyz[:, 2]])
 
 
 def _resolve_index(value: Any, n: int) -> int:
@@ -95,14 +122,53 @@ def _fram(store: ProjectStore) -> FRAMOutput | None:
 
 # ───────────────────────── DTO 빌더 (§3) ─────────────────────────
 def dates_iso(store: ProjectStore) -> list[str]:
+    """취득일 [M] → ISO 'YYYY-MM-DD'.
+
+    `dates_ds` 는 계약상 epoch days 지만, 실 파이프라인은 **최이른 취득일을 0 으로**
+    다시 잡아 넣는다(`track_reader`). 그 값을 1970 기준으로 읽으면 201시점짜리 실
+    산출물이 Bmaps 탭에 '1970-01-01 ~ 1978-11-03' 으로 뜬다 — 실제로 그렇게 떴다.
+    실 취득일은 `insar/date_labels`(YYYYMMDD)에 그대로 있으니 있으면 그것을 쓰고,
+    없을 때만(합성 데모) epoch days 로 돌아간다.
+    """
+    labels = _date_labels(store)
+    if labels is not None:
+        return labels
     ins = _insar(store)
     return [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+
+
+def _json_attr(store: ProjectStore, group: str, key: str) -> dict:
+    """그룹 속성의 JSON 을 dict 로 — 없거나 깨졌으면 빈 dict."""
+    try:
+        v = store.read_json_attr(group, key)
+    except Exception:                            # noqa: BLE001 — 속성이 없는 구버전 산출물
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _date_labels(store: ProjectStore) -> list[str] | None:
+    """`insar/date_labels`(YYYYMMDD) → ISO. 없거나 못 읽으면 None."""
+    if not store.has_array("/insar/date_labels"):
+        return None
+    try:
+        raw = store.read_array("/insar/date_labels")
+    except (KeyError, OSError):
+        return None
+    out: list[str] = []
+    for d in np.asarray(raw).ravel():
+        t = d.decode() if isinstance(d, bytes) else str(d)
+        t = t.strip()
+        if len(t) == 8 and t.isdigit():
+            out.append(f"{t[:4]}-{t[4:6]}-{t[6:]}")
+        else:
+            return None                  # 형식을 못 믿겠으면 통째로 폴백
+    return out or None
 
 
 def summary(store: ProjectStore, *, name: str, bridge_id: str) -> dict[str, Any]:
     """§3.2 탭 헤더 요약 — 경보 + CRI + 기간."""
     ins = _insar(store)
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     coh = store.read_array(ins.coherence_ds)
     out: dict[str, Any] = {
         "bridge_id": bridge_id,
@@ -126,6 +192,13 @@ def summary(store: ProjectStore, *, name: str, bridge_id: str) -> dict[str, Any]
             "lead_time_forecast_days": w.lead_time_forecast_days,
         }
         out["cri_global_max"] = round(float(fram.cri_global_max), 4)
+        # CRI 등급은 '건강 교량 코호트' 기준치로 읽는 값이라, 관측조건이 그 코호트와
+        # 다르면 등급 자체가 밀린다. 그 사실을 API 가 같이 내보내지 않으면 받는 쪽
+        # (B-Maps 탭)은 '위험' 만 보게 된다 — 실측 SHM 이 '관리기준 이내'라고 한
+        # 한강 교량들이 그렇게 표시됐다.
+        rr = _json_attr(store, "fram", "reference_range")
+        out["warning"]["provisional"] = bool(rr.get("provisional"))
+        out["warning"]["regime_note"] = rr.get("regime_mismatch") or None
     return out
 
 
@@ -142,7 +215,7 @@ def points(store: ProjectStore, *, metric: str = "los", date: Any = "latest",
     coh = store.read_array(ins.coherence_ds)
     pid = store.read_array(ins.point_id_ds)
     disp = store.read_array(ds)  # [N, M] m
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     k = _resolve_index(date, len(dates))
 
     fram = _fram(store)
@@ -193,7 +266,7 @@ def point_series(store: ProjectStore, point_id: int) -> dict[str, Any]:
     i = int(matches[0])
 
     member = store.read_array(ins.member_ds)
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     los = store.read_array(ins.los_ds)[i]
     lon_disp = store.read_array(ins.longitudinal_ds)[i]
 
@@ -239,8 +312,7 @@ def girder_displacement(store: ProjectStore, *, date: Any = "latest") -> dict[st
     pinn = _pinn(store)
     if pinn is None or not pinn.vsens_total_ds:
         raise ResultNotFound("가상센싱 거더 변위장이 없습니다(pinn=real 실행 필요).")
-    ins = _insar(store)
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     k = _resolve_index(date, len(dates))
     xl = np.asarray(store.read_array(pinn.vsens_l_from_fixed_ds))     # [V]
     total = np.asarray(store.read_array(pinn.vsens_total_ds))         # [V,M]
@@ -275,8 +347,7 @@ def deck_displacement(store: ProjectStore, *, date: Any = "latest",
     pinn = _pinn(store)
     if pinn is None or not pinn.deck_total_ds:
         raise ResultNotFound("상판 2D 가상센싱 변위장이 없습니다(pinn=real·측점≥3 필요).")
-    ins = _insar(store)
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     k = _resolve_index(date, len(dates))
     xy = np.asarray(store.read_array(pinn.deck_xy_ds), dtype=np.float64)   # [G,2] (E,N)
     total = np.asarray(store.read_array(pinn.deck_total_ds))              # [G,M]
@@ -314,9 +385,8 @@ def cri(store: ProjectStore) -> dict[str, Any]:
     fram = _fram(store)
     if fram is None:
         raise ResultNotFound("FRAM 결과가 없습니다(fram 엔진 필요).")
-    ins = _insar(store)
     cri_arr = store.read_array(fram.CRI_ds)  # [N, M]
-    dates = [epoch_days_to_iso(d) for d in store.read_array(ins.dates_ds)]
+    dates = dates_iso(store)
     return {
         "cri_global_max": round(float(fram.cri_global_max), 4),
         "n_points": int(fram.n_points),
