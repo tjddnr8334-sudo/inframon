@@ -138,6 +138,36 @@ def _annotation_xml(z: zipfile.ZipFile, subswath: str) -> ET.Element:
     return ET.fromstring(z.read(names[0]))
 
 
+def is_safe_dir(slc: str | Path) -> bool:
+    """풀어 둔 `.SAFE` 디렉터리인가 — ASF 는 zip 을, 기관 아카이브는 대개 SAFE 를 준다."""
+    p = Path(slc)
+    return p.is_dir() and (p / "manifest.safe").exists()
+
+
+def gpt_input(slc: str | Path) -> str:
+    """gpt `Read` 에 넘길 경로 — SAFE 디렉터리면 그 안의 `manifest.safe`."""
+    p = Path(slc)
+    return str(p / "manifest.safe") if is_safe_dir(p) else str(p)
+
+
+def annotation_root(slc: str | Path, subswath: str) -> ET.Element:
+    """SLC 의 subswath VV 주석 XML — **zip 이든 풀어 둔 .SAFE 디렉터리든** 같게 읽는다.
+
+    zip 만 읽던 시절엔 이미 풀린 SAFE 아카이브(수백 GB)를 다시 압축해야 했다. 주석은
+    두 형태 모두 `annotation/s1?-iw?-slc-vv-*.xml` 한 자리에 있으므로 읽기만 갈라 준다.
+    """
+    p = Path(slc)
+    if not is_safe_dir(p):
+        with zipfile.ZipFile(str(p)) as z:
+            return _annotation_xml(z, subswath)
+    sw = subswath.lower()
+    cands = sorted(x for x in (p / "annotation").glob("*.xml")
+                   if f"-{sw}-slc-vv" in x.name.lower())
+    if not cands:
+        raise SnapError(f"{subswath} VV 주석을 SLC 에서 못 찾음")
+    return ET.fromstring(cands[0].read_bytes())
+
+
 def _km(dlon: float, dlat: float, lat: float) -> float:
     return math.hypot(dlat, dlon * math.cos(math.radians(lat))) * 111.0
 
@@ -178,9 +208,8 @@ def doppler_centroid_hz(slc_zip: str | Path, subswath: str) -> float | None:
     슬레이브-마스터 |ΔfDC| 가 크면 방위 스펙트럼 비간섭 → slave 품질 저하 판정에 사용.
     """
     try:
-        with zipfile.ZipFile(str(slc_zip)) as z:
-            root = _annotation_xml(z, subswath)
-    except (OSError, zipfile.BadZipFile, KeyError, ValueError):
+        root = annotation_root(slc_zip, subswath)
+    except (OSError, zipfile.BadZipFile, KeyError, ValueError, SnapError):
         return None
     vals = []
     for dc in root.iter("dcEstimate"):
@@ -218,39 +247,38 @@ def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
     """
     contain: list[BurstLoc] = []
     nearest: BurstLoc | None = None
-    with zipfile.ZipFile(str(slc_zip)) as z:
-        for sw in ("IW1", "IW2", "IW3"):
-            try:
-                root = _annotation_xml(z, sw)
-            except SnapError:
-                continue
-            st = root.find(".//swathTiming")
-            lpb = int(st.find("linesPerBurst").text)
-            nb = len(st.find("burstList").findall("burst"))
-            pts = [(int(p.find("line").text), int(p.find("pixel").text),
-                    float(p.find("latitude").text), float(p.find("longitude").text))
-                   for p in root.findall(".//geolocationGridPoint")]
-            if not pts:
-                continue
-            pixels = sorted({q[1] for q in pts})
-            px0, px1 = pixels[0], pixels[-1]
+    for sw in ("IW1", "IW2", "IW3"):
+        try:
+            root = annotation_root(slc_zip, sw)
+        except (SnapError, OSError, zipfile.BadZipFile):
+            continue
+        st = root.find(".//swathTiming")
+        lpb = int(st.find("linesPerBurst").text)
+        nb = len(st.find("burstList").findall("burst"))
+        pts = [(int(p.find("line").text), int(p.find("pixel").text),
+                float(p.find("latitude").text), float(p.find("longitude").text))
+               for p in root.findall(".//geolocationGridPoint")]
+        if not pts:
+            continue
+        pixels = sorted({q[1] for q in pts})
+        px0, px1 = pixels[0], pixels[-1]
 
-            def nearest_pt(line: int, pix: int) -> tuple[float, float]:
-                q = min(pts, key=lambda t: (abs(t[0] - line), abs(t[1] - pix)))
-                return q[3], q[2]      # lon, lat
+        def nearest_pt(line: int, pix: int) -> tuple[float, float]:
+            q = min(pts, key=lambda t: (abs(t[0] - line), abs(t[1] - pix)))
+            return q[3], q[2]      # lon, lat
 
-            for i in range(nb):
-                l0, l1 = i * lpb, (i + 1) * lpb
-                poly = [nearest_pt(l0, px0), nearest_pt(l0, px1),
-                        nearest_pt(l1, px1), nearest_pt(l1, px0)]
-                clon = sum(p[0] for p in poly) / 4.0
-                clat = sum(p[1] for p in poly) / 4.0
-                dc = _km(clon - lon, clat - lat, lat)
-                if nearest is None or dc < nearest.distance_km:
-                    nearest = BurstLoc(sw, i + 1, dc, clat, clon, contained=False)
-                if _point_in_poly(lon, lat, poly):
-                    margin = _edge_margin_km(lon, lat, poly)
-                    contain.append(BurstLoc(sw, i + 1, margin, clat, clon, contained=True))
+        for i in range(nb):
+            l0, l1 = i * lpb, (i + 1) * lpb
+            poly = [nearest_pt(l0, px0), nearest_pt(l0, px1),
+                    nearest_pt(l1, px1), nearest_pt(l1, px0)]
+            clon = sum(p[0] for p in poly) / 4.0
+            clat = sum(p[1] for p in poly) / 4.0
+            dc = _km(clon - lon, clat - lat, lat)
+            if nearest is None or dc < nearest.distance_km:
+                nearest = BurstLoc(sw, i + 1, dc, clat, clon, contained=False)
+            if _point_in_poly(lon, lat, poly):
+                margin = _edge_margin_km(lon, lat, poly)
+                contain.append(BurstLoc(sw, i + 1, margin, clat, clon, contained=True))
     if contain:
         return max(contain, key=lambda b: b.distance_km)   # 가장 깊이 포함(가장자리 여유 큰)
     if nearest is None:
@@ -261,8 +289,7 @@ def find_bridge_burst(slc_zip: str | Path, lat: float, lon: float) -> BurstLoc:
 def platform_heading(slc_zip: str | Path, subswath: str) -> float | None:
     """플랫폼 heading(도) — asc/desc 연직분해용. 못 읽으면 None."""
     try:
-        with zipfile.ZipFile(str(slc_zip)) as z:
-            root = _annotation_xml(z, subswath)
+        root = annotation_root(slc_zip, subswath)
         el = root.find(".//platformHeading")
         return float(el.text) if el is not None else None
     except Exception:  # noqa: BLE001
@@ -288,7 +315,7 @@ def run_pair(gpt: str, graph: str, ref: str, sec: str, burst: BurstLoc,
     """gpt 그래프로 한 쌍(ref,sec) 코레지+간섭도+위상+TC 실행 → rc. 프로세스 격리 지점."""
     iband, qband, cohband = ifg_band_names(burst.subswath, scene_date(ref), scene_date(sec))
     args = [gpt, graph,
-            f"-PrefFile={ref}", f"-PsecFile={sec}",
+            f"-PrefFile={gpt_input(ref)}", f"-PsecFile={gpt_input(sec)}",
             f"-Psubswath={burst.subswath}",
             f"-PfirstBurst={burst.burst_index}", f"-PlastBurst={burst.burst_index}",
             f"-PiBand={iband}", f"-PqBand={qband}", f"-PcohBand={cohband}",
@@ -310,6 +337,7 @@ def process_star_network(
     max_temporal_days: float = 72.0, max_perp_m: float = 150.0,
     max_doppler_hz: float = 500.0, min_keep: int = 3,
     unwrap: bool = False, unwrap_half_km: float = 2.0,
+    workers: int = 1, progress=None,
 ) -> SnapRunResult:
     """스타 네트워크(기준 vs 각 보조) 코레지+간섭도+TC. reference 기본=최이른 날짜.
 
@@ -321,6 +349,11 @@ def process_star_network(
     `unwrap=True` 면 쌍마다 **위상 언래핑**(SnaphuExport→snaphu→SnaphuImport)까지 한다.
     언래핑 없이 나온 LOS 는 ±λ/4 에 갇혀 물리적 의미가 없으므로, 실산출은 이 경로를 쓴다.
     비용 때문에 교량 ±`unwrap_half_km` 만 잘라 푼다(전 버스트는 3700만 화소).
+
+    `workers>1` 이면 쌍을 동시에 처리한다 — 한 쌍은 gpt·snaphu 하위 프로세스에서 몇 분을
+    쓰고 그동안 코어 대부분이 논다. 쌍끼리는 입력도 산출도 겹치지 않아 순서가 필요 없다.
+    `progress(done, total, pair)` 로 진행을 흘려보낸다(수백 쌍짜리 스택은 말이 없으면
+    멈춘 것과 구별되지 않는다).
     """
     scenes = [str(s) for s in scenes]
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
@@ -352,31 +385,54 @@ def process_star_network(
         if tool is None:
             raise SnapError(snap_unwrap.install_hint())
 
-    for sec in sorted(secs, key=scene_date):
+    def one_pair(sec: str) -> SnapPairResult:
+        """쌍 하나 — 예외를 밖으로 내보내지 않는다(한 쌍 실패가 스택을 멈추면 안 된다)."""
         rd, sd = scene_date(ref), scene_date(sec)
         tag = "unw" if unwrap else "tc"
         tif = str(out / f"{tag}_{rd}_{sd}.tif")
         log = str(out / f"{tag}_{rd}_{sd}.log")
         try:
             if skip_existing and Path(tif).exists() and Path(tif).stat().st_size > 0:
-                res.pairs.append(SnapPairResult(rd, sd, tif, True, "재사용(skip_existing)"))
-                continue
+                return SnapPairResult(rd, sd, tif, True, "재사용(skip_existing)")
             if unwrap:
                 from . import snap_unwrap
                 snap_unwrap.unwrap_pair(gpt, ref, sec, burst, dem, tif,
                                         target=(lat, lon), half_km=unwrap_half_km,
                                         work_dir=out / f"snaphu_{rd}_{sd}", tool=tool,
                                         log_file=log)
-                res.pairs.append(SnapPairResult(rd, sd, tif, True, "언래핑"))
-                continue
+                return SnapPairResult(rd, sd, tif, True, "언래핑")
             rc = run_pair(gpt, graph, ref, sec, burst, dem, tif, log_file=log)
             ok = rc == 0 and Path(tif).exists()
-            res.pairs.append(SnapPairResult(rd, sd, tif, ok,
-                                            "" if ok else f"gpt rc={rc}"))
+            return SnapPairResult(rd, sd, tif, ok, "" if ok else f"gpt rc={rc}")
         except (OSError, subprocess.SubprocessError) as e:
-            res.pairs.append(SnapPairResult(rd, sd, tif, False, str(e)))
+            return SnapPairResult(rd, sd, tif, False, str(e))
         except Exception as e:  # noqa: BLE001 — 언래핑 실패도 쌍 단위로 기록하고 계속
-            res.pairs.append(SnapPairResult(rd, sd, tif, False, str(e)[:160]))
+            return SnapPairResult(rd, sd, tif, False, str(e)[:160])
+
+    todo = sorted(secs, key=scene_date)
+    done = 0
+
+    def record(r: SnapPairResult) -> None:
+        nonlocal done
+        done += 1
+        res.pairs.append(r)
+        if progress:
+            progress(done, len(todo), r)
+
+    if workers <= 1 or len(todo) <= 1:
+        for sec in todo:
+            record(one_pair(sec))
+        res.pairs.sort(key=lambda r: r.sec_date)
+        return res
+
+    # 첫 쌍은 혼자 돌린다 — gpt 가 기준 장면의 정밀궤도를 내려받는 순간이 여기고,
+    # 여러 프로세스가 같은 파일을 동시에 받으면 반쯤 쓰인 궤도를 서로 읽는다.
+    record(one_pair(todo[0]))
+    from concurrent.futures import ThreadPoolExecutor  # gpt/snaphu 는 하위 프로세스
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for r in ex.map(one_pair, todo[1:]):
+            record(r)
+    res.pairs.sort(key=lambda r: r.sec_date)
     return res
 
 
@@ -408,7 +464,7 @@ def build_track_h5(
     pairs: list[SnapPairResult], ref_date: str, out_h5: str | Path,
     *, lat: float, lon: float, coh_min: float = 0.3, radius_km: float = 3.0,
     heading: float | None = None, max_points: int = 20000,
-    unwrapped: bool = False,
+    unwrapped: bool = False, reference: bool = True, ref_exclude_km: float = 0.15,
 ) -> int:
     """스타 네트워크 지오코딩 산출(각 [phase, coh, incidence]) → inframon Track H5.
 
@@ -419,6 +475,10 @@ def build_track_h5(
     `unwrapped` 는 입력 위상이 **언래핑됐는지**를 그대로 파일에 적는다(추정하지 않는다).
     래핑 위상이면 LOS 가 ±λ/4 에 갇혀 물리적 의미가 없고, preflight 가 그 사실로
     산출물을 차단한다 — 그러려면 "무엇으로 만들었는지"가 파일에 남아 있어야 한다.
+
+    `reference=True`(기본) 면 간섭도마다 **교량 밖 안정점 중앙값**을 빼서 snaphu 의
+    정수 모호성(간섭도별 상수)과 대기 편차를 제거한다. `ref_exclude_km` 는 기준점에서
+    제외할 교량 주변 반경이다 — 교량 자신의 움직임을 기준에 섞지 않기 위한 것.
     """
     import h5py
     import numpy as np
@@ -466,6 +526,21 @@ def build_track_h5(
     coh_acc = coh0.ravel()[idx].copy()
     scale = -WAVELENGTH_M / (4.0 * math.pi) * 1000.0   # phase(rad) → mm
 
+    # ── 기준점 집합 — 간섭도마다 따로 실리는 상수를 없앤다 ─────────────────
+    # snaphu 는 간섭도를 하나씩 푼다. 그 해는 **상수 하나만큼 불확정**이라(정수 모호성)
+    # 시점마다 λ/2 의 정수배가 통째로 얹힌다. 빼 주지 않으면 서울 한강교량에서 시계열
+    # 표준편차가 34~39 mm(λ/2=27.7 mm)까지 벌어졌고, 그 잡음이 그대로 CRI '위험'으로
+    # 나왔다 — 실측 SHM 은 같은 교량을 '관리기준 이내'로 본다. 교량에서 떨어진
+    # 고결맞음 점(지반·건물)의 **중앙값**을 시점마다 빼면 상수와 대기 편차 대부분이 사라진다.
+    d_sel = dist_km.ravel()[idx]
+    c_sel = coh0.ravel()[idx]
+    ref_mask = (d_sel > ref_exclude_km) & (c_sel >= np.percentile(c_sel, 70))
+    if ref_mask.sum() < 20:
+        ref_mask = d_sel > ref_exclude_km
+    if ref_mask.sum() < 20:                      # 패치가 통째로 교량 근처면 전체로
+        ref_mask = np.ones(N, dtype=bool)
+    n_ref = int(ref_mask.sum())
+
     dates = [ref_date]
     for k, p in enumerate(ok_pairs, start=1):
         dates.append(p.sec_date)
@@ -482,6 +557,10 @@ def build_track_h5(
                                                          indexes=pb["phase"])],
                                 dtype=np.float64)
             los[:, k] = samp * scale
+        if reference:
+            r = np.nanmedian(los[ref_mask, k])
+            if np.isfinite(r):
+                los[:, k] -= r
     coh_mean = (coh_acc / M).astype(np.float32)
     incidence = inc0.ravel()[idx].astype(np.float32)
     epochs = np.array([int(d) for d in dates], dtype=np.int32)
@@ -498,7 +577,12 @@ def build_track_h5(
             f.attrs["HEADING"] = float(heading)
         f.attrs["source"] = ("SNAP(Windows) star-network "
                              + ("snaphu-unwrapped" if unwrapped else "wrapped-phase")
+                             + (f" · 기준점 {n_ref}점 중앙값 차감(>{ref_exclude_km:g}km)"
+                                if reference else " · 기준점 차감 없음")
                              + " → LOS")
+        f.attrs["referenced"] = bool(reference)
+        if reference:
+            f.attrs["n_reference_points"] = int(n_ref)
         f.attrs["RADAR_WAVELENGTH"] = WAVELENGTH_M
         f.attrs["unwrapped"] = bool(unwrapped)
     return N
@@ -983,7 +1067,7 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
         humidity_max_pct: float | None = None, temp_max_c: float | None = None,
         temp_min_c: float | None = None, unwrap: bool = False,
         unwrap_half_km: float = 2.0, max_temporal_days: float = 72.0,
-        max_perp_m: float = 150.0) -> SnapRunResult:
+        max_perp_m: float = 150.0, workers: int = 1, progress=None) -> SnapRunResult:
     """전체: 스타 네트워크 처리 → Track H5. 임의 한국 교량 재사용 진입점.
 
     era5_master=True 면 ⑤ ERA5(강수·습도·온도)로 master(reference) 선정 + 악천후 씬 소거
@@ -1003,7 +1087,8 @@ def run(scenes: list[str | Path], lat: float, lon: float, out_dir: str | Path,
                                dem=dem, graph_dir=graph_dir, gpt=gpt,
                                unwrap=unwrap, unwrap_half_km=unwrap_half_km,
                                max_temporal_days=max_temporal_days,
-                               max_perp_m=max_perp_m)
+                               max_perp_m=max_perp_m,
+                               workers=workers, progress=progress)
     res.weather = weather
     ref = str(reference) if reference else min([str(s) for s in scenes], key=scene_date)
     hd = platform_heading(ref, res.burst.subswath)
@@ -1060,7 +1145,7 @@ def amplitude_pairs(
     for sec in sorted([s for s in scenes if str(s) != ref], key=scene_date):
         tif = str(out / f"amp_{rd}_{scene_date(sec)}.tif")
         if not (skip_existing and Path(tif).exists() and Path(tif).stat().st_size > 0):
-            args = [gpt, graph, f"-PrefFile={ref}", f"-PsecFile={sec}",
+            args = [gpt, graph, f"-PrefFile={gpt_input(ref)}", f"-PsecFile={gpt_input(sec)}",
                     f"-Psubswath={burst.subswath}", f"-PfirstBurst={burst.burst_index}",
                     f"-PlastBurst={burst.burst_index}", f"-PdemName={dem}", f"-PoutFile={tif}"]
             try:
@@ -1121,9 +1206,17 @@ def run_batch(
     *, reference: str | Path | None = None, dem: str = "SRTM 1Sec HGT",
     graph_dir: str | Path | None = None, gpt: str | None = None,
     coh_min: float = 0.3, radius_km: float = 3.0,
+    unwrap: bool = False, unwrap_half_km: float = 2.0,
+    filter_baseline: bool = True, max_temporal_days: float = 72.0,
+    max_perp_m: float = 150.0, workers: int = 1, progress=None,
 ) -> list[BridgeResult]:
-    """여러 교량 배치 처리. 같은 (subswath,burst) 교량은 코레지+간섭도를 **1번만** 하고
-    Track H5 만 교량별로 생성(전체 한국 스케일에서 재처리 회피). bridges: [{name,lat,lon}].
+    """여러 교량 배치 처리. bridges: [{name,lat,lon}].
+
+    래핑 레인은 같은 (subswath,burst) 교량의 코레지+간섭도를 **1번만** 하고 Track H5 만
+    교량별로 만든다(전국 스케일에서 재처리 회피). 언래핑 레인은 그럴 수 없다 — 언래핑은
+    교량 ±`unwrap_half_km` 만 잘라서 풀기 때문에 잘라낸 창이 교량마다 다르다. 같은 burst
+    라도 12 km 떨어진 두 교량은 서로의 창 밖이다. 그래서 언래핑일 때는 교량마다 레인을
+    돌리고, 대신 `workers` 로 쌍을 동시에 처리해 시간을 되찾는다.
     """
     scenes = [str(s) for s in scenes]
     gpt = gpt or find_gpt()
@@ -1145,24 +1238,49 @@ def run_batch(
         groups.setdefault(key, []).append(b)
         detected.setdefault(key, bl)
 
-    for key, members in groups.items():
-        bl = detected[key]
-        burst_dir = out / f"{bl.subswath}_b{bl.burst_index}"
-        first = members[0]
-        run_res = process_star_network(
-            scenes, float(first["lat"]), float(first["lon"]), burst_dir,
-            reference=ref, dem=dem, graph_dir=graph_dir, gpt=gpt, burst=bl)
-        hd = platform_heading(ref, bl.subswath)
+    def _safe(name: str) -> str:
+        """파일명으로 쓸 수 있게만 다듬는다 — 한글은 남긴다.
+
+        ASCII 만 남기던 규칙은 '성수대교'·'한강대교'를 똑같이 `_` 로 만들어 세 교량이
+        한 폴더·한 파일을 덮어썼다. 한국 교량 이름은 거의 다 한글이다.
+        """
+        return re.sub(r'[\/:*?"<>|\s]+', "_", name).strip(". ") or "bridge"
+
+    def _track(members, run_res, bl, hd):
         for b in members:
             name = str(b.get("name") or f"{b['lat']}_{b['lon']}")
-            safe = re.sub(r"[^0-9A-Za-z_.-]+", "_", name)
-            th5 = str(out / f"track_{safe}.h5")
+            th5 = str(out / f"track_{_safe(name)}.h5")
             try:
                 n = build_track_h5(run_res.pairs, run_res.reference, th5,
                                    lat=float(b["lat"]), lon=float(b["lon"]),
-                                   coh_min=coh_min, radius_km=radius_km, heading=hd)
+                                   coh_min=coh_min, radius_km=radius_km, heading=hd,
+                                   unwrapped=unwrap)
                 results.append(BridgeResult(name, float(b["lat"]), float(b["lon"]), th5, n, bl))
             except SnapError as e:
                 results.append(BridgeResult(name, float(b["lat"]), float(b["lon"]),
                                             None, 0, bl, str(e)))
+
+    common = {"reference": ref, "dem": dem, "graph_dir": graph_dir, "gpt": gpt,
+              "filter_baseline": filter_baseline, "max_temporal_days": max_temporal_days,
+              "max_perp_m": max_perp_m, "workers": workers}
+    for key, members in groups.items():
+        bl = detected[key]
+        hd = platform_heading(ref, bl.subswath)
+        if not unwrap:
+            first = members[0]
+            run_res = process_star_network(
+                scenes, float(first["lat"]), float(first["lon"]),
+                out / f"{bl.subswath}_b{bl.burst_index}", burst=bl,
+                progress=(lambda d, t, r, _k=key: progress(_k, d, t, r)) if progress else None,
+                **common)
+            _track(members, run_res, bl, hd)
+            continue
+        for b in members:                       # 언래핑은 교량마다 창이 다르다 → 레인도 따로
+            name = str(b.get("name") or f"{b['lat']}_{b['lon']}")
+            run_res = process_star_network(
+                scenes, float(b["lat"]), float(b["lon"]), out / _safe(name), burst=bl,
+                unwrap=True, unwrap_half_km=unwrap_half_km,
+                progress=(lambda d, t, r, _n=name: progress(_n, d, t, r)) if progress else None,
+                **common)
+            _track([b], run_res, bl, hd)
     return results
