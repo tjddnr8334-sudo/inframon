@@ -86,7 +86,8 @@ async function init() {
     sel.innerHTML = "";
     bridges.filter(b => b.has_insar).forEach(b => {
       const o = document.createElement("option");
-      o.value = b.bridge_id; o.textContent = `${b.name} (${b.warning_level ?? "—"})`;
+      o.value = b.bridge_id;
+      o.textContent = `${b.name} (${b.warning_level ?? "—"}${b.warning_provisional ? " 잠정" : ""})`;
       sel.appendChild(o);
     });
     if (!sel.value) { showErr({ message: "InSAR 산출물이 있는 교량이 없습니다." }); return; }
@@ -115,9 +116,17 @@ async function loadBridge(bridgeId) {
   try {
     const [summary, cri] = await Promise.all([api.summary(bridgeId), api.cri(bridgeId)]);
     // 헤더 요약 + 경보 배지
+    // 경보 배지 — 등급이 **잠정**이면 그렇게 보여야 한다. CRI 등급은 건강 교량 코호트
+    // 기준치로 읽는 값이라 관측조건이 다르면 통째로 밀린다. 그냥 '위험'만 띄우면
+    // 현장 계측이 '관리기준 이내'라고 한 교량이 붉게 뜬다.
     const w = summary.warning?.level ?? "—";
-    $("warnBadge").textContent = w;
-    $("warnBadge").style.background = WARNING_COLORS[w] ?? "#888";
+    const prov = !!summary.warning?.provisional;
+    $("warnBadge").textContent = prov ? `${w} (잠정)` : w;
+    $("warnBadge").style.background = prov ? "#8A8F96" : (WARNING_COLORS[w] ?? "#888");
+    $("warnBadge").title = prov
+      ? `관측조건이 기준치 학습 조건과 다릅니다 — ${summary.warning?.regime_note ?? ""}. `
+        + "등급을 구조 상태로 읽으면 안 됩니다."
+      : "";
     $("summary").textContent =
       `측점 ${summary.n_points} · 시점 ${summary.n_dates} · 기간 ${summary.date_range.join(" ~ ")}` +
       ` · 최대CRI ${summary.cri_global_max ?? "-"} · 평균 coherence ${summary.coherence_mean}`;

@@ -2030,9 +2030,19 @@ def status_header(path: str) -> None:
     n_points = "—" if cri is None else f"{cri.shape[0]:,}"
     n_dates = "—" if cri is None else f"{cri.shape[1]:,}"
 
+    # 등급이 **잠정**이면 그렇게 보여야 한다 — CRI 밴드는 건강 교량 코호트 기준치라
+    # 관측조건(노이즈·기간·에폭)이 다르면 분포가 통째로 밀린다. 그냥 '위험'만 띄우면
+    # 현장 계측이 '관리기준 이내'라고 한 교량이 붉게 뜬다(한강 교량들이 그랬다).
+    rr = d.get("reference_range") or {}
+    if rr.get("provisional"):
+        banner, emoji = "warning", "🟡"
     getattr(st, banner)(f"{emoji}  현재 경보 등급 : **{level}**"
+                        + ("  (**잠정**)" if rr.get("provisional") else "")
                         + (f"   ·   {', '.join(warning['critical_members'])}"
                            if warning.get("critical_members") else ""))
+    if rr.get("provisional"):
+        st.caption(f"⚠ 관측조건이 CRI 기준치 학습 조건과 다릅니다 — {rr.get('regime_mismatch')}. "
+                   "등급을 구조 상태로 바로 읽지 마세요. 판단은 아래 변위속도와 95% 신뢰구간으로.")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("최대 공명위험 CRI", "—" if cri_max is None else f"{cri_max:.3f}")
     c2.metric("측정점 수 N", n_points)
