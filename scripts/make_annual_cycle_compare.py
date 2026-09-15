@@ -206,11 +206,79 @@ def figure(rows: list[dict], out: Path) -> None:
     print("wrote", out)
 
 
+def figure_compact(rows: list[dict], out: Path) -> None:
+    """발표용 가로형 — **1년으로 접어** 두 곡선을 겹친다.
+
+    세로로 긴 3단 그림은 슬라이드에서 작아져 못 읽는다. 여기서는 교량마다 12개월
+    축 하나에 보고서 월평균과 위성 연주기 적합을 **각자의 진폭으로 정규화해** 겹친다 —
+    진폭이 자릿수부터 다르니(경사계는 한 점, 위성은 교면 중앙값) 맞춰 볼 것은 **위상**이다.
+    """
+    n = len(rows)
+    fig = plt.figure(figsize=(16.4, 4.4))
+    gs = fig.add_gridspec(1, n + 1, width_ratios=[*([1.0] * n), 0.82],
+                          left=0.05, right=0.99, top=0.80, bottom=0.14, wspace=0.28)
+    mm = np.arange(1, 13)
+    for i, r in enumerate(rows):
+        ax = fig.add_subplot(gs[0, i])
+        rt, ry, rf = r["report_t"], r["report_y"], r["report_fit"]
+        # 보고서 — 월별 값을 연도 넘어 평균(추세 제거 후)
+        det = ry - (rf["c"][0] + rf["c"][1] * rt)
+        mon = np.clip(((rt % 1.0) * 12).astype(int), 0, 11)
+        avg = np.array([det[mon == k].mean() if (mon == k).any() else np.nan
+                        for k in range(12)])
+        ax.plot(mm, avg / rf["amp_mm"], "o-", ms=5, lw=1.8, color=RED,
+                label=f"보고서 {rf['amp_mm']:.1f} mm")
+        tt = np.linspace(0, 1, 300)
+        c = r["insar_fit"]["c"]
+        cyc = c[2] * np.sin(2 * np.pi * tt) + c[3] * np.cos(2 * np.pi * tt)
+        ax.plot(1 + 11 * tt, cyc / r["insar_fit"]["amp_mm"], "-", lw=2.6, color=BLUE,
+                label=f"위성 {r['insar_amp_vert']:.1f} mm(연직)")
+        ax.axhline(0, color="k", lw=0.8, alpha=.5)
+        ax.set_xticks(mm); ax.set_xticklabels([f"{m}" for m in mm], fontsize=8)
+        ax.set_xlabel("월", fontsize=9)
+        if i == 0:
+            ax.set_ylabel("각자 진폭으로 정규화", fontsize=9)
+        flip = "\n(부호 규약 반대로 보고 뒤집음)" if r["phase_flip"] else ""
+        ax.set_title(f"{r['name']} — 위상차 {r['phase_gap']:.1f}개월" + flip,
+                     fontsize=11, pad=5)
+        ax.legend(fontsize=8, framealpha=.92, loc="lower right")
+        ax.grid(alpha=.22); ax.tick_params(labelsize=8)
+
+    b = fig.add_subplot(gs[0, n])
+    y = np.arange(n)[::-1]
+    b.barh(y, [r["phase_gap"] for r in rows], color=GREEN, height=0.5)
+    for yi, r in zip(y, rows):
+        b.text(r["phase_gap"] + 0.08, yi, f"{r['phase_gap']:.1f}", va="center",
+               fontsize=9.5, color=NAVY)
+    b.axvline(3.0, color=ORANGE, ls="--", lw=1.4)
+    b.text(3.08, len(rows) - 0.55, "3개월 =" + "\n" + "계절 어긋남",
+           fontsize=8, color=ORANGE, va="top")
+    b.set_yticks(y); b.set_yticklabels([r["name"] for r in rows], fontsize=9.5)
+    b.set_ylim(-0.6, len(rows) - 0.4)
+    b.set_xlim(0, 6); b.set_xlabel("위상차 [개월]", fontsize=9.5)
+    b.set_title("최대가 되는 달이 얼마나 다른가", fontsize=11, pad=5)
+    b.grid(axis="x", alpha=.25); b.tick_params(labelsize=8)
+
+    fig.suptitle("보고서 월별 변위 ↔ 위성 InSAR — 추세는 못 가려도 **연주기는 맞는다** "
+                 f"({WIN[0][:7]} ~ {WIN[1][:7]})", fontsize=14, fontweight="bold",
+                 y=0.955)
+    fig.text(0.006, 0.012,
+             "진폭은 맞출 대상이 아니다 — 경사계·레이저처짐계는 한 지점의 처짐이고 위성은 "
+             "교면 결합 측점의 **중앙값**이라, 경간 중앙의 큰 스윙이 중앙값에서 상쇄된다. "
+             "같은 열거동인지는 **최대가 되는 달**로 본다.", fontsize=8.5, color=GRAY)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+    print("wrote", out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--disp", default="docs/bridges/hangang_displacement_2024.json")
     ap.add_argument("--root", default="docs/bridges")
     ap.add_argument("--out", default="docs/img/hangang_연주기_대조.png")
+    ap.add_argument("--compact-out", default="docs/img/hangang_연주기_요약.png",
+                    help="발표용 가로형 — 1년으로 접어 위상을 겹친다")
     ap.add_argument("--json-out", default="docs/bridges/hangang_annual_cycle.json")
     a = ap.parse_args()
     _use_korean_font(plt)
@@ -248,6 +316,7 @@ def main() -> int:
               file=sys.stderr)
         return 1
     figure(rows, Path(a.out))
+    figure_compact(rows, Path(a.compact_out))
 
     slim = {"_창": list(WIN),
             "_읽는법": "amp_mm=연주기 진폭(반진폭), peak_month=1년 중 최대가 되는 달, "

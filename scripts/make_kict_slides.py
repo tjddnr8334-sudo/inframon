@@ -612,6 +612,32 @@ def slide_gnss(prs, fig, trend_json):
               "있어야 성립한다.")
 
 
+def slide_cycle(prs, fig, cyc: dict):
+    """추세는 못 가려도 **연주기는 맞는다** — 앞 장의 '판별 불가' 다음에 오는 장."""
+    s = blank(prs)
+    header(s, "보고서 월별 변위 ↔ 위성 — 추세는 못 가려도 연주기는 맞는다",
+           "2022~2024 같은 창 · 보고서 월별 처짐 곡선 ↔ 위성 연주기 적합")
+    if fig and Path(fig).exists():
+        picture_fit(s, fig, 0.45, 1.0, SW - 0.9, 4.92)
+    rows = (cyc or {}).get("bridges") or []
+    gaps = [r["phase_gap"] for r in rows if r.get("phase_gap") is not None]
+    eps = sorted(r.get("insar_fit", {}).get("n", 0) for r in rows)
+    n_ep = (f"{eps[0]}~{eps[-1]}" if eps and eps[0] != eps[-1]
+            else (str(eps[0]) if eps else "—"))
+    w = (SW - 0.9 - 0.24 * 2) / 3
+    kpi(s, 0.45, 5.98, w, 0.88, str(len(rows)), "개소",
+        "보고서 월별 변위 곡선을 되읽어 대조한 교량", NAVY_L)
+    kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88,
+        (f"{min(gaps):.1f}~{max(gaps):.1f}" if gaps else "—"), "개월",
+        "최대가 되는 달의 차이 — 세 곳 모두 2개월 안쪽", GREEN)
+    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88, n_ep, "시점",
+        "같은 창의 Sentinel-1 시점 — 추세는 못 가려도 계절은 잡힌다", BLUE)
+    footer(s, "진폭은 맞출 대상이 아니다 — 경사계·레이저처짐계는 한 지점의 처짐이고 위성은 "
+              "교면 결합 측점의 중앙값이라, 경간 중앙의 큰 스윙이 중앙값에서 상쇄된다. "
+              "같은 열거동을 보고 있는지는 최대가 되는 달로 본다. 보고서 값은 그림에서 "
+              "되읽은 값이다(자동 판독과 눈 판독이 중앙 0.5 mm 로 일치).")
+
+
 def slide_chain(prs, fig, name: str, b: dict | None):
     """좌표 하나 → OSM 데크선 → PS 선별 → 트윈, 중간을 빼지 않고 보이는 장."""
     s = blank(prs)
@@ -852,6 +878,9 @@ def main() -> int:
                     help="GNSS↔InSAR 추세 수치(make_gnss_insar_trend.py)")
     ap.add_argument("--twin-fig", default="docs/img/hangang_트윈_3D.png",
                     help="디지털 트윈 위의 PS 점 — 전 교량 3D")
+    ap.add_argument("--cycle-fig", default="docs/img/hangang_연주기_요약.png",
+                    help="연주기 대조 — 발표용 가로형")
+    ap.add_argument("--cycle-json", default="docs/bridges/hangang_annual_cycle.json")
     ap.add_argument("--root-bridges", default="docs/bridges")
     ap.add_argument("--chain-bridge", default="암사대교",
                     help="전 과정(OSM→선별→트윈) 한 장을 보일 교량")
@@ -895,6 +924,9 @@ def main() -> int:
     slide3(prs, bs, meta["shm"])
     slide_shm(prs, a.compare_fig, meta["shm"], meta["cmp_rows"])
     slide_gnss(prs, a.gnss_fig, meta["gnss"])
+    cj = Path(a.cycle_json)
+    slide_cycle(prs, a.cycle_fig,
+                json.loads(cj.read_text(encoding="utf-8")) if cj.exists() else {})
     chain_b = Path(a.root_bridges) / a.chain_bridge / "bridge.json"
     slide_chain(prs, Path(a.root_bridges) / a.chain_bridge / "chain.png", a.chain_bridge,
                 json.loads(chain_b.read_text(encoding="utf-8")) if chain_b.exists() else None)
