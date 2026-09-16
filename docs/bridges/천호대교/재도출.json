@@ -27,11 +27,5 @@
  "network_resonance_max": 0.739,
  "velocity_median_mm_yr": -0.59,
  "n_points": 13,
- "EI_median": 7349999999999.999,
- "gnss": {
-  "quantity": "처짐(경사변위)",
-  "read": "눈으로 읽음",
-  "n_months": 3,
-  "note": "짝지어지는 달이 6개 미만 — 대조하지 않는다"
- }
+ "EI_median": 7349999999999.999
 }

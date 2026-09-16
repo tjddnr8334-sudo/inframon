@@ -30,22 +30,5 @@
  "network_resonance_max": 0.83,
  "velocity_median_mm_yr": 0.28,
  "n_points": 10,
- "EI_median": 77022788107.83505,
- "gnss": {
-  "quantity": "연직변위 (P1_U)",
-  "read": "자동판독",
-  "n_months": 18,
-  "r": -0.353,
-  "r2": 0.124,
-  "r2_chance95": 0.225,
-  "beats_chance": false,
-  "insar_slope_mm_yr": 2.04,
-  "insar_slope_ci": 6.14,
-  "report_slope_per_yr": -0.44,
-  "report_slope_ci": 2.74,
-  "trend_ci_overlap": true,
-  "annual_phase_diff_months": -5.13,
-  "annual_amp_insar_mm": 4.21,
-  "annual_amp_report": 5.66
- }
+ "EI_median": 77022788107.83505
 }

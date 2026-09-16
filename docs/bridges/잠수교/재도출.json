@@ -23,6 +23,5 @@
  "network_resonance_max": 0.881,
  "velocity_median_mm_yr": -1.09,
  "n_points": 11,
- "EI_median": 1764000000000.0002,
- "gnss": null
+ "EI_median": 1764000000000.0002
 }

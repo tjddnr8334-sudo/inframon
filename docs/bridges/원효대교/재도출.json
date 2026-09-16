@@ -27,22 +27,5 @@
  "network_resonance_max": 0.923,
  "velocity_median_mm_yr": -0.53,
  "n_points": 14,
- "EI_median": 680001457129.2882,
- "gnss": {
-  "quantity": "처짐(경사계)",
-  "read": "눈으로 읽음",
-  "n_months": 19,
-  "r": -0.006,
-  "r2": 0.0,
-  "r2_chance95": 0.201,
-  "beats_chance": false,
-  "insar_slope_mm_yr": -2.25,
-  "insar_slope_ci": 3.19,
-  "report_slope_per_yr": -1.2,
-  "report_slope_ci": 5.22,
-  "trend_ci_overlap": true,
-  "annual_phase_diff_months": 3.17,
-  "annual_amp_insar_mm": 5.1,
-  "annual_amp_report": 13.92
- }
+ "EI_median": 680001457129.2882
 }

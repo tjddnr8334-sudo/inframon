@@ -118,14 +118,7 @@
      77,
      0.49710891405483343
     ]
-   ],
-   "gnss_sensors": [
-    "처짐(경사계)"
-   ],
-   "gnss_amp_mm": 22.59,
-   "gnss_peak_month": 0.98,
-   "phase_diff_months": -3.13,
-   "same_seasonal_behaviour": false
+   ]
   },
   {
    "name": "샛강문화다리",
@@ -243,16 +236,7 @@
      13,
      0.43846102402760434
     ]
-   ],
-   "gnss_sensors": [
-    "P1_U",
-    "1_2_U",
-    "P2_U"
-   ],
-   "gnss_amp_mm": 5.83,
-   "gnss_peak_month": 0.85,
-   "phase_diff_months": 3.01,
-   "same_seasonal_behaviour": false
+   ]
   },
   {
    "name": "서강대교",
@@ -1078,14 +1062,7 @@
      42,
      0.5806370356253215
     ]
-   ],
-   "gnss_sensors": [
-    "처짐(레이저)"
-   ],
-   "gnss_amp_mm": 8.34,
-   "gnss_peak_month": 1.44,
-   "phase_diff_months": -5.6,
-   "same_seasonal_behaviour": false
+   ]
   },
   {
    "name": "원효대교",
@@ -1203,14 +1180,7 @@
      19,
      0.520274524625979
     ]
-   ],
-   "gnss_sensors": [
-    "처짐(경사계)"
-   ],
-   "gnss_amp_mm": 16.52,
-   "gnss_peak_month": 10.86,
-   "phase_diff_months": 1.26,
-   "same_seasonal_behaviour": true
+   ]
   },
   {
    "name": "월드컵대교",
@@ -1328,16 +1298,7 @@
      48,
      0.6939489835252365
     ]
-   ],
-   "gnss_sensors": [
-    "GP_S1M_01_Z",
-    "GP_T1T_01_Z",
-    "GP_S2M_01_Z"
-   ],
-   "gnss_amp_mm": 7.7,
-   "gnss_peak_month": 7.98,
-   "phase_diff_months": 5.81,
-   "same_seasonal_behaviour": false
+   ]
   },
   {
    "name": "잠수교",

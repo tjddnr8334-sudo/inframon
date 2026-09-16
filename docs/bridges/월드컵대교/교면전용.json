@@ -114,14 +114,5 @@
    48,
    0.6939489835252365
   ]
- ],
- "gnss_sensors": [
-  "GP_S1M_01_Z",
-  "GP_T1T_01_Z",
-  "GP_S2M_01_Z"
- ],
- "gnss_amp_mm": 7.7,
- "gnss_peak_month": 7.98,
- "phase_diff_months": 5.81,
- "same_seasonal_behaviour": false
+ ]
 }

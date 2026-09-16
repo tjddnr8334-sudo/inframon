@@ -114,12 +114,5 @@
    19,
    0.520274524625979
   ]
- ],
- "gnss_sensors": [
-  "처짐(경사계)"
- ],
- "gnss_amp_mm": 16.52,
- "gnss_peak_month": 10.86,
- "phase_diff_months": 1.26,
- "same_seasonal_behaviour": true
+ ]
 }

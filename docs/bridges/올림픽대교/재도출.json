@@ -28,22 +28,5 @@
  "network_resonance_max": 0.967,
  "velocity_median_mm_yr": -0.91,
  "n_points": 20,
- "EI_median": 3675005755670.963,
- "gnss": {
-  "quantity": "처짐(레이저)",
-  "read": "눈으로 읽음",
-  "n_months": 29,
-  "r": 0.047,
-  "r2": 0.002,
-  "r2_chance95": 0.127,
-  "beats_chance": false,
-  "insar_slope_mm_yr": -4.98,
-  "insar_slope_ci": 8.25,
-  "report_slope_per_yr": -3.35,
-  "report_slope_ci": 3.13,
-  "trend_ci_overlap": true,
-  "annual_phase_diff_months": -3.3,
-  "annual_amp_insar_mm": 6.84,
-  "annual_amp_report": 8.53
- }
+ "EI_median": 3675005755670.963
 }
