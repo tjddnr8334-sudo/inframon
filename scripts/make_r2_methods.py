@@ -77,18 +77,75 @@ def transform(name: str, t: np.ndarray, v: np.ndarray) -> np.ndarray:
     return np.cumsum(v - v.mean())
 
 
-def best_r2(X: np.ndarray, y: np.ndarray, t: np.ndarray, name: str) -> float:
-    """점들 중 최대 R² — 지금까지 써 온 방식 그대로."""
+def best_r2(X: np.ndarray, y: np.ndarray, t: np.ndarray, name: str,
+            want_idx: bool = False):
+    """점들 중 최대 R² — 지금까지 써 온 방식 그대로. want_idx 면 그 점 번호까지."""
     yy = transform(name, t, y)
     if np.std(yy) < 1e-9:
-        return float("nan")
-    out = 0.0
+        return (float("nan"), -1) if want_idx else float("nan")
+    out, jbest = 0.0, -1
     for j in range(X.shape[0]):
         xx = transform(name, t, X[j])
         if np.std(xx) < 1e-9:
             continue
-        out = max(out, abs(float(np.corrcoef(xx, yy)[0, 1])))
-    return out ** 2
+        r = abs(float(np.corrcoef(xx, yy)[0, 1]))
+        if r > out:
+            out, jbest = r, j
+    return (out ** 2, jbest) if want_idx else out ** 2
+
+
+def method_figure(name: str, data: list, out: Path) -> None:
+    """방법 하나를 교량마다 한 칸씩 — 변환한 두 곡선을 겹쳐 본다.
+
+    숫자만 놓으면 '왜 오르는지' 가 안 보인다. 평활·연주기·누적이 신호를 어떻게
+    매끄럽게 만드는지 눈으로 보이면, 우연 기준선이 왜 같이 오르는지도 보인다.
+    """
+    n = len(data)
+    ncol = 3
+    nrow = (n + ncol - 1) // ncol
+    fig, axes = plt.subplots(nrow, ncol, figsize=(15.6, 3.2 * nrow))
+    axes = np.atleast_1d(axes).ravel()
+    for ax, (nm, what, t, X, y, rec) in zip(axes, data):
+        m = rec["methods"][name]
+        j = m.get("best_point", -1)
+        yy = transform(name, t, y)
+        xx = transform(name, t, X[j]) if j >= 0 else None
+        # (c%1)*12 = m-0.5 이므로 floor 로 내려야 m 이 나온다. round 를 쓰면
+        # 은행가 반올림 때문에 8월·9월이 같은 이름으로 찍힌다.
+        lab = [f"{int(c)}-{int(np.floor((c % 1) * 12)) + 1:02d}" for c in t]
+        k = np.arange(len(t))
+        ax.plot(k, yy, "-o", ms=3.4, lw=1.8, color=RED, label="현장 계측")
+        ax.set_ylabel("계측", color=RED, fontsize=9)
+        ax.tick_params(axis="y", colors=RED, labelsize=8.2)
+        a2 = ax.twinx()
+        if xx is not None:
+            a2.plot(k, xx, "-o", ms=3.4, lw=1.8, color="#2E6FB7",
+                    label=f"InSAR P{j:02d}")
+        a2.set_ylabel("InSAR", color="#2E6FB7", fontsize=9)
+        a2.tick_params(axis="y", colors="#2E6FB7", labelsize=8.2)
+        step = max(1, len(k) // 8)
+        ax.set_xticks(k[::step])
+        ax.set_xticklabels(lab[::step], fontsize=7.6, rotation=45)
+        ax.grid(alpha=.2)
+        beat = m["beats_chance"]
+        ax.set_title(f"{nm} — {what[:18]}\n"
+                     f"R² {m['observed_r2']:.2f}  ·  우연 {m['chance_r2_p95']:.2f}  ·  "
+                     + ("우연을 넘는다" if beat else "우연 안"),
+                     fontsize=9.6, color=(GREEN if beat else RED), pad=6)
+    for ax in axes[n:]:
+        ax.axis("off")
+    fig.suptitle(f"{name} — 변환한 두 곡선을 겹쳐 본다\n"
+                 "붉은색 = 현장 계측 · 파란색 = 가장 닮은 PS 점 (각자 축)",
+                 fontsize=14.5, fontweight="bold", y=0.995)
+    fig.text(0.006, 0.006,
+             "※ 제목의 '우연' 은 위성 월값을 무작위로 섞어 같은 계산을 200회 돌린 값의 "
+             "95 백분위다. 신호가 매끄러울수록 R² 도 우연도 함께 오른다 — 그래서 R² 만 "
+             "보고 좋다 나쁘다 말할 수 없다.", fontsize=9, color=DIM)
+    fig.tight_layout(rect=(0, 0.018, 1, 0.955))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=140)
+    plt.close(fig)
+    print("wrote", out)
 
 
 def main() -> int:
@@ -109,7 +166,7 @@ def main() -> int:
 
     names = ["가양대교", "원효대교", "올림픽대교", "샛강문화다리", "암사대교",
              "월드컵대교"]
-    rows = []
+    rows, keep = [], []
     for nm in names:
         rp = report_series(auto, eye, nm)
         pts = load_points(Path(a.root) / nm)
@@ -132,7 +189,7 @@ def main() -> int:
         rec = {"name": nm, "what": what, "n_months": len(common),
                "n_points": int(X.shape[0]), "methods": {}}
         for mname in METHODS:
-            obs = best_r2(X, y, t, mname)
+            obs, jb = best_r2(X, y, t, mname, want_idx=True)
             null = []
             for _ in range(a.perm):
                 Xp = X[:, rng.permutation(len(common))]
@@ -141,8 +198,9 @@ def main() -> int:
             rec["methods"][mname] = {
                 "observed_r2": round(float(obs), 3),
                 "chance_r2_p95": round(n95, 3),
-                "beats_chance": bool(obs > n95)}
+                "beats_chance": bool(obs > n95), "best_point": int(jb)}
         rows.append(rec)
+        keep.append((nm, what, t, X, y, rec))
         print(f"{nm:<12} " + "  ".join(
             f"{m}: {rec['methods'][m]['observed_r2']:.2f}"
             f"/{rec['methods'][m]['chance_r2_p95']:.2f}" for m in METHODS))
@@ -187,6 +245,9 @@ def main() -> int:
                 "'0.6 을 넘겼다' 는 것만으로는 일치의 근거가 되지 않는다.",
          "bridges": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     print("wrote", a.json_out)
+    for mname in METHODS:
+        method_figure(mname, keep,
+                      Path(a.out).parent / f"R2_방법_{mname.replace(' ', '')}.png")
     return 0
 
 
