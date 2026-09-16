@@ -556,114 +556,7 @@ def slide3(prs, bs, shm=None):
               "python scripts/bridge_run.py --name <교량> --lat <위도> --lon <경도> --track <트랙>")
 
 
-def slide_shm(prs, compare_fig, shm: dict, cmp_rows: list):
-    """현장 계측 판정과 위성 관측을 같은 축에 놓는다 — 발표의 근거가 되는 장.
 
-    `cmp_rows` 는 `docs/bridges/hangang_gnss_insar.json` 의 bridges 배열 —
-    보고서 16개소를 하나도 빼지 않고 위성 판정과 맞댄 결과다.
-    """
-    s = blank(prs)
-    header(s, "현장 계측 ↔ 위성 InSAR — 16개소 전수 대조",
-           "2024 한강교량 온라인 안전감시 최종보고 전 교량 · 교면 중앙값과 교축 구간별 추세")
-    if compare_fig and Path(compare_fig).exists():
-        picture_fit(s, compare_fig, 0.45, 1.0, SW - 0.9, 4.92)
-
-    done = [r for r in cmp_rows if r.get("insar")]
-    agree = [r for r in done if str(r.get("agree", "")).startswith("일치")]
-    n_gap = sum(1 for v in shm.values()
-                if any(st in ("X", "△") for _, st in (v.get("items") or [])))
-    w = (SW - 0.9 - 0.24 * 2) / 3
-    kpi(s, 0.45, 5.98, w, 0.88, f"{len(done)}/{len(cmp_rows) or len(shm)}", "개소",
-        "보고서 대상 중 위성으로도 산출된 교량 — 빠진 곳 없음", NAVY_L)
-    kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88, f"{len(agree)}/{len(done)}", "일치",
-        "위성 판정이 보고서 판정과 같은 교량", GREEN)
-    so = [r["name"] for r in done if (r.get("insar") or {}).get("section_only")]
-    nsec = sum(1 for r in done
-               for q in ((r.get("insar") or {}).get("sections") or [])
-               if q.get("v") is not None)
-    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88, f"{len(so)}", "개소",
-        "교면 전체 중앙값은 '유의차 없음' 인데 한 구간은 유의 (▲)", ORANGE)
-    footer(s, "위성 판정 = 데크 중앙값 LOS 시계열에 직선+연주기를 맞춘 속도의 95% 신뢰구간이 "
-              "0 을 포함하는가. 다만 중앙값은 교량 전체의 요약일 뿐 '어느 구간도 안 움직인다' 는 "
-              "뜻이 아니어서, 교축을 6구간으로 나눠 같이 실었다(연한 띠) — "
-              + (" · ".join(so) + " 는 중앙값이 '유의차 없음' 인데 한 구간은 유의하다. "
-                 if so else "")
-              + f"※ 구간 검정 {nsec}회이므로 유의수준 5% 에서 {0.05 * nsec:.1f}개 가량은 "
-                "우연이며(다중비교 보정 전), 구간 유의 = 이상 이 아니라 '현장에서 그 구간을 "
-                f"먼저 보라' 는 표식이다. 한편 처짐·텐던 계측이 미설치(X)이거나 경사계로 "
-                f"대체(△)된 곳이 {n_gap}개소 — 위성이 메울 수 있는 빈칸이다.")
-
-
-def slide_gnss(prs, fig, trend_json):
-    """보고서 GNSS 와 위성을 **같은 기간으로 잘라** 맞댄 장 — 되는 것과 안 되는 것."""
-    s = blank(prs)
-    header(s, "보고서 GNSS ↔ 위성 InSAR — 기간을 맞추면 무엇이 남는가",
-           "월드컵대교 2024-01~11 · 샛강문화다리 2022~2024")
-    if fig and Path(fig).exists():
-        picture_fit(s, fig, 0.45, 1.0, SW - 0.9, 4.86)
-
-    d = trend_json or {}
-    wc = (d.get("월드컵대교") or {}).get("insar_2024") or {}
-    sg = (d.get("샛강문화다리") or {}).get("insar_2022_2024") or {}
-    sgf = (d.get("샛강문화다리") or {}).get("insar_전체") or {}
-
-    def _ci(w):
-        if not w:
-            return None
-        k = "ann" if w.get("annual_fit") else "lin"
-        return w[k]["ci"]
-
-    w = (SW - 0.9 - 0.24 * 2) / 3
-    kpi(s, 0.45, 5.98, w, 0.88, "2", "개소",
-        "보고서에 GNSS 수치표가 인쇄된 교량(16개소 중)", NAVY_L)
-    kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88,
-        f"{wc.get('n_epochs', '?')} · {sg.get('n_epochs', '?')}", "시점",
-        "보고서 창(1년 · 3년)으로 자른 Sentinel-1 시점 수", ORANGE)
-    c1, c3 = _ci(wc), _ci(sg)
-    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88,
-        (f"±{c1:.0f} · ±{c3:.1f}" if c1 and c3 else "—"), "mm/yr",
-        "같은 창에서의 95% 신뢰구간 — 이 폭으로는 추세를 판별할 수 없다", RED)
-
-    footer(s, "정직하게 — 보고서 GNSS 는 2024 한 해(월드컵) 또는 2022~24 3년(샛강)뿐이고, "
-              "그 창으로 위성을 자르면 Sentinel-1(12일 주기)은 시점이 6~19개라 신뢰구간이 "
-              "GNSS 값 전체를 삼킨다. 전체 8년으로 보면 샛강문화다리가 "
-              f"{sgf.get('ann', {}).get('v', 0):+.2f} mm/yr 로 보고서 GNSS 범위 안에 들지만, "
-              "그건 같은 기간을 잰 값이 아니다. GNSS 대조는 코너리플렉터·고해상도 SAR 이 "
-              "있어야 성립한다.")
-
-
-def slide_cycle(prs, fig, cyc: dict):
-    """연주기 — **교축 어디를 보느냐**가 진폭을 정한다. ⑥ 의 '판별 불가' 다음 장."""
-    s = blank(prs)
-    header(s, "보고서 처짐계는 한 지점을 본다 — 위성도 그 구간만 보면 맞는다",
-           "2022~2024 같은 창 · 연주기(계절 성분) 진폭과 최대월")
-    if fig and Path(fig).exists():
-        picture_fit(s, fig, 0.45, 1.0, SW - 0.9, 4.92)
-    rows = (cyc or {}).get("bridges") or []
-    gaps = [r["phase_gap"] for r in rows if r.get("phase_gap") is not None]
-    lo = hi = None
-    for r in rows:
-        for q in (r.get("profile") or []):
-            v = q.get("amp_vert_mm")
-            if v is None:
-                continue
-            lo = v if lo is None else min(lo, v)
-            hi = v if hi is None else max(hi, v)
-    med = [r["insar_amp_vert"] for r in rows if r.get("insar_amp_vert") is not None]
-    w = (SW - 0.9 - 0.24 * 2) / 3
-    kpi(s, 0.45, 5.98, w, 0.88,
-        (f"{min(med):.1f}~{max(med):.1f}" if med else "—"), "mm",
-        "교면 전체 중앙값의 연주기 진폭 — 구간이 서로 지워진다", ORANGE)
-    kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88,
-        (f"{lo:.1f}~{hi:.1f}" if lo is not None else "—"), "mm",
-        "교축 구간별 진폭 — 보고서 8~23 mm 와 자릿수가 맞는다", GREEN)
-    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88,
-        (f"{min(gaps):.1f}~{max(gaps):.1f}" if gaps else "—"), "개월",
-        "최대가 되는 달의 차이 — 세 곳 모두 2개월 안쪽", BLUE)
-    footer(s, "보고서 처짐계·레이저처짐계는 한 지점(레이저처짐계는 중앙경간, 보고서 p12)을 "
-              "본다. 위성을 교면 전체 중앙값으로 적합하면 위상이 다른 구간이 서로 지워져 "
-              "진폭이 죽는다 — 가양대교 1.0 mm. 같은 자료를 교축 구간으로 나눠 보면 "
-              "6~12 mm 로 보고서와 자릿수가 맞고, 최대가 되는 달도 2개월 안쪽으로 맞는다.")
 
 
 def slide_chain(prs, fig, name: str, b: dict | None):
@@ -1074,18 +967,10 @@ def main() -> int:
     ap.add_argument("--out", default="docs/KICT_Bmaps_협의.pptx")
     ap.add_argument("--map-fig", default="docs/img/seoul3_map.png")
     ap.add_argument("--tab-shot", default="docs/img/bmaps_tab.png")
-    ap.add_argument("--compare-fig", default="docs/img/hangang_지표_종합.png",
-                    help="현장 보고 ↔ 위성 16개소 전수 대조 그림")
-    ap.add_argument("--compare-json", default="docs/bridges/hangang_gnss_insar.json",
-                    help="같은 대조의 수치(make_hangang_gnss_insar.py)")
-    ap.add_argument("--gnss-fig", default="docs/img/gnss_insar_추세선.png")
     ap.add_argument("--gnss-json", default="docs/bridges/gnss_insar_추세.json",
                     help="GNSS↔InSAR 추세 수치(make_gnss_insar_trend.py)")
     ap.add_argument("--twin-fig", default="docs/img/hangang_트윈_3D.png",
                     help="디지털 트윈 위의 PS 점 — 전 교량 3D")
-    ap.add_argument("--cycle-fig", default="docs/img/hangang_연주기_요약.png",
-                    help="연주기 대조 — 발표용 가로형")
-    ap.add_argument("--cycle-json", default="docs/bridges/hangang_annual_cycle.json")
     ap.add_argument("--root-bridges", default="docs/bridges")
     ap.add_argument("--hangang-map-fig", default="docs/img/hangang_지도_화면.png",
                     help="OSM 위 결과 지도(한강_지도.html) 화면")
@@ -1111,12 +996,8 @@ def main() -> int:
     sj = Path(a.specs_json)
     if sj.exists():
         meta["specs"] = json.loads(sj.read_text(encoding="utf-8"))
-    gj = Path(a.gnss_json)
-    meta["gnss"] = json.loads(gj.read_text(encoding="utf-8")) if gj.exists() else {}
-    cj = Path(a.compare_json)
-    cmp_raw = json.loads(cj.read_text(encoding="utf-8")) if cj.exists() else []
-    # 새 형식은 {"bridges":[...]}, 옛 형식은 배열 — 둘 다 받는다.
-    meta["cmp_rows"] = (cmp_raw.get("bridges") if isinstance(cmp_raw, dict) else cmp_raw) or []
+    # gnss_json · compare_json 은 대조 세 장과 함께 뺐다 — 그 값들이 강변 지반 점에서
+    # 나온 것이라 쓸 수 없다. 교면 전용 대조는 KICT_Bmaps_연계가치_7p.pptx 에 있다.
     hj = Path(a.shm_json)
     if hj.exists():
         meta["shm"] = {k: v for k, v in json.loads(hj.read_text(encoding="utf-8")).items()
@@ -1137,11 +1018,12 @@ def main() -> int:
                 bs16.append(read_bridge(_d))
     slide2(prs, bs16 or bs, meta, a.map_fig, () if bs16 else extra)
     slide3(prs, bs, meta["shm"])
-    slide_shm(prs, a.compare_fig, meta["shm"], meta["cmp_rows"])
-    slide_gnss(prs, a.gnss_fig, meta["gnss"])
-    cj = Path(a.cycle_json)
-    slide_cycle(prs, a.cycle_fig,
-                json.loads(cj.read_text(encoding="utf-8")) if cj.exists() else {})
+    # ⟨삭제⟩ 현장계측↔위성 16개소 전수 대조 · GNSS 추세 · 연주기 요약 세 장을 뺐다.
+    # 셋 다 '데크 ±30 m' 로 고른 점에서 나온 값인데, 그 점들은 교면이 아니라 강변
+    # 지반이었다(scripts/make_deck_vs_ground.py — 15개소 중 11개소에서 교량 위 점의
+    # 계절 위상이 100~200 m 떨어진 맨땅과 1.5개월 안으로 같다). '일치 14/16' 은
+    # 근거가 없어진 숫자다. 교면 전용으로 다시 뽑은 대조는
+    # docs/KICT_Bmaps_연계가치_7p.pptx ③④장에 있다.
     chain_b = Path(a.root_bridges) / a.chain_bridge / "bridge.json"
     slide_chain(prs, Path(a.root_bridges) / a.chain_bridge / "chain.png", a.chain_bridge,
                 json.loads(chain_b.read_text(encoding="utf-8")) if chain_b.exists() else None)

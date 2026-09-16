@@ -52,7 +52,7 @@ from make_deck_only_gnss import (                                      # noqa: E
 from make_deck_vs_ground import (                                      # noqa: E402
     dist_to_polyline, dmon, peak_month, to_local,
 )
-from make_trend_agree import dec_year                                  # noqa: E402
+from insar_series import dec_year                                      # noqa: E402
 
 use_mpl_style()
 

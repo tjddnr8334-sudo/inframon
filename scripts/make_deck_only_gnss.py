@@ -44,7 +44,7 @@ from kaia_theme import MPL, use_mpl_style                              # noqa: E
 from make_deck_vs_ground import (                                      # noqa: E402
     annual_z, dist_to_polyline, dmon, peak_month, to_local,
 )
-from make_trend_agree import dec_year                                  # noqa: E402
+from insar_series import dec_year                                      # noqa: E402
 
 use_mpl_style()
 

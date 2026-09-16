@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kaia_theme import MPL, use_mpl_style                              # noqa: E402
-from make_trend_agree import dec_year                                  # noqa: E402
+from insar_series import dec_year                                      # noqa: E402
 
 use_mpl_style()
 
