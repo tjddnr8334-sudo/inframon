@@ -37,12 +37,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kaia_theme import (                                                # noqa: E402
-    BLUE, BLUE_F, BLUE_P, GREEN, INK, ORANGE, PAPER, RED, RULE, SH, SLATE, SW,
-    WHITE, band, blank, box, bullets, chevrons, footer, header, kpi, panel,
+    BLUE, BLUE_F, BLUE_P, GRAY, GREEN, INK, ORANGE, PAPER, RED, RULE, SH, SLATE,
+    SW, WHITE, band, blank, box, bullets, chevrons, footer, header, kpi, panel,
     picture_fit, reset_pages, table, text,
 )
 from make_kict_slides import MAT_KO, TYPE_KO, read_bridge               # noqa: E402
 
+GRAY_DIM = GRAY          # 값이 없는 칸은 옅게 — 없는 것과 0 을 눈으로 구별한다
 IMG = ROOT / "docs" / "img"
 VAL = IMG / "value"
 BR = ROOT / "docs" / "bridges"
@@ -156,78 +157,82 @@ def slide_value2(prs):
 
 
 # ── ③ 성능 산출물: 정확도 검증 ─────────────────────────────────────────────
-def slide_perf_gnss(prs, r2: dict, lag: dict):
+def slide_perf_gnss(prs, fix: dict):
     s = blank(prs)
     header(s, "성능 산출물 ① — GNSS 기반 InSAR 변위 정확도 검증",
-           "지금 낸 것은 '높은 R²' 가 아니라 '높은 R² 를 믿으면 안 되는 이유'다", TAG)
+           "교면 점만 남기고 지반 성분까지 뺐다 — 그래도 계절이 어긋난다", TAG)
 
-    fig = VAL / "연주기_점별상관_분포.png"
+    fig = VAL / "교면전용_GNSS대조.png"
     if fig.exists():
-        picture_fit(s, fig, 0.45, 1.36, 8.1, 3.78)
+        box(s, 0.45, 1.28, SW - 0.9, 3.16, fill=WHITE, line=RULE, lw=1.0)
+        picture_fit(s, fig, 0.5, 1.33, SW - 1.0, 3.06)
 
-    lo = min(b["methods"]["원본"]["observed_r2"] for b in r2["bridges"])
-    hi = max(b["methods"]["원본"]["observed_r2"] for b in r2["bridges"])
-    n_beat = sum(1 for b in r2["bridges"] for m in b["methods"].values()
-                 if m["beats_chance"])
-    n_all = sum(len(b["methods"]) for b in r2["bridges"])
-    opp = sum(1 for d in lag["bridges"] if abs(d["lag_months"]) > 2)
+    got = [v for v in fix.values() if "phase_diff_months" in v]
+    dif = sorted(abs(v["phase_diff_months"]) for v in got)
+    same = sum(1 for v in got if v.get("same_seasonal_behaviour"))
+    n_pt = [v["n_deck"] for v in fix.values() if "n_deck" in v]
 
-    x = 8.75
-    y0 = panel(s, x, 1.36, SW - 0.45 - x, 3.78, "지금 수준을 있는 그대로", tab=RED)
-    bullets(s, x + 0.22, y0 + 0.06, SW - 0.45 - x - 0.44, 3.3, [
-        ("월별 R² ", f"{lo:.2f} ~ {hi:.2f} (교량 6개소)"),
-        ("우연 기준선을 넘은 칸 ", f"{n_beat}/{n_all} — 평활·누적·연주기로 "
-                            "숫자를 올려도 우연 기준선이 같이 오른다"),
-        ("가장 중요한 발견 ", "한 교량 안에 r 이 +1 에 가까운 점과 -1 에 가까운 "
-                       "점이 둘 다 있다. 점들의 중앙값은 0 근처다"),
-        ("즉 ", "'가장 닮은 점'을 고르는 순간 원하는 답이 나온다 — "
-              f"{opp}/6 이 정반대로 보였던 것도 교량이 아니라 고르기 때문이다"),
-        ("원인 ", "교면 PS 밀도(20,000점 중 20~237점) · 12일 관측을 월로 묶은 "
-               "재표본 · 계측기 정확 위치 미제공"),
-    ], fs=10.2, spacing=1.3)
+    y0 = panel(s, 0.45, 4.62, SW - 0.9, 1.3, "지금 수준을 있는 그대로", tab=RED)
+    cw = (SW - 1.44 - 0.5) / 2
+    bullets(s, 0.72, y0 + 0.04, cw, 1.2, [
+        ("한 것 ", "① 코히런스로 지오로케이션 밀림 되돌리기 ② 회랑을 ±30 m 에서 "
+               "±폭/2 로 ③ 100~400 m 밖 지반 공통성분 빼기"),
+        ("연주기 위상 ", f"{dif[0]:.1f} ~ {dif[-1]:.1f}개월 어긋남 · "
+                    f"같은 계절 거동 {same}/{len(got)}개소"),
+    ], fs=10.2, spacing=1.34)
+    bullets(s, 0.72 + cw + 0.25, y0 + 0.04, cw, 1.2, [
+        ("근본 원인 ", "한강 15개소 중 11개소에서 교량 위 점의 계절 위상이 "
+                  "100~200 m 떨어진 맨땅과 1.5개월 안으로 같다"),
+        ("즉 ", f"교면 점이 {min(n_pt)}~{max(n_pt)}개뿐이고 그마저 주변 지반과 "
+              "섞여 있다 — 통계가 아니라 분해능 문제다"),
+    ], fs=10.2, spacing=1.34)
 
-    box(s, 0.45, 5.32, SW - 0.9, 1.12, fill=BLUE_F, line=RULE, lw=1.0)
-    box(s, 0.45, 5.32, 0.055, 1.12, fill=BLUE)
-    text(s, 0.72, 5.39, SW - 1.44, 1.0, [
-        [("숫자를 감추지 않는 이유", 11.5, True, BLUE)],
-        [("정확도는 아직 낮다. 시스템이 완성되지 않았으니 당연한 결과다. "
-          "점을 골라 숫자를 만드는 함정을 먼저 막아 두는 체계 — 이게 있어야 다음에 "
-          "올라간 숫자가 진짜인지 판별할 수 있다. 목적은 분명하다: 계측기 없는 "
-          "교량에도 같은 판을 깔고, 검증 기준을 먼저 세워 두는 것.",
-          10.8, False, SLATE)]], spacing=1.3)
-
-    footer(s, "※ 우연 기준선 = 위성 월값을 무작위로 섞어 같은 계산을 200회 돌린 값의 "
-              "95 백분위. 다음 단계는 점을 고르지 않는 것 — 계측기 설치 위치를 받아 "
-              "그 옆 점만 미리 정해 놓고 보면 이 함정이 사라진다. "
+    band(s, 6.02,
+         "Sentinel-1 은 지상 5×20 m, 데크 폭은 1~2 화소다 — 지금 낸 것은 '맞는다' 가 "
+         "아니라 '무엇이 있어야 맞출 수 있는가' 다", fill=BLUE_F, fs=11.5)
+    footer(s, "※ 오프셋은 평균 코히런스가 가장 높은 자리로 정했다 — GNSS 를 보지 않고 "
+              "정하는 기준이라 '맞도록 고른' 값이 아니다. 판정 근거: "
+              "scripts/make_deck_vs_ground.py · make_deck_fix.py · 교량별 교면전용.json. "
               "원자료: 24년 한강온라인 최종보고(서울시·㈜유신·㈜일신이앤씨).")
     return s
 
 
 # ── ④ 7개소 적용 현황 ──────────────────────────────────────────────────────
-def slide_seven(prs, bs):
+def slide_seven(prs, bs, fix):
     s = blank(prs)
     header(s, "성능 산출물 ② — 한강 교량 7개소 적용 현황",
            "보고서에 GNSS 현장 계측이 실린 교량만 골랐다 — 답을 맞춰 볼 수 있는 곳",
            TAG)
 
-    rows = [["교량", "연장", "형식", "에폭", "데크 PS", "속도 중앙값", "CRI", "감사"]]
+    # 값은 전부 '교면 전용 재선별'(회랑 ±폭/2 · 지반 공통성분 제거) 결과다.
+    # 예전 ±30 m 선별 값은 강변 지반이 섞여 있어 쓰지 않는다.
+    rows = [["교량", "연장", "형식", "교면 PS", "속도(지반보정)", "연주기",
+             "GNSS 대조"]]
     colors = {}
     for i, b in enumerate(bs, start=1):
         m = b.get("meta", {})
-        v = b.get("vel_med")
+        f = fix.get(b["name"], {})
+        if f.get("skipped") or "velocity_mm_yr" not in f:
+            vel, ann = "—", "—"
+            colors[(i, 4)] = GRAY_DIM
+        else:
+            vel = f"{f['velocity_mm_yr']:+.2f} ± {f['velocity_ci95']:.2f}"
+            ann = f"{f['annual_amp_mm']:.1f} mm · {f['annual_peak_month']:.1f}월"
+            colors[(i, 4)] = RED if f["velocity_significant"] else GREEN
+        if "phase_diff_months" in f:
+            cmp_ = f"{f['phase_diff_months']:+.1f}개월"
+            colors[(i, 6)] = GREEN if f["same_seasonal_behaviour"] else RED
+        else:
+            cmp_ = "계측 없음"
+            colors[(i, 6)] = GRAY_DIM
         rows.append([
             b["name"],
             f"{(m.get('length_m') or 0):,.0f} m",
             TYPE_KO.get(m.get("bridge_type"), m.get("bridge_type") or "—"),
-            str(b.get("n_epochs") or "—"),
-            f"{b.get('n_points') or 0}",
-            ("—" if v is None else f"{v:+.2f} mm/년"),
-            ("—" if b.get("cri") is None else f"{b['cri']:.3f}"),
-            b.get("verdict") or "—"])
-        colors[(i, 7)] = {"보고 가능": GREEN, "조건부": ORANGE}.get(
-            b.get("verdict"), RED)
-    table(s, 0.45, 1.36, 7.7, rows, [1.35, .85, .85, .6, .8, 1.15, .7, .95],
-          row_h=0.335, fs=9.8, head_fs=9.8, head_h=0.34, colors=colors)
+            str(f.get("n_deck", "—")),
+            vel, ann, cmp_])
+    table(s, 0.45, 1.36, 7.7, rows, [1.25, .8, .8, .75, 1.45, 1.25, 1.0],
+          row_h=0.335, fs=9.4, head_fs=9.4, head_h=0.34, colors=colors)
 
     mp = IMG / "hangang_지도_화면.png"
     if mp.exists():
@@ -243,7 +248,7 @@ def slide_seven(prs, bs):
         ("twin.glb · tileset.json ", "— 3D 타일"),
     ], fs=9.8, spacing=1.34)
     bullets(s, 0.72 + w2 + 0.3, y0 + 0.06, w2, 1.3, [
-        ("brief.png · chain.png ", "— 평면 · 종단 · 측점"),
+        ("교면전용.json · png ", "— 재선별 결과와 GNSS 대조"),
         ("osm_roads_500m.json ", "— 반경 도로망"),
         ("결과.md ", "— 출처·적용값·감사 판정을 문장으로"),
     ], fs=9.8, spacing=1.34)
@@ -254,12 +259,13 @@ def slide_seven(prs, bs):
         "즉, 답을 맞춰 볼 수 있는 곳만 골랐다",
     ], fs=10, spacing=1.32)
 
-    band(s, 6.2, "감사 결과가 '보고 불가'인 곳이 더 많다 — 숨기지 않는다. "
-                 "판정을 자동으로 붙이는 것 자체가 산출물이다",
+    band(s, 6.2, "교면만 남기면 7개소 중 6개소의 속도 95% 구간이 0 을 품는다 — "
+                 "유의한 추세가 없다. 숨기지 않고 그대로 싣는다",
          fill=PAPER, fs=11.5)
-    footer(s, "※ 표의 모든 값은 각 교량 폴더의 bridge.json · 결과.md · project.h5 에서 "
-              "직접 읽었다. '감사' 는 관측 조건이 기준 학습 조건과 얼마나 다른지를 보고 "
-              "자동으로 붙는 판정이며, 구조 상태 등급이 아니다.")
+    footer(s, "※ 표의 값은 '교면 전용 재선별'(회랑 ±폭/2 · 코히런스로 밀림 되돌림 · "
+              "지반 공통성분 제거) 결과다 — 교량별 교면전용.json 에서 직접 읽었다. "
+              "예전 ±30 m 선별 값은 강변 지반이 섞여 있어 쓰지 않는다. "
+              "속도는 초록이 '0 을 품음', GNSS 대조는 |1.5개월| 안이면 같은 계절 거동.")
     return s
 
 
@@ -338,9 +344,11 @@ def slide_3d(prs, name: str = "올림픽대교"):
                            "관측 조건이 다르면 잠정으로 표시된다"),
     ], fs=10.2, spacing=1.36)
 
-    footer(s, f"※ {name} 예시. 두 그림 모두 project.h5 의 insar/velocity_mm_yr · "
-              "fram/CRI 를 그대로 읽어 그렸고, 회색 윤곽은 같은 좌표계의 IFC 부재다. "
-              "CRI 색 위끝은 자료에 맞춰 잡았다(0~1 고정 아님).")
+    footer(s, f"※ {name} 예시 — 보여 주는 것은 '값을 부재에 얹는 방식' 이다. "
+              "이 두 그림의 점은 ③④장과 달리 **예전 ±30 m 선별**이라 교면 전용이 아니다"
+              "(교면만 남기면 점이 10~122개로 줄어 3D 로는 성기다). "
+              "두 그림 모두 project.h5 의 insar/velocity_mm_yr · fram/CRI 를 그대로 읽었고, "
+              "회색 윤곽은 같은 좌표계의 IFC 부재다.")
     return s
 
 
@@ -402,16 +410,16 @@ def main() -> int:
     a = ap.parse_args()
 
     bs = [read_bridge(BR / n) for n in SEVEN]
-    r2 = json.loads((BR / "r2_methods.json").read_text(encoding="utf-8"))
-    lag = json.loads((BR / "phase_lag.json").read_text(encoding="utf-8"))
+    fix = {b["name"]: b for b in json.loads(
+        (BR / "deck_fix_all.json").read_text(encoding="utf-8"))["bridges"]}
 
     prs = Presentation()
     prs.slide_width, prs.slide_height = Inches(SW), Inches(SH)
     reset_pages()
     slide_value1(prs)
     slide_value2(prs)
-    slide_perf_gnss(prs, r2, lag)
-    slide_seven(prs, bs)
+    slide_perf_gnss(prs, fix)
+    slide_seven(prs, bs, fix)
     slide_ifc(prs, bs, a.example)
     slide_3d(prs, a.example)
     slide_conclusion(prs)
