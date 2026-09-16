@@ -97,7 +97,8 @@ def text(slide, x, y, w, h, runs, *, align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP,
     return tb
 
 
-_NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"]
+_NUM = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫",
+        "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳"]
 _seq = {"n": 0}
 
 
@@ -701,6 +702,183 @@ def slide_twin_ps(prs, fig, summary: list):
               "시계열이 따라간다.")
 
 
+def hangang16(root: Path) -> list[dict]:
+    """한강 16개소의 산출물을 **폴더에서 그대로** 읽는다 — 손으로 옮겨 적지 않는다."""
+    import re as _re
+    lst = root / "hangang16.json"
+    if not lst.exists():
+        return []
+    names = [b["name"] for b in json.loads(lst.read_text(encoding="utf-8"))]
+    out = []
+    for n in names:
+        d = root / n
+        md_p, bj_p = d / "결과.md", d / "bridge.json"
+        if not md_p.exists() or not bj_p.exists():
+            continue
+        md = md_p.read_text(encoding="utf-8")
+        bj = json.loads(bj_p.read_text(encoding="utf-8"))
+
+        def g(k: str) -> str:
+            m = _re.search(rf"\|\s*{k}\s*\|\s*(.+?)\s*\|", md)
+            return m.group(1).strip() if m else ""
+
+        ifc = _re.findall(r"(\d+)", g("IFC 트윈"))
+        cri_s = g("PINN · CRI")
+        cm = _re.search(r"CRI\s*([0-9.]+)\s*·\s*(\S+)", cri_s)
+        out.append({
+            "name": n,
+            "type": bj.get("bridge_type") or "-",
+            "n_el": int(ifc[0]) if ifc else 0,
+            "n_pt": int(ifc[1]) if len(ifc) > 1 else 0,
+            "n_bind": int(ifc[2]) if len(ifc) > 2 else 0,
+            "sup": g("superstructure"),
+            "deck": g("deck"),
+            "cri": float(cm.group(1)) if cm else None,
+            "grade": cm.group(2) if cm else "-",
+            "audit": g("감사").replace("**", "").split(" · ")[0].strip(),
+            "ifc_file": f"{n}_proxy.ifc" if (d / f"{n}_proxy.ifc").exists() else
+                        next((p.name for p in d.glob("*_proxy.ifc")), "—"),
+        })
+    return out
+
+
+_TYPE_KO = {"girder": "거더", "box_girder": "박스거더", "psc_girder": "PSC거더",
+            "slab": "슬래브", "rahmen": "라멘", "arch": "아치", "truss": "트러스",
+            "cable_stayed": "사장", "suspension": "현수"}
+
+
+def slide_osm16(prs, map_fig, rows: list[dict]):
+    """OSM 에서 무엇을 가져오는가 — 16개소 전수. 교면선이 틀리면 뒤가 전부 틀린다."""
+    s = blank(prs)
+    header(s, "OSM 에서 무엇을 가져오는가 — 한강 16개소 교면선 전수",
+           "교면 중심선이 틀리면 뒤의 모든 숫자가 틀린다")
+    if map_fig and Path(map_fig).exists():
+        picture_fit(s, map_fig, 0.45, 1.02, 7.35, 3.72)
+    text(s, 0.45, 4.80, 7.35, 0.9,
+         [[("지도는 산출물 그대로 — ", 10, False, GRAY),
+           ("docs/bridges/한강_지도.html", 10, True, NAVY),
+           (" (교량을 누르면 그 교량의 결과·산출물 링크가 뜬다)", 10, False, GRAY)],
+          [("바탕지도는 Esri — tile.openstreetmap.org 는 클라이언트에 따라 차단돼 "
+            "'Access blocked' 가 뜨고, CARTO 는 키를 요구한다.", 9.5, False, GRAY)]])
+
+    x2 = 8.05
+    text(s, x2, 1.02, SW - x2 - 0.45, 0.3,
+         [("OSM way 를 그대로 믿지 않는다 — 네 가지를 고친다", 11.5, True, NAVY)])
+    for i, (t, d) in enumerate([
+        ("이름과 연장이 함께 맞아야 한다",
+         "이름만 믿으면 같은 이름의 접속 고가부가 잡힌다(내곡교 401 m ↔ 실교량 162 m)"),
+        ("닫힌 way 는 한쪽 차도만 남긴다",
+         "양방향을 도는 선이면 첫점=끝점이라 방위가 0° 로 계산된다(5개소에서 그랬다)"),
+        ("굽은 접속램프는 잘라낸다",
+         "현 대비 편차 8 % 를 넘을 때만 — 본교까지 자르면 안 된다(청담 12.7 %)"),
+        ("맞는 way 가 없으면 표준데이터 선분",
+         "가양·한강·성수·올림픽 4개소는 OSM way 가 토막나 시점–종점 선분을 썼다"),
+    ]):
+        y = 1.42 + i * 0.66
+        box(s, x2, y, SW - x2 - 0.45, 0.58, fill=GRAY_L, line=LINE)
+        text(s, x2 + 0.14, y + 0.06, SW - x2 - 0.73, 0.46,
+             [[(t, 10, True, BLUE)], [(d, 8.8, False, GRAY)]], spacing=1.05)
+
+    n_osm = sum(1 for r in rows if r["deck"].startswith("OSM"))
+    n_std = sum(1 for r in rows if "표준데이터" in r["deck"])
+    n_bat = len(rows) - n_osm - n_std
+    w = (SW - x2 - 0.45 - 0.2) / 3
+    for i, (big, lab, col) in enumerate([
+        (f"{n_osm}", "OSM way 에서 뽑은 교면선", BLUE),
+        (f"{n_std}", "표준데이터 시점–종점 선분", ORANGE),
+        (f"{n_bat}", "데크선을 직접 지정(보행교)", GRAY),
+    ]):
+        kpi(s, x2 + i * (w + 0.1), 4.26, w, 0.80, big, "개소", lab, col)
+
+    footer(s, "교면선은 산출의 출발점이다 — 여기서 틀리면 측점 선별·부재 결합·판정이 "
+              "모두 따라 틀린다. 그래서 무엇을 어디서 가져왔는지 교량마다 결과.md 에 적는다.")
+
+
+def slide_ifc16(prs, rows: list[dict]):
+    """IFC 프록시 트윈 — 16개소 전수. 형식대로 세우고 GlobalId 로 묶는다."""
+    s = blank(prs)
+    header(s, "IFC 디지털 트윈 — 한강 16개소 전수",
+           "IFC 4.3 프록시 · 측점을 부재 GlobalId 에 결합")
+    head = ["교량", "형식", "IFC 부재", "측점", "결합", "결합률", "형식별 상부구조"]
+    cw = [1.5, 1.0, 0.9, 0.7, 0.7, 0.8, 5.2]
+    body, colors = [head], {}
+    for i, r in enumerate(rows, start=1):
+        frac = (r["n_bind"] / r["n_pt"] * 100) if r["n_pt"] else 0.0
+        sup = r["sup"]
+        sup = ("—" if not sup else
+               (sup.split(" — ")[1] if " — " in sup and "실측이 없어" not in sup
+                else ("주경간 실측이 없어 세우지 않음" if "실측이 없어" in sup else sup)))
+        body.append([r["name"], _TYPE_KO.get(r["type"], r["type"]),
+                     f"{r['n_el']}", f"{r['n_pt']}", f"{r['n_bind']}",
+                     f"{frac:.0f}%", sup[:52]])
+        colors[(i, 5)] = GREEN if frac >= 90 else (ORANGE if frac >= 70 else RED)
+    table(s, 0.45, 1.02, SW - 0.9, body, cw, row_h=0.295, fs=9.5, head_fs=9.5,
+          colors=colors)
+
+    tot_el = sum(r["n_el"] for r in rows)
+    tot_pt = sum(r["n_pt"] for r in rows)
+    tot_bd = sum(r["n_bind"] for r in rows)
+    w = (SW - 0.9 - 0.24 * 2) / 3
+    y = 1.02 + 0.34 + 0.295 * len(rows) + 0.16
+    kpi(s, 0.45, y, w, 0.82, f"{tot_el:,}", "부재",
+        "16개소 IFC 프록시 부재 — 교대·교각·슬래브 + 형식별 상부구조", NAVY_L)
+    kpi(s, 0.45 + w + 0.24, y, w, 0.82, f"{tot_bd:,}/{tot_pt:,}", "점",
+        f"부재 GlobalId 에 결합된 측점 ({tot_bd / max(tot_pt, 1) * 100:.0f}%)", GREEN)
+    kpi(s, 0.45 + 2 * (w + 0.24), y, w, 0.82, "4.3", "IFC",
+        "IfcMapConversion 으로 지오레퍼런싱 — Bmaps 는 tileset.json 을 그대로 쓴다", BLUE)
+
+    footer(s, "형식이 형상을 정하는 교량(사장·현수·아치·트러스)은 **최대경간장 실측이 "
+              "있을 때만** 상부구조를 세운다 — 없으면 추정으로 만들지 않고 그 사유를 남긴다. "
+              "산출: <교량>_proxy.ifc · <교량>_elements.json · twin.glb · twin.viewer.html · "
+              "tileset.json")
+
+
+def slide_cri16(prs, rows: list[dict]):
+    """PINN·CRI — 16개소 전수. 등급을 구조 상태로 읽으면 안 되는 이유까지."""
+    s = blank(prs)
+    header(s, "PINN · 공진위험지수(CRI) — 한강 16개소 전수",
+           "물리식을 함께 푸는 신경망 → CRI 4단계 경보 · 감사 판정")
+    head = ["교량", "CRI", "등급", "감사 판정", "교량", "CRI", "등급", "감사 판정"]
+    cw = [1.4, 0.7, 0.7, 1.3, 1.4, 0.7, 0.7, 1.3]
+    half = (len(rows) + 1) // 2
+    body, colors = [head], {}
+    for i in range(half):
+        line = []
+        for k, off in ((i, 0), (i + half, 4)):
+            if k >= len(rows):
+                line += ["", "", "", ""]
+                continue
+            r = rows[k]
+            line += [r["name"], f"{r['cri']:.3f}" if r["cri"] is not None else "—",
+                     r["grade"], r["audit"]]
+            g, a = r["grade"], r["audit"]
+            colors[(i + 1, off + 2)] = (RED if "위험" in g else
+                                        ORANGE if "경고" in g else GREEN)
+            colors[(i + 1, off + 3)] = (RED if "불가" in a else
+                                        ORANGE if "조건부" in a else GREEN)
+        body.append(line)
+    table(s, 0.45, 1.02, SW - 0.9, body, cw, row_h=0.30, fs=9.5, head_fs=9.5,
+          colors=colors)
+
+    y = 1.02 + 0.34 + 0.30 * half + 0.18
+    box(s, 0.45, y, SW - 0.9, 1.22, fill=RGBColor(0xFD, 0xF3, 0xE6), line=ORANGE)
+    text(s, 0.62, y + 0.10, SW - 1.24, 1.02,
+         [[("이 표를 그대로 '이 교량이 위험하다' 로 읽으면 안 된다", 12, True, ORANGE)],
+          [("· CRI 기준치는 노이즈 10 mm · 관측기간 552일 · 24시점 조건에서 학습됐다. "
+            "한강 교량들은 노이즈 14~26 mm · 관측기간 2748일이라 분포가 통째로 밀려 있다 "
+            "— 감사가 등급을 **잠정**으로 내리는 이유다.", 9.8, False, NAVY)],
+          [("· 같은 자료를 변위속도로 보면 16개소 중 14개소가 현장 보고서 판정과 일치하고, "
+            "95% 신뢰구간이 0 을 포함한다(⑤장). CRI 와 변위속도가 엇갈리면 "
+            "**변위속도 쪽이 관측에 가깝다**.", 9.8, False, NAVY)],
+          [("· 감사 '보고 불가' 는 산출이 틀렸다는 뜻이 아니라 **그대로 보고에 쓰지 "
+            "말라**는 뜻이다(대상 30 m 안 점 부족 등). 사유는 교량마다 결과.md 에 있다.",
+            9.8, False, NAVY)]], spacing=1.12)
+
+    footer(s, "EI·고유진동수는 관측값이 아니라 설계 제원(기하 EI) 기반이다 — InSAR 는 상대 "
+              "변위라 절대 강성을 식별할 수 없다. PINN 은 그 위에서 열·하중·침하·이상 성분을 "
+              "나눈다.")
+
+
 def slide4(prs, bs, ondeck=None):
     s = blank(prs)
     header(s, "산출물과 신뢰성 게이트 — 무엇이 나오고, 무엇을 올리지 않는가")
@@ -900,6 +1078,8 @@ def main() -> int:
                     help="연주기 대조 — 발표용 가로형")
     ap.add_argument("--cycle-json", default="docs/bridges/hangang_annual_cycle.json")
     ap.add_argument("--root-bridges", default="docs/bridges")
+    ap.add_argument("--hangang-map-fig", default="docs/img/hangang_지도_화면.png",
+                    help="OSM 위 결과 지도(한강_지도.html) 화면")
     ap.add_argument("--chain-bridge", default="암사대교",
                     help="전 과정(OSM→선별→트윈) 한 장을 보일 교량")
     ap.add_argument("--shm-json", default="docs/bridges/hangang_shm_2024.json",
@@ -949,6 +1129,11 @@ def main() -> int:
     slide_chain(prs, Path(a.root_bridges) / a.chain_bridge / "chain.png", a.chain_bridge,
                 json.loads(chain_b.read_text(encoding="utf-8")) if chain_b.exists() else None)
     slide_twin_ps(prs, a.twin_fig, twin_summary(Path(a.root_bridges), meta["shm"]))
+    h16 = hangang16(Path(a.root_bridges))
+    if h16:
+        slide_osm16(prs, a.hangang_map_fig, h16)
+        slide_ifc16(prs, h16)
+        slide_cri16(prs, h16)
     slide4(prs, bs, a.ondeck_fig)
     slide5(prs, a.tab_shot)
     slide6(prs)
