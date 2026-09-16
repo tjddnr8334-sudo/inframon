@@ -518,6 +518,37 @@ def collect_run_session(out_dir: Path) -> list[dict]:
     return [{"cmd": shown, "out": raw, "note": f"{it['name']} — 좌표 하나로 끝까지"}]
 
 
+def _find_points(pg, *, want: int = 3, gap: int = 90) -> list[tuple[float, float]]:
+    """렌더된 화면에서 **PS 점을 색으로 찾아** 좌표를 돌려준다.
+
+    뷰어의 스크립트는 `type="module"` 이라 `POS`·`cam` 이 전역에 없다 — 페이지 안에서
+    좌표를 계산할 수가 없다. 그래서 그려진 그림에서 직접 찾는다: 부재는 회색, 배경은
+    검정이고 점만 **짙은 파랑·빨강**이다. 그 화소를 모아 떨어진 것끼리 고른다.
+
+    아무 데나 찍으면 빈 공간에 떨어져 아무 일도 안 일어난다 — 그래서 필요한 절차다.
+    """
+    import io as _io
+
+    from PIL import Image as _Image
+    im = _Image.open(_io.BytesIO(pg.screenshot())).convert("RGB")
+    w, h = im.size
+    px = im.load()
+    cand: list[tuple[float, float, float]] = []
+    for y in range(140, h - 140, 3):
+        for x in range(120, w - 120, 3):
+            r, g, b = px[x, y]
+            if (r - b > 55 and r - g > 55) or (b - r > 55 and b - g > 35):
+                cand.append((x, y, (x - w / 2) ** 2 + (y - h / 2) ** 2))
+    cand.sort(key=lambda q: q[2])
+    out: list[tuple[float, float]] = []
+    for x, y, _ in cand:
+        if all((x - a) ** 2 + (y - b) ** 2 > gap * gap for a, b in out):
+            out.append((float(x), float(y)))
+            if len(out) >= want:
+                break
+    return out
+
+
 def record_twin(html: Path, out_dir: Path) -> Path:
     """IFC 디지털 트윈을 **돌려 보며** 녹화한다 — 결과가 부재 위에 얹힌 것을 보인다.
 
@@ -533,24 +564,6 @@ def record_twin(html: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     for old in out_dir.glob("*.webm"):
         old.unlink()
-
-    # 화면에 보이는 점 하나의 좌표를 돌려준다(가운데에 가까운 것부터).
-    FIND = """
-    (() => {
-      if (typeof POS === 'undefined' || typeof cam === 'undefined') return null;
-      const out = [];
-      for (let i = 0; i < POS.length; i++) {
-        const v = new THREE.Vector3(POS[i][0], POS[i][1], POS[i][2]);
-        v.project(cam);
-        if (v.z < -1 || v.z > 1) continue;
-        const x = (v.x * .5 + .5) * innerWidth, y = (-v.y * .5 + .5) * innerHeight;
-        if (x < 80 || x > innerWidth - 80 || y < 120 || y > innerHeight - 120) continue;
-        out.push([x, y, Math.hypot(x - innerWidth / 2, y - innerHeight / 2)]);
-      }
-      out.sort((a, b) => a[2] - b[2]);
-      return out.slice(0, 12).map(q => [q[0], q[1]]);
-    })()
-    """
 
     with sync_playwright() as p:
         br = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader",
@@ -592,12 +605,12 @@ def record_twin(html: Path, out_dir: Path) -> Path:
 
         say(pg, "점을 클릭하면 어느 부재에 묶였는지 나옵니다")
         pg.wait_for_timeout(1200)
-        pts = pg.evaluate(FIND) or []
+        pts = _find_points(pg)
         if not pts:                               # 안 보이면 조금 물러나 다시 찾는다
             for _ in range(3):
                 pg.mouse.wheel(0, 240)
-                pg.wait_for_timeout(260)
-            pts = pg.evaluate(FIND) or []
+                pg.wait_for_timeout(280)
+            pts = _find_points(pg)
         picked = 0
         for x, y in pts:
             if picked >= 3:

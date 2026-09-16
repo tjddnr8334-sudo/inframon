@@ -114,8 +114,35 @@ const VMAX = %(vmax)f;
 const map = L.map('map', {preferCanvas:true}).setView([37.54, 126.99], 12);
 // 팝업이 화면 밖으로 잘리지 않게 — 오른쪽 레이어 컨트롤·왼쪽 범례를 피해 자동으로 민다
 map.options.popupPane = undefined;
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+// 바탕지도 — 기본은 **Esri** 다. tile.openstreetmap.org 는 이용정책상 클라이언트에
+// 따라 차단되어 지도 대신 'Access blocked' 타일이 깔리는 일이 있고(실제로 그랬다),
+// CARTO 는 이제 키를 요구해 'API KEY REQUIRED' 워터마크가 찍힌다. Esri 는 키 없이
+// 뜨므로 그것을 기본으로 두고, OSM 표준지도는 고를 수 있게 남긴다.
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+const ATTR_ESRI = 'Esri · HERE · Garmin · OpenStreetMap 기여자';
+const base = {
+  '일반 지도 (Esri)': L.tileLayer(ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:19, attribution: ATTR_ESRI}),
+  '지형 (Esri)': L.tileLayer(ESRI + 'World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:19, attribution: ATTR_ESRI}),
+  '위성 영상 (Esri)': L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:19, attribution:'Esri · Maxar · Earthstar Geographics'}),
+  'OSM 표준': L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19, attribution:'&copy; OpenStreetMap 기여자'}),
+};
+base['일반 지도 (Esri)'].addTo(map);
+// 타일이 안 뜨면 이유를 화면에 적는다 — 빈 회색 화면만 보면 원인을 알 수 없다.
+let tileFail = 0;
+Object.values(base).forEach(l => l.on('tileerror', () => {
+  if (++tileFail !== 8) return;
+  const d = document.createElement('div');
+  d.style.cssText = 'position:absolute;left:50%%;top:14px;transform:translateX(-50%%);'
+    + 'z-index:1000;background:#fff3cd;border:1px solid #e0b34a;border-radius:8px;'
+    + 'padding:10px 16px;font:600 13px/1.5 Malgun Gothic,sans-serif;color:#7a5b12';
+  d.textContent = '바탕지도 타일을 못 불러왔습니다 — 인터넷 연결을 확인하세요. '
+    + '교량선과 측점은 인터넷 없이도 그대로 보입니다.';
+  document.body.appendChild(d);
+}));
 
 function col(v){                       // 발산형 — 파랑(멀어짐) ~ 빨강(가까워짐)
   const t = Math.max(-1, Math.min(1, (v||0)/VMAX));
@@ -174,7 +201,7 @@ for(const b of B){
       <span style="font-weight:400;color:#5A636B">${b.n_points}점</span></div>`})})
     .bindPopup(()=>popup(b), POP).addTo(marks);
 }
-L.control.layers(null, {'데크선':decks, '교면 측점':pts, '교량명·판정':marks},
+L.control.layers(base, {'데크선':decks, '교면 측점':pts, '교량명·판정':marks},
                  {collapsed:false}).addTo(map);
 const all = B.flatMap(b=>b.deck.length?b.deck:[[b.lat,b.lon]]);
 if(all.length) map.fitBounds(L.latLngBounds(all), {padding:[40,40]});
