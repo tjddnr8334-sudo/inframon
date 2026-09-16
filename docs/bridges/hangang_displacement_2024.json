@@ -226,8 +226,8 @@
   "chart": "GNSS 연직방향 변위량 비교(2024-01~11) · 센서 3(GP_S1M_01_Z · GP_T1T_01_Z · GP_S3M_01_Z)",
   "quantity": "GNSS 연직변위",
   "unit": "mm",
-  "status": "not_read",
-  "why": "월별 막대 3장이 모두 y축 눈금 표기 없이 그려져 있어 눈으로도 척도를 확정할 수 없다. p30 의 교축·교축직각 Min/Max 표(hangang_gnss_2024.json)가 이 교량의 확실한 수치다."
+  "status": "readable_not_read",
+  "why": "**정정** — 앞서 'y축 눈금 표기가 없다' 고 적었으나 사실이 아니다. 원본(p29)을 200 dpi 로 다시 렌더해 보면 세 막대 그래프 모두 y축 눈금이 찍혀 있다(GP_S1M_01_Z 0.00~-60.00 · GP_T1T_01_Z 0.00~-40.00 · GP_S3M_01_Z +4.00~-4.00). 읽으려면 읽을 수 있다. 다만 이 교량은 p30 에 교축·교축직각 Min/Max/변동폭 표가 **인쇄돼** 있어(hangang_gnss_2024.json) 그쪽을 쓴다 — 눈으로 읽은 값보다 확실하다. 연직 월별값이 필요해지면 scripts/read_report_displacement.py 로 판독하면 된다."
  },
  "청담대교": {
   "page": 40,
