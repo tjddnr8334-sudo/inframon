@@ -73,3 +73,6 @@ out/
 
 # 교량 폴더 통째 압축본(수십 GB) — 저장소에 넣지 않는다
 docs/bridges/*.zip
+
+# 참고용으로 받아 둔 남의 발표자료 — 250 MB 라 리포에 넣지 않는다(GitHub 100 MB 제한)
+docs/2026 KAIA 자문회의 ppt_v2.pptx
