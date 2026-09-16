@@ -554,7 +554,7 @@ def slide_shm(prs, compare_fig, shm: dict, cmp_rows: list):
     """
     s = blank(prs)
     header(s, "현장 계측 ↔ 위성 InSAR — 16개소 전수 대조",
-           "2024 한강교량 온라인 안전감시 최종보고 전 교량")
+           "2024 한강교량 온라인 안전감시 최종보고 전 교량 · 교면 중앙값과 교축 구간별 추세")
     if compare_fig and Path(compare_fig).exists():
         picture_fit(s, compare_fig, 0.45, 1.0, SW - 0.9, 4.92)
 
@@ -567,11 +567,21 @@ def slide_shm(prs, compare_fig, shm: dict, cmp_rows: list):
         "보고서 대상 중 위성으로도 산출된 교량 — 빠진 곳 없음", NAVY_L)
     kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88, f"{len(agree)}/{len(done)}", "일치",
         "위성 판정이 보고서 판정과 같은 교량", GREEN)
-    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88, f"{n_gap}", "개소",
-        "처짐·텐던 계측이 미설치(X)이거나 경사계 대체(△)", ORANGE)
+    so = [r["name"] for r in done if (r.get("insar") or {}).get("section_only")]
+    nsec = sum(1 for r in done
+               for q in ((r.get("insar") or {}).get("sections") or [])
+               if q.get("v") is not None)
+    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88, f"{len(so)}", "개소",
+        "교면 전체 중앙값은 '유의차 없음' 인데 한 구간은 유의 (▲)", ORANGE)
     footer(s, "위성 판정 = 데크 중앙값 LOS 시계열에 직선+연주기를 맞춘 속도의 95% 신뢰구간이 "
-              "0 을 포함하는가. 현장 계측은 센서가 있는 항목만, 그 지점에서 본다 — 둘은 경쟁이 "
-              "아니라 서로의 빈칸을 메운다.")
+              "0 을 포함하는가. 다만 중앙값은 교량 전체의 요약일 뿐 '어느 구간도 안 움직인다' 는 "
+              "뜻이 아니어서, 교축을 6구간으로 나눠 같이 실었다(연한 띠) — "
+              + (" · ".join(so) + " 는 중앙값이 '유의차 없음' 인데 한 구간은 유의하다. "
+                 if so else "")
+              + f"※ 구간 검정 {nsec}회이므로 유의수준 5% 에서 {0.05 * nsec:.1f}개 가량은 "
+                "우연이며(다중비교 보정 전), 구간 유의 = 이상 이 아니라 '현장에서 그 구간을 "
+                f"먼저 보라' 는 표식이다. 한편 처짐·텐던 계측이 미설치(X)이거나 경사계로 "
+                f"대체(△)된 곳이 {n_gap}개소 — 위성이 메울 수 있는 빈칸이다.")
 
 
 def slide_gnss(prs, fig, trend_json):

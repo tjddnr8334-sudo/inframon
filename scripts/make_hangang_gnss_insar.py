@@ -96,6 +96,7 @@ def read_bridge(folder: Path) -> dict | None:
         if "insar/los" not in f:
             return None
         los = np.asarray(f["insar/los"][()], float)          # (점, 시점)
+        st = np.asarray(f["insar/deck_station"][()], float)
         days = np.asarray(f["insar/dates"][()], float)
         labels = [b.decode() for b in f["insar/date_labels"][()]]
         inc = float(np.median(np.asarray(f["insar/incidence_deg"][()], float)))
@@ -115,6 +116,24 @@ def read_bridge(folder: Path) -> dict | None:
 
     lin = fit(t, med, annual=False)
     ann = fit(t, med, annual=True)
+    # 교축 구간별 추세 — **중앙값은 교량 전체의 요약이지, 어느 구간도 안 움직인다는
+    # 뜻이 아니다.** 구간마다 부호가 다르면 중앙값에서 서로 지워진다(연주기에서는
+    # 가양대교 진폭이 1/10 로 죽었다). 추세는 그만큼은 아니지만, 중앙값이 '유의차 없음'
+    # 인데 한 구간만 유의한 경우가 있어 그것을 놓치면 안 된다.
+    sections = []
+    if st.size == los.shape[0] and np.ptp(st) > 1.0:
+        edges = np.linspace(float(st.min()), float(st.max()), 7)
+        for i in range(6):
+            sel = (st >= edges[i]) & ((st < edges[i + 1]) if i < 5
+                                      else (st <= edges[i + 1]))
+            if sel.sum() < 3:
+                sections.append({"s0": float(edges[i]), "s1": float(edges[i + 1]),
+                                 "n": int(sel.sum()), "v": None, "ci": None})
+                continue
+            q = fit(t, np.median(los[sel], axis=0), annual=True)
+            sections.append({"s0": float(edges[i]), "s1": float(edges[i + 1]),
+                             "n": int(sel.sum()), "v": q["v"], "ci": q["ci"],
+                             "significant": bool(abs(q["v"]) >= q["ci"])})
     cos_th = float(np.cos(np.radians(inc)))
     return {
         "n_points": int(los.shape[0]), "n_epochs": int(los.shape[1]),
@@ -127,6 +146,9 @@ def read_bridge(folder: Path) -> dict | None:
         "p2p_mm": float(med.max() - med.min()),
         "annual_p2p_mm": 2 * ann["amp"],
         "significant": bool(abs(ann["v"]) >= ann["ci"]),
+        "sections": sections,
+        "section_only": bool(abs(ann["v"]) < ann["ci"]
+                             and any(q.get("significant") for q in sections)),
     }
 
 
@@ -204,6 +226,15 @@ def fig_summary(rows: list[dict], out: Path) -> None:
             a.text(0.5, yi, "InSAR 산출 없음", transform=a.get_yaxis_transform(),
                    fontsize=9, color=RED, va="center", ha="center", style="italic")
             continue
+        # 구간별 추세 범위 — 중앙값 하나로는 "어느 구간도 안 움직인다" 를 말할 수 없다
+        sec = [q for q in (d.get("sections") or []) if q.get("v") is not None]
+        if sec:
+            vs = [q["v"] for q in sec]
+            a.plot([min(vs), max(vs)], [yi + 0.30, yi + 0.30], "-", lw=5.0,
+                   color="#DCE6EE", solid_capstyle="butt", zorder=2)
+            for q in sec:
+                a.plot(q["v"], yi + 0.30, "|", ms=8, mew=1.4,
+                       color=(RED if q.get("significant") else "#7F93A6"), zorder=3)
         c = ORANGE if d["significant"] else GREEN
         a.errorbar(d["ann"]["v"], yi, xerr=d["ann"]["ci"], fmt="o", ms=6.5, color=c,
                    ecolor=c, elinewidth=2.1, capsize=3.5, zorder=4)
@@ -214,17 +245,22 @@ def fig_summary(rows: list[dict], out: Path) -> None:
     a.axvline(0, color="k", lw=1.2)
     a.axvspan(-0.5, 0.5, color=GREEN, alpha=.07)
     a.set_yticks(y)
-    a.set_yticklabels([r["name"] + ("  ◆GNSS" if r["gnss"] else "") for r in rows],
-                      fontsize=10)
+    a.set_yticklabels([r["name"] + ("  ◆GNSS" if r["gnss"] else "")
+                       + (" ▲" if (r["insar"] or {}).get("section_only") else "")
+                       for r in rows], fontsize=10)
     a.set_ylim(-0.6, n - 0.4)
     a.set_xlabel("LOS 변위속도 [mm/yr] · 오차막대 = 95% 신뢰구간", fontsize=10.5)
     a.set_title("(a) 위성 InSAR — 교량별 변위속도\n"
                 "◆ = 보고서상 GNSS 변위계 설치 교량", fontsize=12, pad=9)
     a.grid(axis="x", alpha=.25)
-    a.legend(handles=[Patch(color=GREEN, label="연주기 포함 적합 — 95% CI 가 0 을 포함(유의차 없음)"),
-                      Patch(color=ORANGE, label="연주기 포함 적합 — 0 을 벗어남"),
-                      Patch(color=GRAY, label="직선만 적합(비교용)")],
-             fontsize=8.6, loc="upper center", bbox_to_anchor=(0.5, -0.055),
+    a.legend(handles=[Patch(color=GREEN, label="교면 중앙값 — 95% CI 가 0 을 포함(유의차 없음)"),
+                      Patch(color=ORANGE, label="교면 중앙값 — 0 을 벗어남"),
+                      Patch(color=GRAY, label="직선만 적합(비교용)"),
+                      Patch(color="#DCE6EE", label="교축 6구간별 추세 범위 "
+                                                   "(| 붉은 것 = 그 구간은 유의)"),
+                      Patch(color="white", ec="white",
+                            label="▲ = 중앙값은 유의차 없는데 한 구간은 유의")],
+             fontsize=8.6, loc="upper left", bbox_to_anchor=(1.08, -0.035),
              ncol=1, framealpha=.93)
 
     # 우: 판정 대조표
@@ -278,7 +314,23 @@ def fig_summary(rows: list[dict], out: Path) -> None:
     fig.suptitle(f"한강교량 현장 안전감시(2024) ↔ 위성 InSAR — {len(rows)}개소 전수 대조 "
                  f"· 일치 {ok} · 대조불가 {na}",
                  fontsize=14.5, fontweight="bold", y=0.988)
-    fig.subplots_adjust(left=0.092, right=0.997, top=0.862, bottom=0.135)
+    so = [r["name"] for r in rows if (r["insar"] or {}).get("section_only")]
+    nsec = sum(1 for r in rows
+               for q in ((r["insar"] or {}).get("sections") or [])
+               if q.get("v") is not None)
+    nsig = sum(1 for r in rows
+               for q in ((r["insar"] or {}).get("sections") or [])
+               if q.get("significant"))
+    cav = ("▲ 교면 전체 중앙값은 '유의차 없음' 인데 한 국간은 유의한 교량 — "
+           + (" ／ ".join(so) if so else "해당 없음")
+           + f"  ({len(so)}개소).\n"
+           + "　 중앙값은 교량 전체의 요약일 뿐, ‘어느 국간도 안 움직인다’ 는 뜻이 아니다."
+           + f"   ※ 국간 검정 {nsec}회 · 유의 {nsig}개 — 유의수준 5% 이므로 "
+             f"{0.05 * nsec:.1f}개 가량은 우연으로 나온다(다중비교 보정 전)."
+           )
+    fig.text(0.030, 0.020, cav, fontsize=9.0, color="#334155", va="bottom",
+             linespacing=1.55)
+    fig.subplots_adjust(left=0.092, right=0.997, top=0.862, bottom=0.175)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=140); plt.close(fig)
     print("wrote", out)
@@ -464,7 +516,8 @@ def main() -> int:
                                   ("n_points", "n_epochs", "span", "incidence_deg",
                                    "v_pt_med", "ci_pt_med", "lin", "ann",
                                    "v_vert_mm_yr", "ci_vert_mm_yr",
-                                   "p2p_mm", "annual_p2p_mm", "significant")}}))
+                                   "p2p_mm", "annual_p2p_mm", "significant",
+                                   "sections", "section_only")}}))
     Path(a.json_out).write_text(json.dumps(
         {"_설명": "2024 한강교량 온라인 안전감시 보고 ↔ inframon InSAR 전수 대조",
          "_판정기준": "연주기 포함 적합의 95% CI 가 0 을 포함하면 '유의한 변위 없음'",
