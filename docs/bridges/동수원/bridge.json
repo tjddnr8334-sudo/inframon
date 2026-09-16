@@ -9,7 +9,10 @@
  "out": "docs/bridges/동수원",
  "length_m": 890.0,
  "n_spans": 16,
- "width_m": 12.0,
+ "superstructure": true,
+ "max_span_m": 70.0,
+ "span_layout": "auto",
+ "width_m": 17.0,
  "clearance_m": 6.8,
  "ground_m": 57.0,
  "deck_az_deg": 86.75086950653758,
@@ -105,15 +108,20 @@
  "notes": [
   "CSV 에 폭 없음 → OSM 보도 간격으로",
   "OSM 어느 way 도 CSV 연장 890 m 와 안 맞음 — '동수원고가차도' 1227 m 사용",
-  "폭 정보 없음 → 12 m 가정",
-  "SNAP star 처리 폴더도 SARvey 기선 JSON 도 없음 → 잔차고도 불가(브리프 (b) 비움)"
+  "처리 오프셋 ≈ 0 → 교량 위 점의 횡방향 치우침은 산란체 위치(보도·난간)로 본다",
+  "SNAP star 처리 폴더도 SARvey 기선 JSON 도 없음 → 잔차고도 불가(브리프 (b) 비움)",
+  "⚠ 부재 결합 0/77 — 데크선이 크게 굽어 있다(현 대비 편차 15 %) — 직선 프록시가 곡선 위 측점을 따라가지 못한다. 부재별 통계를 쓰면 안 된다(교면 전체 통계는 유효)"
  ],
  "sources": {
   "specs": "파트너 실측 CSV '동수원고가차도' (113 m)",
   "bridge_type": "CSV '강박스거더교(STB)' → box_girder",
   "clearance": "전국교량표준데이터 교량높이 6.8 m",
   "deck": "OSM '동수원고가차도' 1227 m · 방위 86.8°",
+  "width": "전국교량표준데이터 교량폭 17 m",
   "ground": "Open-Meteo DEM",
-  "points": "쉬프트 7.8 m(heading -13.1°) 보정 후 데크 ±30 m 안 77/454"
+  "ground_offset": "처리 오프셋 ≈ 0 (|B| 0.6 m < 3 m · 지면 점 342 · 도로 양쪽 대칭)",
+  "points": "쉬프트 7.8 m(heading -13.1°) 보정 후 데크 ±30 m 안 77/454",
+  "span_layout": "measured — 주경간 70 m(실측)를 가운데, 나머지 15경간 55 m 균등",
+  "bind_warn": "결합 0/77 — 데크선이 크게 굽어 있다(현 대비 편차 15 %) — 직선 프록시가 곡선 위 측점을 따라가지 못한다"
  }
 }

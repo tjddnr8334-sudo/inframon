@@ -426,6 +426,71 @@ def _whole_deck(b: Bridge, road, roads: list):
     return whole
 
 
+def refine_type_with_deck(b: Bridge) -> None:
+    """데크선이 정해진 뒤 형식을 다시 확인한다 — 나란한 두 다리 중 어느 쪽인가.
+
+    행주대교는 전국교량표준데이터에 **연장이 같은(1460 m) 두 줄**이 있다 — 하류(사장교,
+    1995)와 상류교(PSC박스거더교, 2000). ① 제원 단계에는 데크선이 없어 '가장 긴 줄'
+    규칙으로 상류교가 잡혔고 형식이 box_girder 가 됐다. 그런데 2024 한강교량 온라인
+    안전감시 보고서의 행주대교 계측항목에는 **케이블장력·주탑경사**가 있다 — 사장교다.
+
+    ② 가 끝난 뒤에는 가릴 수 있다. 후보의 시점–종점 선분과 데크선 사이의 수직거리를
+    재면 된다(행주 하류 4.6 m vs 상류교 23.4 m). 나란한 교량은 30 m 남짓 떨어져 있어
+    이 거리가 갈린다. 형식이 같으면 아무것도 바꾸지 않는다.
+    """
+    if not b.geometry or len(b.geometry) < 2:
+        return
+    try:
+        from inframon.bridge_specs_csv import (find_spec_csvs, load_specs,
+                                               spec_candidates)
+        from inframon.public_data import parse_structure_ko
+        cands = spec_candidates(load_specs(*find_spec_csvs("data")), b.lat, b.lon,
+                                name=b.name)
+    except Exception:                            # noqa: BLE001 — 없으면 그대로 둔다
+        return
+    usable = [s for s in cands
+              if s.lat_end is not None and s.lon_end is not None and s.structure_raw]
+    types = {parse_structure_ko(str(s.structure_raw))[0] for s in usable}
+    if len(usable) < 2 or len(types - {None}) < 2:
+        return
+
+    P = np.asarray([list(p) for p in b.geometry], float)
+    lat0 = float(P[:, 0].mean())
+    n = len(P)
+
+    def _dist(s) -> float:
+        # 데크선과 후보 선분을 **같은 원점**으로 옮긴다 — _to_xy 는 첫 점을 원점으로 쓴다
+        q = _to_xy(np.vstack([P, [[s.lat, s.lon], [s.lat_end, s.lon_end]]]), lat0)
+        xy, a, z = q[:n], q[n], q[n + 1]
+        ab = z - a
+        L2 = float(ab @ ab)
+        if L2 <= 0:
+            return float("inf")
+        d = []
+        for p in xy:
+            t = min(1.0, max(0.0, float((p - a) @ ab) / L2))
+            d.append(float(np.hypot(*(p - (a + t * ab)))))
+        return float(np.median(d))
+
+    ranked = sorted(((_dist(s), s) for s in usable), key=lambda ds: ds[0])
+    d0, s0 = ranked[0]
+    d1 = ranked[1][0]
+    if not np.isfinite(d0) or d0 > 60.0 or d1 < d0 * 2.0:
+        return                                   # 갈리지 않으면 건드리지 않는다
+    bt, mat = parse_structure_ko(str(s0.structure_raw))
+    if not bt or bt == b.bridge_type:
+        return
+    old = b.bridge_type
+    b.bridge_type, b.material = bt, (mat or b.material)
+    if s0.max_span_m:
+        b.max_span_m = float(s0.max_span_m)
+    b.sources["bridge_type"] = (f"CSV '{s0.structure_raw}' → {bt} "
+                                f"(데크선에 가장 가까운 '{s0.name}' · {d0:.0f} m)")
+    note(b, f"나란한 교량 후보가 {len(usable)}개 — 데크선에서 {d0:.0f} m 인 "
+            f"'{s0.name}'({s0.structure_raw}) 로 형식을 고친다: {old} → {bt} "
+            f"(다음 후보는 {d1:.0f} m)")
+
+
 def resolve_deck(b: Bridge) -> None:
     from inframon.insar.osm_bridge import find_bridges_near
 
@@ -810,6 +875,32 @@ def _deck_midpoint(b: Bridge) -> tuple[float, float]:
             float(P[k, 1] + f * (P[k + 1, 1] - P[k, 1])))
 
 
+def _warn_twin_misses_deck(b: Bridge, r: dict) -> None:
+    """부재에 묶인 점이 거의 없으면 **조용히 넘어가지 않는다**.
+
+    프록시는 **직선** 이다. 데크선이 크게 굽은 고가차도(동수원고가차도 — 호길이
+    1228 m·현 1172 m·편차 14.5 %)에서는 직선 부재가 곡선 위 측점을 따라가지 못해
+    결합이 0 이 된다. 부재 위치가 틀린 채로 통계만 나오면 그게 더 나쁘다.
+
+    지금 고칠 수 있는 문제가 아니다(곡선 정렬 프록시가 필요하다). 그러니 **왜 0 인지**
+    를 산출물에 남긴다 — 결합 0 을 보고 '점이 없다' 고 읽으면 안 된다.
+    """
+    n, bound = int(r.get("n_points") or 0), int(r.get("bound") or 0)
+    if n <= 0 or bound >= max(1, int(n * 0.2)):
+        return
+    dev = None
+    if b.geometry and len(b.geometry) >= 3:
+        P = np.asarray([list(p) for p in b.geometry], float)
+        dev = _chord_dev(_to_xy(P, float(P[:, 0].mean())))
+    why = (f"데크선이 크게 굽어 있다(현 대비 편차 {dev * 100:.0f} %) — "
+           "직선 프록시가 곡선 위 측점을 따라가지 못한다"
+           if dev is not None and dev > 0.08 else
+           "프록시 위치와 측점이 평면에서 어긋난다")
+    note(b, f"⚠ 부재 결합 {bound}/{n} — {why}. "
+            f"부재별 통계를 쓰면 안 된다(교면 전체 통계는 유효)")
+    b.sources["bind_warn"] = f"결합 {bound}/{n} — {why}"
+
+
 # ── ⑥ IFC 트윈 ────────────────────────────────────────────────────────────
 def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     from pyproj import Transformer
@@ -872,6 +963,7 @@ def build_twin(b: Bridge, sub: Path, out: Path) -> dict:
     r = export_insar_gltf(proj, out / "twin.glb", value="velocity", element_guids=guids,
                           element_z=ginfo["element_z"], z_source="deck",
                           element_z_datum=b.ground_m)
+    _warn_twin_misses_deck(b, r)
     write_web_viewer(out / "twin.glb", elements_json=ej, map_conversion=mc2, ifc_crs=CRS)
     write_3dtiles_tileset(out / "twin.glb")
     return {"ifc": str(ifc), "elements": len(els2), "points": r["n_points"], "bound": r["bound"],
@@ -1028,7 +1120,7 @@ def run_one(b: Bridge, *, count: int = 12, start: str | None = None,
             ep = f["epochs"][()] if "epochs" in f else None
         print("  ① 제원");   resolve_specs(b)
         _warn_stack_predates_build(b, ep)
-        print("  ② 데크선"); resolve_deck(b)
+        print("  ② 데크선"); resolve_deck(b); refine_type_with_deck(b)
         print("  ③ 지면");   resolve_ground(b)
         print("  ④ 점 선택"); sub = select_points(b, out)
         if sub is None:

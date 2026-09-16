@@ -19,7 +19,7 @@
   "z_source": "ifc_element_top",
   "z_detail": "ifc_element_top · 지면 155m · z 164~166m (IFC 부재 상단 + 원점 표고 155m)",
   "ground_m": 155.0,
-  "deck_z_median_m": 165.55
+  "deck_z_median_m": 164.78
  },
  "binding": {
   "key": "element_globalid",
@@ -85,7 +85,7 @@
   {
    "index": 7,
    "point_id": 7,
-   "element_globalid": "05F5U1HAZTJZXD$4UO1I$H",
+   "element_globalid": null,
    "value": -6.105915546417236,
    "lon": 127.61024244283631,
    "lat": 38.050805037682906
@@ -125,7 +125,7 @@
   {
    "index": 12,
    "point_id": 12,
-   "element_globalid": "2$00XG736AA4EA5EZ5JMF_",
+   "element_globalid": "05F5U1HAZTJZXD$4UO1I$H",
    "value": -112.0902328491211,
    "lon": 127.60999092198534,
    "lat": 38.0505535107879

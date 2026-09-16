@@ -10,14 +10,14 @@
  "length_m": 327.35152435717174,
  "n_spans": 11,
  "superstructure": true,
- "max_span_m": 66.0,
+ "max_span_m": null,
  "span_layout": "auto",
  "width_m": 5.5,
- "clearance_m": 4.5,
+ "clearance_m": 6.0,
  "ground_m": 8.0,
  "deck_az_deg": 34.33244597214219,
- "bridge_type": "box_girder",
- "material": "steel",
+ "bridge_type": "girder",
+ "material": null,
  "n_epochs": 51,
  "geometry": [
   [
@@ -114,24 +114,22 @@
   ]
  ],
  "notes": [
-  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "제원 CSV 에 없음 → OSM 연장으로",
   "스택 시작(2018)이 준공(2019)보다 이르다 — 다리가 없던 영상과의 결맞음으로 PS 를 고르면 교면이 통째로 탈락한다. 교면 점이 적으면 scripts/rebuild_track.py --since 2019-01-01 로 트랙을 다시 쌓을 것",
   "데크선을 직접 받았다(46점) — OSM 조회를 건너뛴다",
   "OSM way 가 양방향 차도를 도는 닫힌 선이었다(첫점=끝점) — 주축 양 끝으로 한쪽 차도만 남겨 방위 34.3° · 연장 327 m 로 잡는다",
   "OSM 보도 간격 55.7 m 는 등록 교량폭 5.5 m 와 크게 달라 쓰지 않았다(그 교량 보도가 아닐 수 있다)",
   "경간수 없음 → 30 m 규칙으로 11 가정",
+  "형하고 6.0 m 가정(표준데이터 교량높이 없음) — 잔차고도로 대체 시도",
   "처리 오프셋 ≈ 0 → 교량 위 점의 횡방향 치우침은 산란체 위치(보도·난간)로 본다"
  ],
  "sources": {
-  "specs": "파트너 실측 CSV '여의중류램프교' (136 m)",
-  "bridge_type": "CSV '강박스거더교(STB)' → box_girder",
-  "clearance": "전국교량표준데이터 교량높이 4.5 m",
   "deck": "배치 파일에 지정한 데크선",
   "deck_cut": "닫힌 way → 주축 양 끝 절단 · 한쪽 차도 23점",
   "width": "전국교량표준데이터 교량폭 5.5 m",
   "ground": "Open-Meteo DEM",
   "ground_offset": "처리 오프셋 ≈ 0 (|B| 0.7 m < 3 m · 지면 점 1029 · 도로 양쪽 대칭)",
-  "points": "쉬프트 5.2 m(heading -13.3°) 보정 후 데크 ±30 m 안 50/7058",
-  "span_layout": "measured — 주경간 66 m(실측)를 가운데, 나머지 10경간 26 m 균등"
+  "points": "쉬프트 7.0 m(heading -13.3°) 보정 후 데크 ±30 m 안 50/7058",
+  "span_layout": "equal — 최대경간장 실측이 없어 등간격"
  }
 }
