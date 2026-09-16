@@ -1,0 +1,316 @@
+{
+ "_설명": "보고서 추세와 PS 점 추세의 상대 유사도(1 − 상대오차)",
+ "_주의": "신뢰구간을 보지 않는 값끼리의 거리다. 부호를 뒤집은 기준선(count_at_flipped)보다 뚜렷이 많아야 의미가 있다.",
+ "bridges": [
+  {
+   "name": "가양대교",
+   "what": "처짐(경사계)",
+   "how": "눈 판독",
+   "vertical": true,
+   "years": 2.83,
+   "n_epochs": 20,
+   "n_points": 167,
+   "report_slope": -3.738,
+   "report_ci": 6.444,
+   "count_at": {
+    "50%": 29,
+    "60%": 22,
+    "70%": 18,
+    "80%": 12,
+    "90%": 9
+   },
+   "count_at_flipped": {
+    "50%": 25,
+    "60%": 15,
+    "70%": 12,
+    "80%": 10,
+    "90%": 5
+   },
+   "best_similarity": 0.993,
+   "top60": [
+    {
+     "station_m": 1300.2,
+     "slope": -3.71,
+     "ci": 10.69,
+     "similarity": 0.993
+    },
+    {
+     "station_m": 1029.2,
+     "slope": -3.7,
+     "ci": 13.23,
+     "similarity": 0.99
+    },
+    {
+     "station_m": 36.4,
+     "slope": -3.68,
+     "ci": 18.13,
+     "similarity": 0.985
+    },
+    {
+     "station_m": 48.4,
+     "slope": -3.84,
+     "ci": 18.18,
+     "similarity": 0.973
+    },
+    {
+     "station_m": 816.7,
+     "slope": -3.86,
+     "ci": 20.35,
+     "similarity": 0.968
+    },
+    {
+     "station_m": 911.4,
+     "slope": -3.6,
+     "ci": 16.37,
+     "similarity": 0.964
+    },
+    {
+     "station_m": 30.8,
+     "slope": -3.53,
+     "ci": 15.96,
+     "similarity": 0.945
+    },
+    {
+     "station_m": 887.3,
+     "slope": -3.95,
+     "ci": 15.66,
+     "similarity": 0.943
+    },
+    {
+     "station_m": 42.8,
+     "slope": -4.08,
+     "ci": 16.28,
+     "similarity": 0.91
+    },
+    {
+     "station_m": 49.3,
+     "slope": -4.16,
+     "ci": 16.62,
+     "similarity": 0.887
+    },
+    {
+     "station_m": 196.8,
+     "slope": -4.21,
+     "ci": 18.77,
+     "similarity": 0.874
+    },
+    {
+     "station_m": 1200.9,
+     "slope": -3.1,
+     "ci": 11.81,
+     "similarity": 0.831
+    }
+   ],
+   "short": false
+  },
+  {
+   "name": "원효대교",
+   "what": "처짐(경사계)",
+   "how": "눈 판독",
+   "vertical": true,
+   "years": 2.92,
+   "n_epochs": 21,
+   "n_points": 45,
+   "report_slope": 0.695,
+   "report_ci": 4.687,
+   "count_at": {
+    "50%": 2,
+    "60%": 2,
+    "70%": 2,
+    "80%": 2,
+    "90%": 1
+   },
+   "count_at_flipped": {
+    "50%": 2,
+    "60%": 1,
+    "70%": 1,
+    "80%": 1,
+    "90%": 1
+   },
+   "best_similarity": 0.95,
+   "top60": [
+    {
+     "station_m": 2017.1,
+     "slope": 0.66,
+     "ci": 6.89,
+     "similarity": 0.95
+    },
+    {
+     "station_m": 1520.4,
+     "slope": 0.57,
+     "ci": 13.98,
+     "similarity": 0.825
+    }
+   ],
+   "short": false
+  },
+  {
+   "name": "올림픽대교",
+   "what": "처짐(레이저)",
+   "how": "눈 판독",
+   "vertical": true,
+   "years": 2.83,
+   "n_epochs": 40,
+   "n_points": 56,
+   "report_slope": -3.58,
+   "report_ci": 2.508,
+   "count_at": {
+    "50%": 5,
+    "60%": 5,
+    "70%": 4,
+    "80%": 2,
+    "90%": 1
+   },
+   "count_at_flipped": {
+    "50%": 0,
+    "60%": 0,
+    "70%": 0,
+    "80%": 0,
+    "90%": 0
+   },
+   "best_similarity": 0.959,
+   "top60": [
+    {
+     "station_m": 883.2,
+     "slope": -3.43,
+     "ci": 11.15,
+     "similarity": 0.959
+    },
+    {
+     "station_m": 1474.5,
+     "slope": -4.16,
+     "ci": 5.72,
+     "similarity": 0.837
+    },
+    {
+     "station_m": 1360.0,
+     "slope": -4.34,
+     "ci": 6.51,
+     "similarity": 0.788
+    },
+    {
+     "station_m": 1342.7,
+     "slope": -2.58,
+     "ci": 7.65,
+     "similarity": 0.721
+    },
+    {
+     "station_m": 1456.7,
+     "slope": -2.19,
+     "ci": 6.25,
+     "similarity": 0.611
+    }
+   ],
+   "short": false
+  },
+  {
+   "name": "샛강문화다리",
+   "what": "GNSS 연직변위 (P1_U)",
+   "how": "자동 판독",
+   "vertical": true,
+   "years": 2.83,
+   "n_epochs": 20,
+   "n_points": 50,
+   "report_slope": -0.045,
+   "report_ci": 1.776,
+   "count_at": {
+    "50%": 0,
+    "60%": 0,
+    "70%": 0,
+    "80%": 0,
+    "90%": 0
+   },
+   "count_at_flipped": {
+    "50%": 0,
+    "60%": 0,
+    "70%": 0,
+    "80%": 0,
+    "90%": 0
+   },
+   "best_similarity": 0.0,
+   "top60": [],
+   "short": false
+  },
+  {
+   "name": "암사대교",
+   "what": "신축변위",
+   "how": "눈 판독",
+   "vertical": false,
+   "years": 0.83,
+   "n_epochs": 7,
+   "n_points": 237,
+   "report_slope": -37.091,
+   "report_ci": 56.634,
+   "count_at": {
+    "50%": 0,
+    "60%": 0,
+    "70%": 0,
+    "80%": 0,
+    "90%": 0
+   },
+   "count_at_flipped": {
+    "50%": 72,
+    "60%": 56,
+    "70%": 30,
+    "80%": 11,
+    "90%": 4
+   },
+   "best_similarity": 0.477,
+   "top60": [],
+   "short": true
+  },
+  {
+   "name": "월드컵대교",
+   "what": "GNSS 연직변위 (GP_S1M_01_Z)",
+   "how": "자동 판독",
+   "vertical": true,
+   "years": 0.83,
+   "n_epochs": 7,
+   "n_points": 82,
+   "report_slope": 6.538,
+   "report_ci": 5.862,
+   "count_at": {
+    "50%": 5,
+    "60%": 4,
+    "70%": 2,
+    "80%": 2,
+    "90%": 1
+   },
+   "count_at_flipped": {
+    "50%": 4,
+    "60%": 4,
+    "70%": 4,
+    "80%": 1,
+    "90%": 0
+   },
+   "best_similarity": 0.965,
+   "top60": [
+    {
+     "station_m": 237.8,
+     "slope": 6.31,
+     "ci": 65.56,
+     "similarity": 0.965
+    },
+    {
+     "station_m": 254.7,
+     "slope": 5.74,
+     "ci": 76.09,
+     "similarity": 0.878
+    },
+    {
+     "station_m": 6.9,
+     "slope": 8.53,
+     "ci": 76.07,
+     "similarity": 0.696
+    },
+    {
+     "station_m": 275.4,
+     "slope": 4.23,
+     "ci": 69.43,
+     "similarity": 0.648
+    }
+   ],
+   "short": true
+  }
+ ]
+}
