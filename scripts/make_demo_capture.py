@@ -351,12 +351,23 @@ def record_app(url: str, out_dir: Path, seconds_per_tab: float = 9.0) -> Path:
         pg.wait_for_timeout(2500)
 
         for name in SECTIONS:
+            # **라디오**를 집는다. get_by_text 는 같은 글자를 '진행:' 표시줄에서도
+            # 찾아(2건) 엉뚱한 쪽을 눌렀고, 그러면 탭이 안 바뀐 채 스크롤만 했다.
+            # input 자체는 숨겨져 있어 클릭이 안 된다 — 감싸는 label 을 누른다(사람과 같게).
             try:
-                pg.get_by_text(name, exact=True).first.click(timeout=15_000)
+                (pg.get_by_role("radio", name=name)
+                   .locator("xpath=ancestor::label[1]").click(timeout=15_000))
             except Exception as e:                       # noqa: BLE001
                 print(f"  · '{name}' 클릭 실패 — 건너뜀 ({type(e).__name__})")
                 continue
-            pg.wait_for_timeout(2200)
+            pg.wait_for_timeout(2600)
+            try:                                         # 정말 바뀌었나 확인
+                if not pg.get_by_role("radio", name=name).is_checked():
+                    print(f"  · '{name}' 선택이 안 먹었다")
+            except Exception:                            # noqa: BLE001
+                pass
+            pg.mouse.wheel(0, -3000)                     # 탭마다 위에서 시작
+            pg.wait_for_timeout(700)
             print(f"  · {name}")
             _poke(pg, name)                     # 그 탭에서 실제로 뭔가 눌러 본다
             # 천천히 훑어 내린다 — 차트가 그려지는 걸 보이게
