@@ -45,21 +45,25 @@ ORANGE = (242, 153, 74)
 RED = (235, 87, 87)
 SUB_BG = (8, 15, 25)
 
+# mono 는 **굴림체**(gulim.ttc index 1) — 한글이 있는 고정폭이다. Consolas 는 고정폭이지만
+# 한글 글리프가 없어 로그가 통째로 네모가 된다. 반대로 원문자 ⓪(U+24EA)는 한글 글꼴에
+# 없고 Consolas 에만 있어서, 단계 번호만 "circ" 로 따로 찍는다.
 FONTS = {
-    "bold": "C:/Windows/Fonts/malgunbd.ttf",
-    "reg": "C:/Windows/Fonts/malgun.ttf",
-    "mono": "C:/Windows/Fonts/consola.ttf",
+    "bold": ("C:/Windows/Fonts/malgunbd.ttf", 0),
+    "reg": ("C:/Windows/Fonts/malgun.ttf", 0),
+    "mono": ("C:/Windows/Fonts/gulim.ttc", 1),
+    "circ": ("C:/Windows/Fonts/consola.ttf", 0),
 }
 
 
 def _font(kind: str, size: int) -> ImageFont.FreeTypeFont:
     key = (kind, size)
     if key not in _font.cache:
-        p = FONTS[kind]
+        p, idx = FONTS[kind]
         if not Path(p).exists():                     # 윈도우가 아니면 기본 글꼴
             _font.cache[key] = ImageFont.load_default()
         else:
-            _font.cache[key] = ImageFont.truetype(p, size)
+            _font.cache[key] = ImageFont.truetype(p, size, index=idx)
     return _font.cache[key]
 
 
@@ -152,14 +156,16 @@ def rail(d, active: int | None):
         on = active is not None and i == active
         done = active is not None and i < active
         col = BLUE if on else (GREEN if done else (70, 92, 116))
-        f = _font("bold" if on else "reg", 25 if on else 22)
-        s = f"{num} {name}"
-        wsp = f.getlength(s)
+        sz = 25 if on else 22
+        f = _font("bold" if on else "reg", sz)
+        fc = _font("circ", sz) if num == "⓪" else f
+        wn, ws = fc.getlength(num + " "), f.getlength(name)
         if on:
-            d.rounded_rectangle((x - 12, 22, x + wsp + 12, 64), radius=10,
+            d.rounded_rectangle((x - 12, 22, x + wn + ws + 12, 64), radius=10,
                                 fill=(26, 56, 92), outline=BLUE, width=2)
-        d.text((x, 43), s, font=f, fill=col, anchor="lm")
-        x += wsp + 34
+        d.text((x, 43), num, font=fc, fill=col, anchor="lm")
+        d.text((x + wn, 43), name, font=f, fill=col, anchor="lm")
+        x += wn + ws + 34
     return x
 
 
@@ -211,7 +217,7 @@ def sc_title(meta: dict) -> Scene:
         text(d, (120, 674),
              f"Sentinel-1 ASC path127 · {meta['scenes']}장면 · {meta['span']}",
              size=28, fill=DIM)
-        text(d, (120, H - 150), "⚠ 연구용 프로토타입 — 실무 안전판정이 아닙니다",
+        text(d, (120, H - 150), "※ 연구용 프로토타입 — 실무 안전판정이 아닙니다",
              size=26, fill=ORANGE)
     return Scene(7.0, bg, [
         (0.3, 3.4, "inframon 은 좌표 하나만 주면 위성 원자료부터 디지털 트윈까지 스스로 갑니다."),
@@ -290,7 +296,10 @@ def sc_step(i: int, *, head: str, bullets: list[str], out: str,
         d.rectangle((0, 0, W, H), fill=BG)
         rail(d, i)
         L, R = body_split(0.40 if image else 0.52)
-        text(d, (L[0], L[1] + 6), f"{num}  {name}", kind="bold", size=54, fill=BLUE)
+        fc = _font("circ", 54) if num == "⓪" else _font("bold", 54)
+        d.text((L[0], L[1] + 6), num, font=fc, fill=BLUE)
+        text(d, (L[0] + fc.getlength(num + " "), L[1] + 6), name,
+             kind="bold", size=54, fill=BLUE)
         y = L[1] + 86
         for ln in wrap(head, _font("bold", 32), L[2] - L[0]):
             text(d, (L[0], y), ln, kind="bold", size=32, fill=INK); y += 44
@@ -348,8 +357,10 @@ def sc_result(md_lines: list[tuple[str, tuple]], cues: list, dur: float) -> Scen
     def bg(img, d):
         d.rectangle((0, 0, W, H), fill=BG)
         rail(d, 10)
-        text(d, (48, 104), "⑩  결과 문서 — 숫자마다 출처를 적는다", kind="bold",
-             size=40, fill=INK)
+        fc = _font("circ", 40)
+        d.text((48, 104), "⑩", font=fc, fill=INK)
+        text(d, (48 + fc.getlength("⑩  "), 104),
+             "결과 문서 — 숫자마다 출처를 적는다", kind="bold", size=40, fill=INK)
         text(d, (48, 154), "docs/bridges/암사대교/결과.md · 손으로 옮겨 적은 숫자가 없다",
              size=27, fill=DIM)
         card(d, (48, 196, W - 48, 846), fill=(10, 20, 33))
@@ -370,7 +381,7 @@ def sc_end(meta: dict) -> Scene:
         text(d, (160, 372), "python scripts/bridge_run.py --name <교량> --lat <위도> --lon <경도>",
              kind="mono", size=27, fill=GREEN)
         text(d, (160, 416), "여러 교량", kind="bold", size=26, fill=DIM)
-        text(d, (300, 416), "python scripts/bridge_batch.py --json docs/bridges/hangang16_batch.json",
+        text(d, (300, 416), "python scripts/bridge_run.py --batch docs/bridges/hangang16_batch.json",
              kind="mono", size=27, fill=GREEN)
         rows = [
             (f"{meta['n_bridges']} 개소", "실 SLC 로 관통한 교량(한강 16개소 포함)"),
@@ -384,7 +395,7 @@ def sc_end(meta: dict) -> Scene:
             for k, ln in enumerate(wrap(small, _font("reg", 25), 480)):
                 text(d, (x + 30, 604 + k * 32), ln, size=25, fill=DIM)
             x += 570
-        text(d, (120, 706), "⚠ 연구용 프로토타입 — 전 파이프라인·해석해 검증 완료, "
+        text(d, (120, 706), "※ 연구용 프로토타입 — 전 파이프라인·해석해 검증 완료, "
                             "현장·상용FEM·실 붕괴라벨 검증 미수행.", size=27, fill=ORANGE)
         text(d, (120, 746), "   산출은 파이프라인 결과이며 실무 안전판정이 아닙니다.",
              size=27, fill=ORANGE)
@@ -432,7 +443,7 @@ def build_scenes(bd: Path, meta: dict) -> list[Scene]:
                  "굽은 접속램프는 잘라낸다 — 본교의 방위가 흐려지면 뒤 계산이 전부 흔들린다"],
         out="deck_polyline.json · 데크 방위", image=f"{b}/chain.png",
         dur=11.0, cues=[
-            (0.2, 4.2, "이 단계. 오픈스트리트맵에서 교면 중심선을 뽑습니다."),
+            (0.2, 4.2, "둘째 단계. 오픈스트리트맵에서 교면 중심선을 뽑습니다."),
             (4.4, 8.0, "닫힌 선이면 한쪽 차도만 남기고, 굽은 접속램프는 잘라냅니다."),
             (8.2, 10.8, "왼쪽 위 그림의 회색 선이 그렇게 정리한 교면 중심선입니다."),
         ]))
@@ -456,7 +467,7 @@ def build_scenes(bd: Path, meta: dict) -> list[Scene]:
                  "밀린 양(δh/tanθ)을 되돌린 뒤 교면 중심선에서 ±30 m 안만 남긴다",
                  "정밀도 기준에 못 미치는 점은 뺀다 — 뺀 점도 그림에 ×로 남긴다"],
         out="교면 결합 측점 · project.h5", image=f"{b}/chain.png",
-        note="암사대교 — 쉬프트 32.4 m(heading −13.3°) 보정 후 237/20000 점 채택",
+        note="암사대교 — 쉬프트 32.4 m(heading -13.3°) 보정 후 237/20000 점 채택",
         dur=12.0, cues=[
             (0.2, 4.6, "사 단계. 레이더는 높은 구조물을 옆으로 밀어 찍습니다."),
             (4.8, 8.6, "밀린 만큼 되돌린 다음, 교면 중심선에서 삼십 미터 안쪽만 남깁니다."),
@@ -469,7 +480,7 @@ def build_scenes(bd: Path, meta: dict) -> list[Scene]:
                  "낮게 나오면 경고를 찍는다 — 제방·교대 지면을 교면으로 착각했을 수 있다",
                  "이 관문을 통과하지 못하면 뒤 숫자를 믿으면 안 된다"],
         out="잔차고도 z 검정 · 결과.md 경고", image=None,
-        note="암사대교 — 교면 위 − 밖 +8.5 ± 2.6 m (z=3.33) · 통과",
+        note="암사대교 — 교면 위 - 밖 +8.5 ± 2.6 m (z=3.33) · 통과",
         note_col=GREEN,
         dur=10.5, cues=[
             (0.2, 4.4, "오 단계. 고른 점이 정말 다리 위 점인지 프로그램이 스스로 검사합니다."),
@@ -542,7 +553,7 @@ def build_scenes(bd: Path, meta: dict) -> list[Scene]:
         ("| points      | 쉬프트 32.4 m 보정 후 데크 ±30 m 안 237/20000              |", INK),
         ("", INK),
         ("| IFC 트윈   | 부재 77 · 점 237 · 결합 237                                |", GREEN),
-        ("| 잔차고도   | 교면 위 − 밖 +8.5 ± 2.6 m (z=3.33) — 유의하게 높다          |", GREEN),
+        ("| 잔차고도   | 교면 위 - 밖 +8.5 ± 2.6 m (z=3.33) — 유의하게 높다          |", GREEN),
         ("| PINN · CRI | CRI 0.809 · 경고                                          |", ORANGE),
         ("| 감사       | 조건부 · CRI 등급은 잠정 — 관측조건이 기준과 다르다         |", ORANGE),
         ("", INK),
@@ -687,6 +698,7 @@ def main() -> int:
         scenes = scenes[:3]
 
     out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     n = write_subs(scenes, out.with_suffix(".srt"), out.with_suffix(".txt"))
     print(f"자막 {n}줄 — {out.with_suffix('.srt')} · {out.with_suffix('.txt')}")
     if a.subs_only:
