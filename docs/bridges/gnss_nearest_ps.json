@@ -1,0 +1,157 @@
+{
+ "_설명": "GNSS 설치 위치 옆 PS 점과의 대조(점을 고르지 않음)",
+ "_위치출처": "보고서 입면도에서 픽셀로 측정 — 샛강 p51 주탑 25%·75%, 월드컵 p30 주경간(축척 없어 대략치)",
+ "_방향": "교축 0 이 어느 교대인지 도면으로 못 정해 정방향·역방향 둘 다 적는다",
+ "sensors": [
+  {
+   "bridge": "샛강문화다리",
+   "sensor": "P1_U",
+   "where": "좌측 주탑(P1)",
+   "frac": 0.25,
+   "approx": false,
+   "deck_length_m": 330.7,
+   "n_months": 18,
+   "정방향": {
+    "station_m": 82.7,
+    "n_near": 14,
+    "nearest_dist_m": 3.2,
+    "r": -0.416,
+    "r2": 0.173,
+    "insar_slope": 2.21,
+    "insar_ci": 11.77,
+    "gnss_slope": -0.44,
+    "gnss_ci": 2.74
+   },
+   "역방향": {
+    "station_m": 248.0,
+    "n_near": 15,
+    "nearest_dist_m": 3.1,
+    "r": 0.018,
+    "r2": 0.0,
+    "insar_slope": -3.04,
+    "insar_ci": 9.73,
+    "gnss_slope": -0.44,
+    "gnss_ci": 2.74
+   }
+  },
+  {
+   "bridge": "샛강문화다리",
+   "sensor": "1_2_U",
+   "where": "경간 중앙",
+   "frac": 0.5,
+   "approx": false,
+   "deck_length_m": 330.7,
+   "n_months": 18,
+   "정방향": {
+    "station_m": 165.4,
+    "n_near": 18,
+    "nearest_dist_m": 1.9,
+    "r": -0.126,
+    "r2": 0.016,
+    "insar_slope": 0.03,
+    "insar_ci": 9.5,
+    "gnss_slope": -1.03,
+    "gnss_ci": 2.29
+   },
+   "역방향": {
+    "station_m": 165.4,
+    "n_near": 18,
+    "nearest_dist_m": 1.9,
+    "r": -0.126,
+    "r2": 0.016,
+    "insar_slope": 0.03,
+    "insar_ci": 9.5,
+    "gnss_slope": -1.03,
+    "gnss_ci": 2.29
+   }
+  },
+  {
+   "bridge": "샛강문화다리",
+   "sensor": "P2_U",
+   "where": "우측 주탑(P2)",
+   "frac": 0.75,
+   "approx": false,
+   "deck_length_m": 330.7,
+   "n_months": 16,
+   "정방향": {
+    "station_m": 248.0,
+    "n_near": 15,
+    "nearest_dist_m": 3.1,
+    "r": 0.13,
+    "r2": 0.017,
+    "insar_slope": -2.62,
+    "insar_ci": 10.65,
+    "gnss_slope": -1.06,
+    "gnss_ci": 3.59
+   },
+   "역방향": {
+    "station_m": 82.7,
+    "n_near": 14,
+    "nearest_dist_m": 3.2,
+    "r": -0.441,
+    "r2": 0.195,
+    "insar_slope": 2.39,
+    "insar_ci": 12.38,
+    "gnss_slope": -1.06,
+    "gnss_ci": 3.59
+   }
+  },
+  {
+   "bridge": "월드컵대교",
+   "sensor": "GP_S1M_01_Z",
+   "where": "주경간 좌측 데크",
+   "frac": 0.44,
+   "approx": true,
+   "deck_length_m": 1489.1,
+   "n_months": 6,
+   "정방향": {
+    "station_m": 655.2,
+    "n_near": 0,
+    "nearest_dist_m": 264.7
+   },
+   "역방향": {
+    "station_m": 833.9,
+    "n_near": 0,
+    "nearest_dist_m": 410.7
+   }
+  },
+  {
+   "bridge": "월드컵대교",
+   "sensor": "GP_T1T_01_Z",
+   "where": "주탑 정부(P11)",
+   "frac": 0.53,
+   "approx": true,
+   "deck_length_m": 1489.1,
+   "n_months": 6,
+   "정방향": {
+    "station_m": 789.2,
+    "n_near": 0,
+    "nearest_dist_m": 398.7
+   },
+   "역방향": {
+    "station_m": 699.9,
+    "n_near": 0,
+    "nearest_dist_m": 309.3
+   }
+  },
+  {
+   "bridge": "월드컵대교",
+   "sensor": "GP_S2M_01_Z",
+   "where": "주경간 우측 데크",
+   "frac": 0.58,
+   "approx": true,
+   "deck_length_m": 1489.1,
+   "n_months": 6,
+   "정방향": {
+    "station_m": 863.7,
+    "n_near": 0,
+    "nearest_dist_m": 381.0
+   },
+   "역방향": {
+    "station_m": 625.4,
+    "n_near": 0,
+    "nearest_dist_m": 234.9
+   }
+  }
+ ]
+}
