@@ -613,29 +613,37 @@ def slide_gnss(prs, fig, trend_json):
 
 
 def slide_cycle(prs, fig, cyc: dict):
-    """추세는 못 가려도 **연주기는 맞는다** — 앞 장의 '판별 불가' 다음에 오는 장."""
+    """연주기 — **교축 어디를 보느냐**가 진폭을 정한다. ⑥ 의 '판별 불가' 다음 장."""
     s = blank(prs)
-    header(s, "보고서 월별 변위 ↔ 위성 — 추세는 못 가려도 연주기는 맞는다",
-           "2022~2024 같은 창 · 보고서 월별 처짐 곡선 ↔ 위성 연주기 적합")
+    header(s, "보고서 처짐계는 한 지점을 본다 — 위성도 그 구간만 보면 맞는다",
+           "2022~2024 같은 창 · 연주기(계절 성분) 진폭과 최대월")
     if fig and Path(fig).exists():
         picture_fit(s, fig, 0.45, 1.0, SW - 0.9, 4.92)
     rows = (cyc or {}).get("bridges") or []
     gaps = [r["phase_gap"] for r in rows if r.get("phase_gap") is not None]
-    eps = sorted(r.get("insar_fit", {}).get("n", 0) for r in rows)
-    n_ep = (f"{eps[0]}~{eps[-1]}" if eps and eps[0] != eps[-1]
-            else (str(eps[0]) if eps else "—"))
+    lo = hi = None
+    for r in rows:
+        for q in (r.get("profile") or []):
+            v = q.get("amp_vert_mm")
+            if v is None:
+                continue
+            lo = v if lo is None else min(lo, v)
+            hi = v if hi is None else max(hi, v)
+    med = [r["insar_amp_vert"] for r in rows if r.get("insar_amp_vert") is not None]
     w = (SW - 0.9 - 0.24 * 2) / 3
-    kpi(s, 0.45, 5.98, w, 0.88, str(len(rows)), "개소",
-        "보고서 월별 변위 곡선을 되읽어 대조한 교량", NAVY_L)
+    kpi(s, 0.45, 5.98, w, 0.88,
+        (f"{min(med):.1f}~{max(med):.1f}" if med else "—"), "mm",
+        "교면 전체 중앙값의 연주기 진폭 — 구간이 서로 지워진다", ORANGE)
     kpi(s, 0.45 + w + 0.24, 5.98, w, 0.88,
+        (f"{lo:.1f}~{hi:.1f}" if lo is not None else "—"), "mm",
+        "교축 구간별 진폭 — 보고서 8~23 mm 와 자릿수가 맞는다", GREEN)
+    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88,
         (f"{min(gaps):.1f}~{max(gaps):.1f}" if gaps else "—"), "개월",
-        "최대가 되는 달의 차이 — 세 곳 모두 2개월 안쪽", GREEN)
-    kpi(s, 0.45 + 2 * (w + 0.24), 5.98, w, 0.88, n_ep, "시점",
-        "같은 창의 Sentinel-1 시점 — 추세는 못 가려도 계절은 잡힌다", BLUE)
-    footer(s, "진폭은 맞출 대상이 아니다 — 경사계·레이저처짐계는 한 지점의 처짐이고 위성은 "
-              "교면 결합 측점의 중앙값이라, 경간 중앙의 큰 스윙이 중앙값에서 상쇄된다. "
-              "같은 열거동을 보고 있는지는 최대가 되는 달로 본다. 보고서 값은 그림에서 "
-              "되읽은 값이다(자동 판독과 눈 판독이 중앙 0.5 mm 로 일치).")
+        "최대가 되는 달의 차이 — 세 곳 모두 2개월 안쪽", BLUE)
+    footer(s, "보고서 처짐계·레이저처짐계는 한 지점(레이저처짐계는 중앙경간, 보고서 p12)을 "
+              "본다. 위성을 교면 전체 중앙값으로 적합하면 위상이 다른 구간이 서로 지워져 "
+              "진폭이 죽는다 — 가양대교 1.0 mm. 같은 자료를 교축 구간으로 나눠 보면 "
+              "6~12 mm 로 보고서와 자릿수가 맞고, 최대가 되는 달도 2개월 안쪽으로 맞는다.")
 
 
 def slide_chain(prs, fig, name: str, b: dict | None):

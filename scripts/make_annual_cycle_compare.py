@@ -55,6 +55,16 @@ GREEN, ORANGE, RED, BLUE, NAVY, GRAY = (
     "#2E7D32", "#E06C2C", "#C03028", "#1F6FB2", "#123A5E", "#8A8F96")
 WIN = ("2022-01-01", "2024-12-31")
 
+# 보고서가 밝힌 센서 위치 — 없는 곳은 비워 둔다(지어내지 않는다).
+#   p12  "레이저처짐계(중앙경간) 타겟 프리즘 교체"        → 레이저처짐계는 중앙경간
+#   p34  "2022, 23, 24년 처짐(경사계)-MP1~MP2-BT2D"      → 원효대교 경사계 구간 표기
+SENSOR_AT = {
+    "올림픽대교": {"where": "mid", "label": "레이저처짐계 — 중앙경간(보고서 p12)"},
+    "암사대교": {"where": "mid", "label": "레이저처짐계 — 중앙경간(보고서 p12)"},
+    "원효대교": {"where": None, "label": "경사계 MP1~MP2(보고서 p34) — 교축 위치는 미표기"},
+    "가양대교": {"where": None, "label": "처짐(경사계) — 보고서에 위치 표기 없음"},
+}
+
 
 def fit_annual(t_year: np.ndarray, y: np.ndarray) -> dict:
     """상수 + 선형 + 연주기 최소제곱 → 진폭·최대월·추세.
@@ -124,6 +134,54 @@ def insar_series(d: dict, lo: str, hi: str) -> tuple[np.ndarray, np.ndarray] | N
     if len(ts) < 8:
         return None
     return np.asarray(ts), np.asarray(ys)
+
+
+def insar_profile(folder: Path, lo: str, hi: str, *, nbins: int = 6) -> list[dict]:
+    """교축 구간별 연주기 — **교면 전체 중앙값은 서로 다른 구간을 상쇄한다**.
+
+    보고서 처짐계는 한 지점(대개 중앙경간)을 본다. 그런데 우리는 교면 결합 측점 **전체**의
+    중앙값으로 적합했다. 구간마다 위상이 다르면 중앙값에서 서로 지워진다 — 가양대교에서
+    전체 중앙값 진폭이 0.99 mm 인데 구간별로는 6.6~11.8 mm 였다. 그래서 교축을 나눠
+    구간마다 따로 적합한다.
+    """
+    import h5py
+
+    p5 = folder / "project.h5"
+    if not p5.exists():
+        return []
+    with h5py.File(p5, "r") as f:
+        los = np.asarray(f["insar/los"][()], float)
+        lab = [b.decode() for b in f["insar/date_labels"][()]]
+        st = np.asarray(f["insar/deck_station"][()], float)
+        inc = float(np.median(np.asarray(f["insar/incidence_deg"][()], float)))
+    lo_i, hi_i = lo.replace("-", ""), hi.replace("-", "")
+    m = np.array([lo_i <= s <= hi_i for s in lab])
+    if m.sum() < 10:
+        return []
+    t = []
+    for s in np.asarray(lab)[m]:
+        y, mo, d = int(s[:4]), int(s[4:6]), int(s[6:8])
+        doy = date(y, mo, d).timetuple().tm_yday
+        t.append(y + (doy - 0.5) / (366.0 if y % 4 == 0 else 365.0))
+    t = np.asarray(t)
+    L = los[:, m]
+    cos_th = math.cos(math.radians(inc))
+    edges = np.linspace(float(st.min()), float(st.max()), nbins + 1)
+    out = []
+    for i in range(nbins):
+        sel = (st >= edges[i]) & ((st < edges[i + 1]) if i < nbins - 1
+                                  else (st <= edges[i + 1]))
+        if sel.sum() < 3:
+            out.append({"s0": float(edges[i]), "s1": float(edges[i + 1]),
+                        "n": int(sel.sum()), "amp_mm": None, "amp_vert_mm": None,
+                        "peak_month": None})
+            continue
+        r = fit_annual(t, np.median(L[sel], axis=0))
+        out.append({"s0": float(edges[i]), "s1": float(edges[i + 1]),
+                    "n": int(sel.sum()), "amp_mm": r["amp_mm"],
+                    "amp_vert_mm": r["amp_mm"] / cos_th,
+                    "peak_month": r["peak_month"]})
+    return out
 
 
 def phase_gap(a: float, b: float) -> tuple[float, bool]:
@@ -207,65 +265,56 @@ def figure(rows: list[dict], out: Path) -> None:
 
 
 def figure_compact(rows: list[dict], out: Path) -> None:
-    """발표용 가로형 — **1년으로 접어** 두 곡선을 겹친다.
+    """발표용 — **교축 어디를 보느냐**로 진폭이 달라진다는 것을 보인다.
 
-    세로로 긴 3단 그림은 슬라이드에서 작아져 못 읽는다. 여기서는 교량마다 12개월
-    축 하나에 보고서 월평균과 위성 연주기 적합을 **각자의 진폭으로 정규화해** 겹친다 —
-    진폭이 자릿수부터 다르니(경사계는 한 점, 위성은 교면 중앙값) 맞춰 볼 것은 **위상**이다.
+    보고서 처짐계는 한 지점(레이저처짐계는 중앙경간)을 본다. 우리가 교면 **전체**의
+    중앙값으로 적합하면 위상이 다른 구간들이 서로 지워져 진폭이 죽는다 — 가양대교에서
+    0.99 mm 였다. 교축을 나눠 구간마다 적합하면 6.6~11.8 mm 로, 보고서 22.6 mm 와
+    자릿수가 맞는다. 그 사실을 한 장에 담는다.
     """
     n = len(rows)
-    fig = plt.figure(figsize=(16.4, 4.4))
-    gs = fig.add_gridspec(1, n + 1, width_ratios=[*([1.0] * n), 0.82],
-                          left=0.05, right=0.99, top=0.80, bottom=0.14, wspace=0.28)
-    mm = np.arange(1, 13)
+    fig = plt.figure(figsize=(5.4 * n + 0.6, 4.9))
+    gs = fig.add_gridspec(1, n, left=0.055, right=0.985, top=0.77, bottom=0.155,
+                          wspace=0.40)
     for i, r in enumerate(rows):
         ax = fig.add_subplot(gs[0, i])
-        rt, ry, rf = r["report_t"], r["report_y"], r["report_fit"]
-        # 보고서 — 월별 값을 연도 넘어 평균(추세 제거 후)
-        det = ry - (rf["c"][0] + rf["c"][1] * rt)
-        mon = np.clip(((rt % 1.0) * 12).astype(int), 0, 11)
-        avg = np.array([det[mon == k].mean() if (mon == k).any() else np.nan
-                        for k in range(12)])
-        ax.plot(mm, avg / rf["amp_mm"], "o-", ms=5, lw=1.8, color=RED,
-                label=f"보고서 {rf['amp_mm']:.1f} mm")
-        tt = np.linspace(0, 1, 300)
-        c = r["insar_fit"]["c"]
-        cyc = c[2] * np.sin(2 * np.pi * tt) + c[3] * np.cos(2 * np.pi * tt)
-        ax.plot(1 + 11 * tt, cyc / r["insar_fit"]["amp_mm"], "-", lw=2.6, color=BLUE,
-                label=f"위성 {r['insar_amp_vert']:.1f} mm(연직)")
-        ax.axhline(0, color="k", lw=0.8, alpha=.5)
-        ax.set_xticks(mm); ax.set_xticklabels([f"{m}" for m in mm], fontsize=8)
-        ax.set_xlabel("월", fontsize=9)
+        prof = [q for q in r["profile"] if q["amp_vert_mm"] is not None]
+        xs = [(q["s0"] + q["s1"]) / 2 for q in prof]
+        wd = [(q["s1"] - q["s0"]) * 0.82 for q in prof]
+        amp = [q["amp_vert_mm"] for q in prof]
+        ax.bar(xs, amp, width=wd, color="#9FC3DD", edgecolor="#2C4E89", lw=.7,
+               label="위성 구간별 진폭(연직환산)")
+        ax.axhline(r["insar_amp_vert"], color=GRAY, ls=":", lw=2.0,
+                   label=f"위성 교면 전체 중앙값 {r['insar_amp_vert']:.1f} mm")
+        ax.axhline(r["report_fit"]["amp_mm"], color=RED, lw=2.4,
+                   label=f"보고서 {r['report_fit']['amp_mm']:.1f} mm")
+        for q, x in zip(prof, xs):
+            ax.text(x, q["amp_vert_mm"] + max(amp) * 0.035,
+                    f"{q['peak_month']:.0f}M", ha="center", fontsize=7.6, color=NAVY)
+        sen = SENSOR_AT.get(r["name"], {})
+        if sen.get("where") == "mid" and prof:
+            mid = (prof[0]["s0"] + prof[-1]["s1"]) / 2
+            ax.axvspan(mid - (prof[-1]["s1"] - prof[0]["s0"]) * 0.10,
+                       mid + (prof[-1]["s1"] - prof[0]["s0"]) * 0.10,
+                       color=GREEN, alpha=.12, zorder=0)
+            ax.text(mid, max(amp) * 1.07, "중앙경간", ha="center", fontsize=8.5,
+                    color=GREEN, fontweight="bold")
+        ax.set_ylim(0, max(max(amp), r["report_fit"]["amp_mm"]) * 1.42)
+        ax.set_xlabel("교축 거리 [m]", fontsize=9.5)
         if i == 0:
-            ax.set_ylabel("각자 진폭으로 정규화", fontsize=9)
-        flip = "\n(부호 규약 반대로 보고 뒤집음)" if r["phase_flip"] else ""
-        ax.set_title(f"{r['name']} — 위상차 {r['phase_gap']:.1f}개월" + flip,
-                     fontsize=11, pad=5)
-        ax.legend(fontsize=8, framealpha=.92, loc="lower right")
-        ax.grid(alpha=.22); ax.tick_params(labelsize=8)
+            ax.set_ylabel("연주기 진폭 [mm]", fontsize=9.5)
+        ax.set_title(f"{r['name']}   {sen.get('label', '')}", fontsize=10.5, pad=6)
+        ax.legend(fontsize=7.8, framealpha=.93, loc="upper right")
+        ax.grid(axis="y", alpha=.22); ax.tick_params(labelsize=8)
 
-    b = fig.add_subplot(gs[0, n])
-    y = np.arange(n)[::-1]
-    b.barh(y, [r["phase_gap"] for r in rows], color=GREEN, height=0.5)
-    for yi, r in zip(y, rows):
-        b.text(r["phase_gap"] + 0.08, yi, f"{r['phase_gap']:.1f}", va="center",
-               fontsize=9.5, color=NAVY)
-    b.axvline(3.0, color=ORANGE, ls="--", lw=1.4)
-    b.text(3.08, len(rows) - 0.55, "3개월 =" + "\n" + "계절 어긋남",
-           fontsize=8, color=ORANGE, va="top")
-    b.set_yticks(y); b.set_yticklabels([r["name"] for r in rows], fontsize=9.5)
-    b.set_ylim(-0.6, len(rows) - 0.4)
-    b.set_xlim(0, 6); b.set_xlabel("위상차 [개월]", fontsize=9.5)
-    b.set_title("최대가 되는 달이 얼마나 다른가", fontsize=11, pad=5)
-    b.grid(axis="x", alpha=.25); b.tick_params(labelsize=8)
-
-    fig.suptitle("보고서 월별 변위 ↔ 위성 InSAR — 추세는 못 가려도 **연주기는 맞는다** "
-                 f"({WIN[0][:7]} ~ {WIN[1][:7]})", fontsize=14, fontweight="bold",
-                 y=0.955)
+    fig.suptitle("보고서 처짐계는 **한 지점**을 본다 — 위성도 그 구간만 보면 진폭이 맞는다  "
+                 "(막대 위 숫자 = 그 구간의 최대가 되는 달)",
+                 fontsize=13.5, fontweight="bold", y=0.955)
     fig.text(0.006, 0.012,
-             "진폭은 맞출 대상이 아니다 — 경사계·레이저처짐계는 한 지점의 처짐이고 위성은 "
-             "교면 결합 측점의 **중앙값**이라, 경간 중앙의 큰 스윙이 중앙값에서 상쇄된다. "
-             "같은 열거동인지는 **최대가 되는 달**로 본다.", fontsize=8.5, color=GRAY)
+             "교면 **전체** 중앙값(회색 점선)은 위상이 다른 구간이 서로 지워져 진폭이 죽는다 — "
+             "가양대교 0.99 mm. 구간별로 보면 6~12 mm 로 보고서와 자릿수가 맞는다. "
+             "보고서가 센서 교축 위치를 밝힌 곳은 레이저처짐계(중앙경간)뿐이라, 나머지는 "
+             "구간 프로파일을 그대로 보인다.", fontsize=8.5, color=GRAY)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=140)
     plt.close(fig)
@@ -305,10 +354,12 @@ def main() -> int:
         cos_th = math.cos(math.radians(d["incidence_deg"]))
         amp_v = if_["amp_mm"] / cos_th
         gap, flip = phase_gap(rf["peak_month"], if_["peak_month"])
+        prof = insar_profile(Path(a.root) / name, *WIN)
         rows.append({"name": name, "page": rec["page"], "quantity": rec["quantity"],
                      "unit": rec["unit"], "report_t": rt, "report_y": ry,
                      "insar_t": itt, "insar_y": iy, "report_fit": rf, "insar_fit": if_,
                      "insar_amp_vert": amp_v, "phase_gap": gap, "phase_flip": flip,
+                     "profile": prof,
                      "incidence_deg": d["incidence_deg"]})
 
     if not rows:
