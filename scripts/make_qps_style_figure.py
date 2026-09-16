@@ -115,6 +115,85 @@ def scatter_panel(ax, x, y, color, label, *, fs=11, big=False):
     return r2
 
 
+def best_pair(root: Path, nm: str, auto: dict, eye: dict):
+    """그 교량에서 현장 계측과 가장 닮은 점 하나 — (현장값, 점값, 정보) 또는 None."""
+    rp = report_series(auto, eye, nm)
+    pts = load_points(root / nm)
+    if rp is None or pts is None:
+        return None
+    tr, vr, what, how = rp
+    los, ti, st, mem, inc = pts
+    lo, hi = float(tr.min()), float(tr.max())
+    sel = (ti >= lo - 0.12) & (ti <= hi + 0.12)
+    if sel.sum() < 4:
+        return None
+
+    def ym(t):
+        y = np.floor(t).astype(int)
+        return list(zip(y, np.clip(((t - y) * 12).astype(int) + 1, 1, 12)))
+
+    kr, ki = ym(tr), ym(ti[sel])
+    common = sorted(set(kr) & set(ki))
+    if len(common) < 4:
+        return None
+    ridx = {k: i for i, k in enumerate(kr)}
+    X = np.vstack([los[:, sel][:, [i for i, k in enumerate(ki) if k == c]
+                                ].mean(axis=1) for c in common]).T
+    gv = np.asarray([vr[ridx[c]] for c in common], float)
+    Xc = X - X.mean(1, keepdims=True)
+    sx = Xc.std(1)
+    gc = gv - gv.mean()
+    ok = sx > 1e-9
+    r = np.full(X.shape[0], np.nan)
+    if float(gc.std()) > 1e-9:
+        r[ok] = (Xc[ok] @ gc) / (len(common) * sx[ok] * float(gc.std()))
+    j = int(np.nanargmax(np.abs(np.nan_to_num(r))))
+    return {"name": nm, "what": what, "how": how, "j": j, "n": len(common),
+            "n_points": int(X.shape[0]), "r": float(r[j]),
+            "station": (None if not np.isfinite(st[j]) else float(st[j])),
+            "gv": gv, "xv": X[j]}
+
+
+def all_panels(a, auto: dict, eye: dict) -> int:
+    """현장 계측이 있는 교량 전부를 참고본 패널 형식으로 한 줄에."""
+    names = ["가양대교", "원효대교", "올림픽대교", "샛강문화다리", "암사대교",
+             "천호대교", "월드컵대교"]
+    got = [q for q in (best_pair(Path(a.root), n, auto, eye) for n in names) if q]
+    if not got:
+        print("그릴 것이 없다")
+        return 2
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, len(got), figsize=(4.25 * len(got), 4.9))
+    axes = np.atleast_1d(axes)
+    for k, (ax, g) in enumerate(zip(axes, got)):
+        scatter_panel(ax, g["gv"], g["xv"], PALETTE[k % len(PALETTE)],
+                      g["name"], fs=11)
+        ax.set_xlabel(f"{g['what']} [mm]", fontsize=10)
+        if k == 0:
+            ax.set_ylabel("InSAR Displacement [mm]", fontsize=11)
+        sm = "" if g["station"] is None else f" · 교축 {g['station']:.0f} m"
+        ax.set_title(f"P{g['j']:02d}{sm}\n짝 {g['n']}개월 · 점 {g['n_points']}개",
+                     fontsize=9.5, color="#12314F", pad=6)
+    fig.suptitle("한강 교량 — 현장 계측 ↔ InSAR (교량마다 가장 닮은 점 하나)",
+                 fontsize=15, fontweight="bold", y=0.985)
+    fig.text(0.006, 0.006,
+             "※ 교량마다 점 수십~수백 개 중 **상관이 가장 큰 점**을 고른 것이다. 짝이 "
+             "6개월뿐인 교량(암사·월드컵)은 그중 최댓값이 우연히도 커진다 — R² 만 보고 "
+             "고르면 안 된다(우연 기준선은 ps_match.json).",
+             fontsize=9, color="#55636F")
+    fig.tight_layout(rect=(0, 0.02, 1, 0.94))
+    p = out / "한강_현장계측_vs_InSAR_panels.png"
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
+    print("wrote", p)
+    print(f"\n{'교량':<12}{'계측':<18}{'짝':>4}{'점':>6}{'최적점':>8}{'r':>8}{'R²':>7}")
+    for g in got:
+        print(f"{g['name']:<12}{g['what'][:16]:<18}{g['n']:>4}{g['n_points']:>6}"
+              f"{('P%02d' % g['j']):>8}{g['r']:>+8.3f}{g['r'] ** 2:>7.3f}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bridge", default="올림픽대교")
@@ -124,12 +203,17 @@ def main() -> int:
     ap.add_argument("--out-dir", default="docs/img/qps")
     ap.add_argument("--top", type=int, default=5, help="산점도로 낼 점 수")
     ap.add_argument("--no-basemap", action="store_true")
+    ap.add_argument("--all", action="store_true",
+                    help="현장 계측이 있는 교량 전부를 한 줄 패널로 모은다")
     a = ap.parse_args()
 
     auto = json.loads(Path(a.auto).read_text(encoding="utf-8")) \
         if Path(a.auto).exists() else {}
     eye = json.loads(Path(a.eye).read_text(encoding="utf-8")) \
         if Path(a.eye).exists() else {}
+
+    if a.all:
+        return all_panels(a, auto, eye)
 
     nm = a.bridge
     rp = report_series(auto, eye, nm)
