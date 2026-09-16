@@ -1,0 +1,32 @@
+{
+ "name": "암사대교",
+ "n_deck_ps": 27,
+ "gamma_used": 0.25,
+ "offset_m": 50,
+ "half_m": 13.75,
+ "coh_mean": 0.675,
+ "gamma_median_deck": 0.295,
+ "n_epochs": 51,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": -0.039,
+ "elements": 77,
+ "points": 27,
+ "bound": 10,
+ "cri": 0.7589777057389598,
+ "warning": "경고",
+ "notes": [
+  "연장 1133 m 에 맞는 way 는 이름이 없다 — 이름이 맞는 '구리암사대교' 2363 m 를 쓴다",
+  "OSM way 가 양방향 차도를 도는 닫힌 선이었다(첫점=끝점) — 주축 양 끝으로 한쪽 차도만 남겨 방위 125.2° · 연장 1136 m 로 잡는다",
+  "경간수 없음 → 30 m 규칙으로 38 가정",
+  "형식별 상부구조: arch — 최대경간장 실측이 없어 형식 상부구조를 세우지 않는다(주경간이 형상을 정하는 형식이라 추정으로 만들지 않는다)",
+  "형식별 상부구조: arch — 최대경간장 실측이 없어 형식 상부구조를 세우지 않는다(주경간이 형상을 정하는 형식이라 추정으로 만들지 않는다)"
+ ],
+ "cri_point_median": 0.086,
+ "cri_point_max": 0.161,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.851,
+ "velocity_median_mm_yr": 0.21,
+ "n_points": 27,
+ "EI_median": 618750000000.0,
+ "gnss": null
+}

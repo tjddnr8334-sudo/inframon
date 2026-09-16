@@ -1,0 +1,28 @@
+{
+ "name": "잠수교",
+ "n_deck_ps": 11,
+ "gamma_used": 0.0,
+ "offset_m": 25,
+ "half_m": 9.0,
+ "coh_mean": 0.59,
+ "gamma_median_deck": 0.207,
+ "n_epochs": 51,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": -0.246,
+ "elements": 53,
+ "points": 11,
+ "bound": 9,
+ "cri": 0.7330020692800592,
+ "warning": "경고",
+ "notes": [
+  "경간수 없음 → 30 m 규칙으로 26 가정"
+ ],
+ "cri_point_median": 0.135,
+ "cri_point_max": 0.206,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.881,
+ "velocity_median_mm_yr": -1.09,
+ "n_points": 11,
+ "EI_median": 1764000000000.0002,
+ "gnss": null
+}

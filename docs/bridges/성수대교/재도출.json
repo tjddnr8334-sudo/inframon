@@ -1,0 +1,33 @@
+{
+ "name": "성수대교",
+ "n_deck_ps": 15,
+ "gamma_used": 0.35,
+ "offset_m": 20,
+ "half_m": 17.5,
+ "coh_mean": 0.668,
+ "gamma_median_deck": 0.493,
+ "n_epochs": 101,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": 0.174,
+ "elements": 123,
+ "points": 15,
+ "bound": 15,
+ "cri": 0.7009500282184278,
+ "warning": "경고",
+ "notes": [
+  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "OSM 어느 way 도 연장 1160 m 와 안 맞음 (토막난 way) → 표준데이터 시점–종점 선분 사용",
+  "OSM 보도 간격 8.4 m 는 등록 교량폭 35 m 와 크게 달라 쓰지 않았다(그 교량 보도가 아닐 수 있다)",
+  "⚠ '교면 위' 점이 지면보다 유의하게 **낮다**(z<−2) — 교면 산란체가 아닐 수 있다(제방·교대 주변 지면). 평면 선택을 다시 볼 것",
+  "형식별 상부구조: 트러스교 — 상현재 2련(데크 위 12 m) · 수직재 78본",
+  "형식별 상부구조: 트러스교 — 상현재 2련(데크 위 12 m) · 수직재 78본"
+ ],
+ "cri_point_median": 0.058,
+ "cri_point_max": 0.089,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.971,
+ "velocity_median_mm_yr": -0.05,
+ "n_points": 15,
+ "EI_median": 7349999999999.999,
+ "gnss": null
+}

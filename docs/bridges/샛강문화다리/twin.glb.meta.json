@@ -1,17 +1,17 @@
 {
  "schema": "inframon.gltf.meta/1.0",
  "glb": "twin.glb",
- "n_points": 50,
+ "n_points": 10,
  "value_channel": "velocity",
  "legend": {
   "kind": "div",
-  "vmin": -2.3494781851768494,
-  "vmax": 2.3494781851768494,
+  "vmin": -2.166462743282318,
+  "vmax": 2.166462743282318,
   "units": "mm/yr"
  },
  "georef": {
-  "origin_lon": 126.91842772160936,
-  "origin_lat": 37.518630286669286,
+  "origin_lon": 126.9180992773749,
+  "origin_lat": 37.518553038027875,
   "origin_height_m": 0.0,
   "projection": "EPSG:5186",
   "frame": "ENU_meters",
@@ -29,402 +29,82 @@
   {
    "index": 0,
    "point_id": 0,
-   "element_globalid": null,
-   "value": 0.5350525975227356,
-   "lon": 126.91974822555373,
-   "lat": 37.51976216024876
+   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
+   "value": 2.0440731048583984,
+   "lon": 126.91954556498234,
+   "lat": 37.51949626907621
   },
   {
    "index": 1,
    "point_id": 1,
-   "element_globalid": null,
-   "value": 0.7017624378204346,
-   "lon": 126.9198739879745,
-   "lat": 37.51976215992767
+   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
+   "value": 2.074333667755127,
+   "lon": 126.91941980084256,
+   "lat": 37.51937050493643
   },
   {
    "index": 2,
    "point_id": 2,
-   "element_globalid": "1GR28JPBT1S1H9KTWF8G1K",
-   "value": 1.6451196670532227,
-   "lon": 126.91999975034354,
-   "lat": 37.51976215959693
+   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
+   "value": 2.2418410778045654,
+   "lon": 126.91929403670278,
+   "lat": 37.51924474079665
   },
   {
    "index": 3,
    "point_id": 3,
-   "element_globalid": null,
-   "value": 2.2620465755462646,
-   "lon": 126.91962246303983,
-   "lat": 37.51963639641266
+   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
+   "value": 1.185935139656067,
+   "lon": 126.91828792358457,
+   "lat": 37.518615920097766
   },
   {
    "index": 4,
    "point_id": 4,
    "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.4175127744674683,
-   "lon": 126.91999975025034,
-   "lat": 37.51963639543974
+   "value": 0.10743018984794617,
+   "lon": 126.91841368772435,
+   "lat": 37.518615920097766
   },
   {
    "index": 5,
    "point_id": 5,
    "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.1878372430801392,
-   "lon": 126.91949670066057,
-   "lat": 37.51951063260172
+   "value": -0.34473979473114014,
+   "lon": 126.91791063116524,
+   "lat": 37.51849015595799
   },
   {
    "index": 6,
    "point_id": 6,
    "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.0343337059020996,
-   "lon": 126.9196224629777,
-   "lat": 37.51951063226128
+   "value": -0.1954812854528427,
+   "lon": 126.91728181046636,
+   "lat": 37.518238627678436
   },
   {
    "index": 7,
    "point_id": 7,
    "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.6692298650741577,
-   "lon": 126.91937093821923,
-   "lat": 37.519384868779184
+   "value": -1.2147594690322876,
+   "lon": 126.91715604632658,
+   "lat": 37.51811286353866
   },
   {
    "index": 8,
    "point_id": 8,
    "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.064836263656616,
-   "lon": 126.91949670054666,
-   "lat": 37.51938486844067
+   "value": 0.10222917050123215,
+   "lon": 126.9170302821868,
+   "lat": 37.51798709939889
   },
   {
    "index": 9,
    "point_id": 9,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.344510316848755,
-   "lon": 126.91962246287413,
-   "lat": 37.51938486810216
-  },
-  {
-   "index": 10,
-   "point_id": 10,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.23221492767334,
-   "lon": 126.91937093799139,
-   "lat": 37.51925910459684
-  },
-  {
-   "index": 11,
-   "point_id": 11,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.666116237640381,
-   "lon": 126.91949670032918,
-   "lat": 37.519259104260264
-  },
-  {
-   "index": 12,
-   "point_id": 12,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.4340531826019287,
-   "lon": 126.91962246273951,
-   "lat": 37.51925910393723
-  },
-  {
-   "index": 13,
-   "point_id": 13,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.0440462827682495,
-   "lon": 126.91899365134083,
-   "lat": 37.51913334153458
-  },
-  {
-   "index": 14,
-   "point_id": 14,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 2.3535428047180176,
-   "lon": 126.91962246278094,
-   "lat": 37.519133339805194
-  },
-  {
-   "index": 15,
-   "point_id": 15,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.3315088450908661,
-   "lon": 126.91899365090582,
-   "lat": 37.51900757731355
-  },
-  {
-   "index": 16,
-   "point_id": 16,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.13399098813533783,
-   "lon": 126.91836483979843,
-   "lat": 37.51888181496529
-  },
-  {
-   "index": 17,
-   "point_id": 17,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.9542151093482971,
-   "lon": 126.91849060207366,
-   "lat": 37.518881814617025
-  },
-  {
-   "index": 18,
-   "point_id": 18,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.3578461408615112,
-   "lon": 126.91911941300526,
-   "lat": 37.518881812792664
-  },
-  {
-   "index": 19,
-   "point_id": 19,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.241922378540039,
-   "lon": 126.91962246334015,
-   "lat": 37.518881811630095
-  },
-  {
-   "index": 20,
-   "point_id": 20,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.5022644996643066,
-   "lon": 126.9182390775854,
-   "lat": 37.51875605118539
-  },
-  {
-   "index": 21,
-   "point_id": 21,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.1995418518781662,
-   "lon": 126.9183648401817,
-   "lat": 37.5187560508971
-  },
-  {
-   "index": 22,
-   "point_id": 22,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.36496397852897644,
-   "lon": 126.91849060253979,
-   "lat": 37.51875605056431
-  },
-  {
-   "index": 23,
-   "point_id": 23,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.3203068971633911,
-   "lon": 126.91899365085403,
-   "lat": 37.51875604902432
-  },
-  {
-   "index": 24,
-   "point_id": 24,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.1758463382720947,
-   "lon": 126.91836484056498,
-   "lat": 37.51863028682891
-  },
-  {
-   "index": 25,
-   "point_id": 25,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.09691958129405975,
-   "lon": 126.91849060299558,
-   "lat": 37.51863028650966
-  },
-  {
-   "index": 26,
-   "point_id": 26,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.211069941520691,
-   "lon": 126.91886788917932,
-   "lat": 37.51863028534497
-  },
-  {
-   "index": 27,
-   "point_id": 27,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.3540736436843872,
-   "lon": 126.91798755274513,
-   "lat": 37.51850452354824
-  },
-  {
-   "index": 28,
-   "point_id": 28,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.6445367336273193,
-   "lon": 126.91811331556926,
-   "lat": 37.5185045233025
-  },
-  {
-   "index": 29,
-   "point_id": 29,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.6673615574836731,
-   "lon": 126.91836484114508,
-   "lat": 37.518504522797485
-  },
-  {
-   "index": 30,
-   "point_id": 30,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.17144830524921417,
-   "lon": 126.91849060357565,
-   "lat": 37.51850452247824
-  },
-  {
-   "index": 31,
-   "point_id": 31,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.18275561928749084,
-   "lon": 126.91874212789831,
-   "lat": 37.51850452173916
-  },
-  {
-   "index": 32,
-   "point_id": 32,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.20724786818027496,
-   "lon": 126.91773602675508,
-   "lat": 37.518378759836104
-  },
-  {
-   "index": 33,
-   "point_id": 33,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.20724786818027496,
-   "lon": 126.91786179042865,
-   "lat": 37.51837875974903
-  },
-  {
-   "index": 34,
-   "point_id": 34,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.9620941281318665,
-   "lon": 126.9179875532631,
-   "lat": 37.51837875950521
-  },
-  {
-   "index": 35,
-   "point_id": 35,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -1.5519955158233643,
-   "lon": 126.91811331609759,
-   "lat": 37.5183787592614
-  },
-  {
-   "index": 36,
-   "point_id": 36,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.165108323097229,
-   "lon": 126.91823907892172,
-   "lat": 37.51837875901567
-  },
-  {
-   "index": 37,
-   "point_id": 37,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.20588724315166473,
-   "lon": 126.9173587416606,
-   "lat": 37.51825299706447
-  },
-  {
-   "index": 38,
-   "point_id": 38,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.4297207295894623,
-   "lon": 126.91748450378,
-   "lat": 37.5182529966871
-  },
-  {
-   "index": 39,
-   "point_id": 39,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.4597996175289154,
-   "lon": 126.91761026603416,
-   "lat": 37.5182529963349
-  },
-  {
-   "index": 40,
-   "point_id": 40,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -0.844143807888031,
-   "lon": 126.91710721856175,
-   "lat": 37.518127233892365
-  },
-  {
-   "index": 41,
-   "point_id": 41,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": -1.2259724140167236,
-   "lon": 126.91723298059811,
-   "lat": 37.518127233499484
-  },
-  {
-   "index": 42,
-   "point_id": 42,
    "element_globalid": "17V6SRC5Z0HYGC14CZYH59",
-   "value": 1.175778865814209,
-   "lon": 126.91685569476904,
-   "lat": 37.51800147059065
-  },
-  {
-   "index": 43,
-   "point_id": 43,
-   "element_globalid": "17V6SRC5Z0HYGC14CZYH59",
-   "value": 0.43978846073150635,
-   "lon": 126.91698145704359,
-   "lat": 37.51800147024226
-  },
-  {
-   "index": 44,
-   "point_id": 44,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.09128269553184509,
-   "lon": 126.91710721918348,
-   "lat": 37.518001469868715
-  },
-  {
-   "index": 45,
-   "point_id": 45,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.2436116486787796,
-   "lon": 126.91723298128198,
-   "lat": 37.518001469487444
-  },
-  {
-   "index": 46,
-   "point_id": 46,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 0.7038877606391907,
-   "lon": 126.91735874344272,
-   "lat": 37.51800146911779
-  },
-  {
-   "index": 47,
-   "point_id": 47,
-   "element_globalid": "1JVKV6NTXFMRT8P62TMXJB",
-   "value": 1.5798970460891724,
-   "lon": 126.91710721962903,
-   "lat": 37.51787570581216
-  },
-  {
-   "index": 48,
-   "point_id": 48,
-   "element_globalid": "17V6SRC5Z0HYGC14CZYH59",
-   "value": 0.4363740384578705,
-   "lon": 126.91685569553587,
-   "lat": 37.51774994245432
-  },
-  {
-   "index": 49,
-   "point_id": 49,
-   "element_globalid": "17V6SRC5Z0HYGC14CZYH59",
-   "value": -0.3844226002693176,
-   "lon": 126.9169814578622,
-   "lat": 37.51774994211561
+   "value": 0.44769272208213806,
+   "lon": 126.91677875390725,
+   "lat": 37.51773557111933
   }
  ]
 }

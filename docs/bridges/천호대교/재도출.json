@@ -1,0 +1,37 @@
+{
+ "name": "천호대교",
+ "n_deck_ps": 13,
+ "gamma_used": 0.45,
+ "offset_m": -30,
+ "half_m": 17.5,
+ "coh_mean": 0.638,
+ "gamma_median_deck": 0.683,
+ "n_epochs": 51,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": -0.046,
+ "elements": 77,
+ "points": 13,
+ "bound": 12,
+ "cri": 0.7437000505932717,
+ "warning": "경고",
+ "notes": [
+  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "연장 1150 m 에 맞는 way 는 이름이 없다 — 이름이 맞는 '천호대교' 2371 m 를 쓴다",
+  "OSM way 가 양방향 차도를 도는 닫힌 선이었다(첫점=끝점) — 주축 양 끝으로 한쪽 차도만 남겨 방위 -18.8° · 연장 1149 m 로 잡는다",
+  "경간수 없음 → 30 m 규칙으로 38 가정",
+  "잔차고도 집단평균 +59.4 m 는 형하고로 비현실적(> 40 m) — 채택하지 않고 18.0 m 를 유지한다"
+ ],
+ "cri_point_median": 0.095,
+ "cri_point_max": 0.127,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.739,
+ "velocity_median_mm_yr": -0.59,
+ "n_points": 13,
+ "EI_median": 7349999999999.999,
+ "gnss": {
+  "quantity": "처짐(경사변위)",
+  "read": "눈으로 읽음",
+  "n_months": 3,
+  "note": "짝지어지는 달이 6개 미만 — 대조하지 않는다"
+ }
+}
