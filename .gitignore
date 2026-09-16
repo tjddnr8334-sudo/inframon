@@ -64,3 +64,9 @@ inframon_handoff_*.zip
 
 # 파이프라인 임시 산출(재현 가능 · 커밋하지 않는다)
 out/
+
+# 실화면 영상 만들 때 쓰는 중간 산출물(실제 clone·venv·녹화 webm)
+.demo_capture/
+
+# 파워포인트 임시 잠금 파일
+~$*
