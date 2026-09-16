@@ -302,31 +302,116 @@ def pipe_frames(frames: list[Image.Image], out: Path, fps: int) -> None:
 SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
 
 
-def _poke(pg, section: str) -> None:
-    """탭마다 **진짜 조작**을 하나씩 — 스크롤만 하면 구동이 아니라 구경이 된다.
+OVERLAY = r"""
+(() => {
+  if (window.__demoReady) return;
+  const mk = (css) => { const e = document.createElement('div'); e.style.cssText = css;
+                        document.body.appendChild(e); return e; };
+  const cur = mk('position:fixed;left:50%;top:50%;width:30px;height:30px;'
+    + 'margin:-15px 0 0 -15px;border-radius:50%;border:3px solid #ff2d55;'
+    + 'background:rgba(255,45,85,.22);z-index:2147483647;pointer-events:none;'
+    + 'box-shadow:0 0 0 2px rgba(255,255,255,.85),0 4px 14px rgba(0,0,0,.35);'
+    + 'transition:left .45s cubic-bezier(.4,0,.2,1),top .45s cubic-bezier(.4,0,.2,1)');
+  cur.id = '__demo_cursor';
+  const lab = mk('position:fixed;left:50%;top:20px;transform:translateX(-50%);'
+    + 'z-index:2147483647;pointer-events:none;background:rgba(12,22,38,.93);color:#fff;'
+    + 'font:600 24px/1.35 "Malgun Gothic",sans-serif;padding:12px 26px;border-radius:999px;'
+    + 'opacity:0;transition:opacity .25s;box-shadow:0 6px 20px rgba(0,0,0,.35)');
+  lab.id = '__demo_label';
+  const sty = document.createElement('style');
+  sty.textContent = '@keyframes __demoRing{from{transform:scale(.3);opacity:.9}'
+    + 'to{transform:scale(2.6);opacity:0}}';
+  document.head.appendChild(sty);
+  window.__demoMove = (x, y) => { cur.style.left = x + 'px'; cur.style.top = y + 'px'; };
+  window.__demoSay = (t) => { lab.textContent = t || ''; lab.style.opacity = t ? '1' : '0'; };
+  window.__demoRing = (x, y) => {
+    const r = mk('position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;'
+      + 'border-radius:50%;border:4px solid #ff2d55;z-index:2147483646;pointer-events:none;'
+      + 'left:' + x + 'px;top:' + y + 'px;animation:__demoRing .55s ease-out forwards');
+    setTimeout(() => r.remove(), 700);
+    cur.animate([{transform:'scale(1)'},{transform:'scale(.72)'},{transform:'scale(1)'}],
+                {duration:280});
+  };
+  window.__demoReady = true;
+})();
+"""
 
-    누를 게 없으면 조용히 넘어간다(탭 구성이 바뀌어도 녹화가 깨지지 않게).
+
+def _overlay(pg) -> None:
+    """커서·클릭 표시·동작 라벨을 페이지에 심는다(있으면 그대로 둔다).
+
+    Playwright 녹화에는 **마우스 커서가 찍히지 않는다**. 그래서 무엇을 눌렀는지 영상만
+    봐서는 알 수 없었다. 진짜 커서 대신 페이지 안에 표식을 그려 넣고, 클릭할 때마다
+    그 자리에 파문을 낸다. Streamlit 이 다시 그려도 body 에 붙은 것은 남지만, 매번
+    한 번 더 심어(있으면 무시) 안전하게 한다.
     """
-    targets = {
-        "⓪ 시작": ["자세히 보기", "윈도우 도구"],
-        "① InSAR": ["인벤토리 점검", "점별 표"],
-        "② PINN": ["검증 실행", "제원"],
-        "③ FRAM": ["자세히", "경보"],
-        "④ 잔존수명": ["자세히", "가정"],
-        "⑤ PSI 방법론": ["연직 속도(mm/yr)", "점별 표"],
-    }
-    for t in targets.get(section, []):
+    try:
+        pg.evaluate(OVERLAY)
+    except Exception:                                # noqa: BLE001
+        pass
+
+
+def say(pg, text: str) -> None:
+    """지금 무엇을 하는지 화면 위에 띄운다(빈 문자열이면 감춘다)."""
+    _overlay(pg)
+    try:
+        pg.evaluate("t => window.__demoSay(t)", text)
+    except Exception:                                # noqa: BLE001
+        pass
+
+
+def click_seen(pg, loc, text: str, *, settle: int = 2200) -> bool:
+    """**보이게** 누른다 — 커서를 옮기고, 무엇을 누르는지 띄우고, 파문을 낸 뒤 클릭.
+
+    돌아오는 값은 실제로 눌렀는지. 못 누르면 조용히 False(탭 구성이 바뀌어도 녹화가
+    깨지지 않게).
+    """
+    try:
+        loc.scroll_into_view_if_needed(timeout=5000)
+        pg.wait_for_timeout(400)
+        box = loc.bounding_box()
+        if not box:
+            return False
+        x = box["x"] + box["width"] / 2
+        y = box["y"] + box["height"] / 2
+        _overlay(pg)
+        say(pg, text)
+        pg.evaluate("([x,y]) => window.__demoMove(x,y)", [x, y])
+        pg.wait_for_timeout(750)                     # 커서가 가는 게 보이게
+        pg.evaluate("([x,y]) => window.__demoRing(x,y)", [x, y])
+        pg.wait_for_timeout(320)
+        loc.click(timeout=10_000)
+        pg.wait_for_timeout(settle)
+        return True
+    except Exception:                                # noqa: BLE001
+        return False
+
+
+# 탭마다 눌러 볼 것 — (찾을 글자, 화면에 띄울 말)
+POKES: dict[str, list[tuple[str, str]]] = {
+    "\u24ea 시작": [("자세히 보기", "'자세히 보기' — 막힌 항목 확인"),
+                 ("윈도우 도구", "'윈도우 도구' 펼치기")],
+    "\u2460 InSAR": [("인벤토리 점검", "'인벤토리 점검' 누르기"),
+                   ("점별 표", "'점별 표' 펼치기")],
+    "\u2461 PINN": [("제원", "'제원' 펼치기"), ("검증 실행", "'검증 실행' 누르기")],
+    "\u2462 FRAM": [("자세히", "'자세히' 펼치기")],
+    "\u2463 잔존수명": [("자세히", "'자세히' 펼치기")],
+    "\u2464 PSI 방법론": [("연직 속도(mm/yr)", "색 기준을 '연직 속도' 로 바꾸기"),
+                     ("점별 표", "'점별 표' 펼치기")],
+}
+
+
+def _poke(pg, section: str) -> None:
+    """그 탭에서 **진짜 조작**을 하나 — 무엇을 눌렀는지 화면에 보이게."""
+    for needle, label in POKES.get(section, []):
+        loc = pg.get_by_text(needle, exact=False).first
         try:
-            el = pg.get_by_text(t, exact=False).first
-            if el.count() == 0:
+            if loc.count() == 0:
                 continue
-            el.scroll_into_view_if_needed(timeout=4000)
-            pg.wait_for_timeout(500)
-            el.click(timeout=4000)
-            pg.wait_for_timeout(1800)
-            return
-        except Exception:                        # noqa: BLE001 — 없으면 그만
+        except Exception:                            # noqa: BLE001
             continue
+        if click_seen(pg, loc, label):
+            return
 
 
 def record_app(url: str, out_dir: Path, seconds_per_tab: float = 9.0) -> Path:
@@ -349,28 +434,28 @@ def record_app(url: str, out_dir: Path, seconds_per_tab: float = 9.0) -> Path:
         pg = ctx.new_page()
         pg.goto(url, wait_until="networkidle", timeout=120_000)
         pg.wait_for_timeout(2500)
+        _overlay(pg)
+        say(pg, "대시보드가 떴습니다 — 왼쪽은 저장 폴더와 현재 교량")
+        pg.wait_for_timeout(2600)
 
         for name in SECTIONS:
-            # **라디오**를 집는다. get_by_text 는 같은 글자를 '진행:' 표시줄에서도
-            # 찾아(2건) 엉뚱한 쪽을 눌렀고, 그러면 탭이 안 바뀐 채 스크롤만 했다.
-            # input 자체는 숨겨져 있어 클릭이 안 된다 — 감싸는 label 을 누른다(사람과 같게).
-            try:
-                (pg.get_by_role("radio", name=name)
-                   .locator("xpath=ancestor::label[1]").click(timeout=15_000))
-            except Exception as e:                       # noqa: BLE001
-                print(f"  · '{name}' 클릭 실패 — 건너뜀 ({type(e).__name__})")
+            # 라디오의 **감싸는 label** 을 누른다 — input 은 숨겨져 클릭이 안 되고,
+            # get_by_text 는 '진행:' 표시줄까지 잡아(2건) 엉뚱한 곳을 눌렀다.
+            tab = (pg.get_by_role("radio", name=name)
+                     .locator("xpath=ancestor::label[1]"))
+            if not click_seen(pg, tab, f"'{name}' 탭 클릭", settle=2600):
+                print(f"  \u00b7 '{name}' 클릭 실패 — 건너뜀")
                 continue
-            pg.wait_for_timeout(2600)
-            try:                                         # 정말 바뀌었나 확인
+            try:
                 if not pg.get_by_role("radio", name=name).is_checked():
-                    print(f"  · '{name}' 선택이 안 먹었다")
-            except Exception:                            # noqa: BLE001
+                    print(f"  \u00b7 '{name}' 선택이 안 먹었다")
+            except Exception:                        # noqa: BLE001
                 pass
-            pg.mouse.wheel(0, -3000)                     # 탭마다 위에서 시작
+            print(f"  \u00b7 {name}")
+            pg.mouse.wheel(0, -3000)                 # 탭마다 위에서 시작
             pg.wait_for_timeout(700)
-            print(f"  · {name}")
-            _poke(pg, name)                     # 그 탭에서 실제로 뭔가 눌러 본다
-            # 천천히 훑어 내린다 — 차트가 그려지는 걸 보이게
+            _poke(pg, name)
+            say(pg, f"{name} — 결과를 훑어봅니다")
             steps = 6
             for _ in range(steps):
                 pg.mouse.wheel(0, 420)
@@ -379,9 +464,11 @@ def record_app(url: str, out_dir: Path, seconds_per_tab: float = 9.0) -> Path:
             for _ in range(steps):
                 pg.mouse.wheel(0, -420)
                 pg.wait_for_timeout(int(seconds_per_tab * 1000 / steps / 3))
+            say(pg, "")
             pg.wait_for_timeout(600)
 
-        pg.wait_for_timeout(1200)
+        say(pg, "여섯 탭을 한 바퀴 돌았습니다")
+        pg.wait_for_timeout(2200)
         ctx.close()                                  # 닫아야 webm 이 저장된다
         br.close()
 
