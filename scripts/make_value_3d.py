@@ -26,17 +26,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import font_manager, rcParams
+from kaia_theme import MPL, use_mpl_style
 
-for _f in ("Malgun Gothic", "맑은 고딕", "NanumGothic"):
-    if any(_f in f.name for f in font_manager.fontManager.ttflist):
-        rcParams["font.family"] = _f
-        break
-rcParams["axes.unicode_minus"] = False
+# 발표자료(KAIA 톤)와 같은 서체·색을 쓴다 — 한 장에 붙였을 때 따로 놀지 않게.
+use_mpl_style()
 
 ROOT = Path(__file__).resolve().parent.parent
-NAVY = "#12314F"
-DIM = "#55636F"
+NAVY = MPL["ink"]
+DIM = MPL["gray"]
 
 # 부재별 윤곽 색 — 트윈 뷰어와 같은 계열로 맞춘다.
 MEMBER_COLOR = {
@@ -148,7 +145,7 @@ def panel(fig, ax, xyz, val, cmap, vlo, vhi, label):
     빼앗게 두면 3D 축이 쪼그라들어 교량이 실처럼 가늘어진다."""
     s = ax.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c=val, cmap=cmap,
                    vmin=vlo, vmax=vhi, s=30, depthshade=False,
-                   edgecolors="#33414E", linewidths=0.35, zorder=5)
+                   edgecolors=MPL["slate"], linewidths=0.35, zorder=5)
     cax = fig.add_axes((0.935, 0.20, 0.017, 0.56))
     cb = fig.colorbar(s, cax=cax)
     cb.set_label(label, fontsize=10, color=NAVY)
@@ -176,8 +173,8 @@ def frame(ax, xyz, ext=None):
     ax.view_init(elev=24, azim=-58)
     ax.grid(False)
     for a in (ax.xaxis, ax.yaxis, ax.zaxis):
-        a.pane.set_facecolor("#FBFCFD")
-        a.pane.set_edgecolor("#E3E8ED")
+        a.pane.set_facecolor("#FCFDFE")
+        a.pane.set_edgecolor(MPL["rule"])
 
 
 def render(folder: Path, out_dir: Path) -> list[Path]:
@@ -205,7 +202,7 @@ def render(folder: Path, out_dir: Path) -> list[Path]:
                  "※ 위성 시선(LOS) 방향 속도다. 붉은색이 가라앉는 쪽, 푸른색이 솟는 쪽.\n"
                  "   옅은 회색 윤곽은 같은 좌표계의 IFC 부재 상면이다.",
                  fontsize=8.6, color=DIM)
-        ax.set_position((-0.045, -0.055, 0.985, 0.965))
+        ax.set_position((-0.045, -0.085, 0.985, 0.935))
         p = out_dir / f"3D_변위속도_{name}.png"
         fig.savefig(p, dpi=160)
         plt.close(fig)
@@ -232,7 +229,7 @@ def render(folder: Path, out_dir: Path) -> list[Path]:
                  "나타낸다. 값 자체가 손상이 아니라 '같이 움직이는 구간'을 짚어 주는 지표다."
                  f"\n   색 위끝은 자료에 맞춰 {vmax:.2f} 로 잡았다(0~1 고정 아님).",
                  fontsize=8.6, color=DIM)
-        ax.set_position((-0.045, -0.055, 0.985, 0.965))
+        ax.set_position((-0.045, -0.085, 0.985, 0.935))
         p = out_dir / f"3D_FRAM_CRI_{name}.png"
         fig.savefig(p, dpi=160)
         plt.close(fig)
@@ -266,11 +263,11 @@ def _flat(ax, boxes, ia, ib, pts=None, val=None):
         c = MEMBER_COLOR.get(mem, "#B7C1CB")
         w, h = hi[ia] - lo[ia], hi[ib] - lo[ib]
         ax.add_patch(Rectangle((lo[ia], lo[ib]), max(w, 0.8), max(h, 0.8),
-                               facecolor=c, edgecolor="#5C6B7A", lw=0.35,
+                               facecolor=c, edgecolor=MPL["slate"], lw=0.35,
                                alpha=0.85, zorder=2))
     if pts is not None:
         ax.scatter(pts[:, ia], pts[:, ib], c=val, cmap="RdYlBu", s=13,
-                   edgecolors="#33414E", linewidths=0.25, zorder=5)
+                   edgecolors=MPL["slate"], linewidths=0.25, zorder=5)
     ax.autoscale_view()
     ax.set_aspect("equal", adjustable="datalim")
     ax.tick_params(labelsize=8)
@@ -316,7 +313,7 @@ def plan_elevation(folder: Path, out_dir: Path) -> Path | None:
         lim = float(np.nanpercentile(np.abs(val), 96)) or 1.0
         ax3.scatter(pts[:, 0], pts[:, 1], pts[:, 2], c=val, cmap="RdYlBu",
                     vmin=-lim, vmax=lim, s=16, depthshade=False,
-                    edgecolors="#33414E", linewidths=0.25, zorder=5)
+                    edgecolors=MPL["slate"], linewidths=0.25, zorder=5)
         frame(ax3, pts, ext)
     elif ext is not None:
         frame(ax3, np.vstack([ext[0], ext[1]]), ext)

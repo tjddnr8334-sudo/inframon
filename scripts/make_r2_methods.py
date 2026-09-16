@@ -36,22 +36,19 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import font_manager, rcParams
+from kaia_theme import MPL, use_mpl_style
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_trend_agree import load_points, report_series                 # noqa: E402
 
-for _f in ("Malgun Gothic", "맑은 고딕", "NanumGothic"):
-    if any(_f in f.name for f in font_manager.fontManager.ttflist):
-        rcParams["font.family"] = _f
-        break
-rcParams["axes.unicode_minus"] = False
+# 발표자료(KAIA 톤)와 같은 서체·색을 쓴다 — 한 장에 붙였을 때 따로 놀지 않게.
+use_mpl_style()
 
-NAVY = "#12314F"
-DIM = "#55636F"
-GREEN = "#2E9E6B"
-RED = "#C8443C"
-GRAY = "#B7C1CB"
+NAVY = MPL["ink"]
+DIM = MPL["gray"]
+GREEN = MPL["green"]
+RED = MPL["red"]
+GRAY = MPL["rule"]
 METHODS = ["원본", "3개월 평활", "연주기 성분", "누적"]
 
 
@@ -119,10 +116,10 @@ def method_figure(name: str, data: list, out: Path) -> None:
         ax.tick_params(axis="y", colors=RED, labelsize=8.2)
         a2 = ax.twinx()
         if xx is not None:
-            a2.plot(k, xx, "-o", ms=3.4, lw=1.8, color="#2E6FB7",
+            a2.plot(k, xx, "-o", ms=3.4, lw=1.8, color=MPL["blue"],
                     label=f"InSAR P{j:02d}")
-        a2.set_ylabel("InSAR", color="#2E6FB7", fontsize=9)
-        a2.tick_params(axis="y", colors="#2E6FB7", labelsize=8.2)
+        a2.set_ylabel("InSAR", color=MPL["blue"], fontsize=9)
+        a2.tick_params(axis="y", colors=MPL["blue"], labelsize=8.2)
         step = max(1, len(k) // 8)
         ax.set_xticks(k[::step])
         ax.set_xticklabels(lab[::step], fontsize=7.6, rotation=45)

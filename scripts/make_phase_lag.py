@@ -32,22 +32,19 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import font_manager, rcParams
+from kaia_theme import MPL, use_mpl_style
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from make_r2_methods import ym                                         # noqa: E402
 from make_trend_agree import load_points, report_series                # noqa: E402
 
-for _f in ("Malgun Gothic", "맑은 고딕", "NanumGothic"):
-    if any(_f in f.name for f in font_manager.fontManager.ttflist):
-        rcParams["font.family"] = _f
-        break
-rcParams["axes.unicode_minus"] = False
+# 발표자료(KAIA 톤)와 같은 서체·색을 쓴다 — 한 장에 붙였을 때 따로 놀지 않게.
+use_mpl_style()
 
-NAVY = "#12314F"
-DIM = "#55636F"
-RED = "#C8443C"
-GREEN = "#2E9E6B"
+NAVY = MPL["ink"]
+DIM = MPL["gray"]
+RED = MPL["red"]
+GREEN = MPL["green"]
 
 
 def fit(t: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -110,18 +107,18 @@ def spread_figure(rows: list, out: Path, auto: dict, eye: dict, root: Path) -> N
         if rs is None or not len(rs):
             continue
         ax.scatter(rs, i + rng.uniform(-0.17, 0.17, len(rs)), s=13,
-                   color="#8FA3B5", edgecolors="none", alpha=0.75, zorder=2)
+                   color=MPL["blue"], edgecolors="none", alpha=0.75, zorder=2)
         med = float(np.median(rs))
-        ax.plot([med, med], [i - 0.28, i + 0.28], color="#33414E", lw=2.2, zorder=4)
+        ax.plot([med, med], [i - 0.28, i + 0.28], color=MPL["slate"], lw=2.2, zorder=4)
         k = int(np.argmax(np.abs(rs)))
         ax.scatter([rs[k]], [i], s=155, marker="*", color=RED,
-                   edgecolors="#6E2420", linewidths=0.6, zorder=5)
+                   edgecolors=MPL["red"], linewidths=0.6, zorder=5)
         kp = int(np.argmax(rs))
         ax.scatter([rs[kp]], [i], s=145, marker="*", color=GREEN,
-                   edgecolors="#1B5E3C", linewidths=0.6, zorder=5)
+                   edgecolors=MPL["green"], linewidths=0.6, zorder=5)
         ax.text(1.06, i, f"점 {len(rs)}개 · 중앙 {med:+.2f}", fontsize=9.4,
                 va="center", color=NAVY)
-    ax.axvline(0, color="#33414E", lw=1.0)
+    ax.axvline(0, color=MPL["slate"], lw=1.0)
     ax.set_yticks(range(len(names)))
     ax.set_yticklabels(names, fontsize=10.5)
     ax.set_xlim(-1.12, 1.12)
@@ -134,7 +131,7 @@ def spread_figure(rows: list, out: Path, auto: dict, eye: dict, root: Path) -> N
                  fontsize=13.5, fontweight="bold", color=NAVY, pad=10)
     ax.scatter([], [], s=145, marker="*", color=RED, label="|r| 이 가장 큰 점(지금까지 쓰던 방식)")
     ax.scatter([], [], s=145, marker="*", color=GREEN, label="r 이 가장 큰 점(같은 방향)")
-    ax.plot([], [], color="#33414E", lw=2.2, label="점들의 중앙값")
+    ax.plot([], [], color=MPL["slate"], lw=2.2, label="점들의 중앙값")
     # 범례를 그림 안에 두면 점을 덮는다 — 축 아래로 내린다.
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.135), ncol=3,
               fontsize=9.4, frameon=False)
@@ -207,8 +204,8 @@ def main() -> int:
     k = np.arange(len(rows))
     lag = [d["lag_months"] for d in rows]
     col = [GREEN if abs(v) <= 2.0 else RED for v in lag]
-    ax.barh(k, lag, color=col, height=0.58, edgecolor="#33414E", linewidth=0.5)
-    ax.axvline(0, color="#33414E", lw=1.1)
+    ax.barh(k, lag, color=col, height=0.58, edgecolor=MPL["slate"], linewidth=0.5)
+    ax.axvline(0, color=MPL["slate"], lw=1.1)
     for s in (-6, 6):
         ax.axvline(s, color=RED, lw=1.2, ls="--")
     ax.set_ylim(-0.75, len(rows) - 0.1)
