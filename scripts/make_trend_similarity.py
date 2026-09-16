@@ -61,6 +61,64 @@ def similarity(b_pt: np.ndarray, b_rep: float) -> np.ndarray:
     return np.clip(1.0 - np.abs(b_pt - b_rep) / abs(b_rep), 0.0, 1.0)
 
 
+def line_figure(keep, out: Path) -> None:
+    """**추세선끼리** 겹쳐 본다 — 막대 개수 말고 선이 얼마나 나란한가.
+
+    같은 창에서 각 직선을 창 가운데 기준으로 0 에 맞춰 그린다. 기울기만 남으므로
+    선이 나란하면 추세가 같은 것이고, 벌어지면 다른 것이다.
+    """
+    n = len(keep)
+    ncol = 2
+    nrow = (n + ncol - 1) // ncol
+    fig, axes = plt.subplots(nrow, ncol, figsize=(15.6, 3.1 * nrow))
+    axes = np.atleast_1d(axes).ravel()
+    for ax, (nm, st, b_pt, ci_pt, sim, sim_flip, b_rep, ci_rep, what, how, r,
+             tt, LL, cosv) in zip(axes, keep):
+        t0, tm = float(tt.min()), float(tt.mean())
+        xs = np.linspace(tt.min(), tt.max(), 40)
+        good = np.isfinite(b_pt) & np.isfinite(sim)
+        for j in np.where(good & (sim < 0.6))[0]:
+            ax.plot(xs, b_pt[j] * (xs - tm), "-", lw=.7, color=GRAY, alpha=.35)
+        order = np.where(good & (sim >= 0.6))[0]
+        order = order[np.argsort(-sim[order])]
+        for k, j in enumerate(order[:8]):
+            lbl = (f"교축 {st[j]:.0f} m · {sim[j]:.0%}"
+                   if np.isfinite(st[j]) else f"{sim[j]:.0%}")
+            ax.plot(xs, b_pt[j] * (xs - tm), "-", lw=1.9, color=GREEN,
+                    alpha=.9 - .06 * k, label=lbl if k < 4 else None)
+        ax.plot(xs, b_rep * (xs - tm), "-", lw=3.4, color=RED,
+                label=f"보고서 {b_rep:+.2f} mm/yr", zorder=6)
+        ax.axhline(0, color="#999", lw=.8)
+        ax.grid(alpha=.2)
+        ax.set_xlabel("연", fontsize=9)
+        ax.set_ylabel(("연직 변위 [mm]" if r["vertical"] else "LOS 변위 [mm]"),
+                      fontsize=9)
+        ax.set_title(f"{nm} — 추세선 {len(order)}개가 60% 이상 나란하다"
+                     + ("   ※ 창이 짧다" if r["short"] else ""),
+                     fontsize=10, color=NAVY, pad=6)
+        if len(order):
+            ax.legend(fontsize=7.8, framealpha=.9, loc="best")
+        else:
+            ax.legend(fontsize=8, framealpha=.9, loc="best")
+        ax.tick_params(labelsize=8.5)
+    for ax in axes[len(keep):]:
+        ax.axis("off")
+    fig.suptitle("추세선끼리 겹쳐 보기 — 얼마나 나란한가\n"
+                 "붉은 굵은 선 = 보고서 추세 · 초록 = 60% 이상 비슷한 점 · "
+                 "회색 = 나머지 점 (모두 창 가운데에서 0 으로 맞춤)",
+                 fontsize=14.5, fontweight="bold", y=0.995)
+    fig.text(0.006, 0.004,
+             "※ 기울기만 보려고 각 직선을 창 가운데에서 0 으로 맞췄다. 선이 나란하면 추세가 "
+             "같은 것이고 벌어지면 다르다. 회색 다발이 붉은 선을 넓게 감싸고 있으면, "
+             "초록 선이 나란한 것은 '점 추세 분포가 넓어서' 일 수 있다.",
+             fontsize=8.8, color=DIM)
+    fig.tight_layout(rect=(0, 0.014, 1, 0.955))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=135)
+    plt.close(fig)
+    print("wrote", out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--auto", default="docs/bridges/hangang_gnss_monthly.json")
@@ -68,6 +126,7 @@ def main() -> int:
     ap.add_argument("--root", default="docs/bridges")
     ap.add_argument("--out", default="docs/img/추세유사도.png")
     ap.add_argument("--json-out", default="docs/bridges/trend_similarity.json")
+    ap.add_argument("--line-out", default="docs/img/추세선_비교.png")
     a = ap.parse_args()
 
     auto = json.loads(Path(a.auto).read_text(encoding="utf-8")) \
@@ -125,14 +184,14 @@ def main() -> int:
                       for j in order[:12]],
             "short": bool((hi - lo) < 1.5 or int(sel.sum()) < 8)})
         keep.append((nm, st, b_pt, ci_pt, sim, sim_flip, b_rep, ci_rep, what, how,
-                     rows[-1]))
+                     rows[-1], ti[sel], los[:, sel], cosv))
 
     n = len(keep)
     fig, axes = plt.subplots(n, 2, figsize=(15.6, 2.75 * n),
                              gridspec_kw={"width_ratios": [1.5, 1]})
     axes = np.atleast_2d(axes)
     for i, (nm, st, b_pt, ci_pt, sim, sim_flip, b_rep, ci_rep, what, how,
-            r) in enumerate(keep):
+            r, _tt, _LL, _cos) in enumerate(keep):
         ax, bx = axes[i]
         good = np.isfinite(b_pt) & np.isfinite(st) & np.isfinite(sim)
         hit = good & (sim >= 0.6)
@@ -148,7 +207,7 @@ def main() -> int:
                       fontsize=9)
         c60, f60 = r["count_at"]["60%"], r["count_at_flipped"]["60%"]
         ax.set_title(f"{nm} — 60% 이상 비슷한 점 {c60}개 / {r['n_points']}개"
-                     + ("   ⚠ 창이 짧다" if r["short"] else "") + "\n"
+                     + ("   ※ 창이 짧다" if r["short"] else "") + "\n"
                      f"보고서 {b_rep:+.2f} ± {ci_rep:.2f} mm/yr · "
                      f"진한 띠 ±20% · 연한 띠 ±40% · 부호를 뒤집으면 {f60}개",
                      fontsize=9.4, color=NAVY, pad=6)
@@ -186,6 +245,8 @@ def main() -> int:
     fig.savefig(a.out, dpi=135)
     plt.close(fig)
     print("wrote", a.out)
+
+    line_figure(keep, Path(a.line_out))
 
     Path(a.json_out).write_text(json.dumps(
         {"_설명": "보고서 추세와 PS 점 추세의 상대 유사도(1 − 상대오차)",
