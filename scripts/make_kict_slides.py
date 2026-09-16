@@ -455,9 +455,10 @@ def slide_flow2(prs):
 def slide2(prs, bs, meta, fig, extra=()):
     s = blank(prs)
     n_han = len(meta.get("shm") or {}) or len(bs)
+    full = len(bs) >= n_han                 # 전수인가, 골라 온 몇 개소인가
     header(s, f"한강 교량 {n_han}개소 실증 — 교량만 갈아 끼웠다 "
-              f"(표는 측점 상위 {len(bs)}개소"
-              + (f" + 참고 {len(extra)}개소)" if extra else ")"),
+              + ("(전수)" if full else f"(표는 측점 상위 {len(bs)}개소")
+              + ("" if full else (f" + 참고 {len(extra)}개소)" if extra else ")")),
            f"Sentinel-1 ASC path127 · {meta['n_scenes']}장면 · {meta['span']}")
     rows = [["교량", "상부형식", "연장×폭", "준공", "시점", "교면 측점",
              "LOS 변위속도 ± 95% CI", "CI 가 0 포함", "현장 SHM 2024"]]
@@ -482,12 +483,20 @@ def slide2(prs, bs, meta, fig, extra=()):
             colors[(i, 7)] = GREEN if b["frac_ci_zero"] >= 0.5 else ORANGE
         if meta["shm"].get(b["name"], {}).get("verdict"):
             colors[(i, 8)] = GREEN
-    end = table(s, 0.45, 1.12, SW - 0.9, rows, [1.3, 1.3, 1.3, 0.8, 0.7, 1.0, 2.0, 1.1, 2.2])
+    nrow = len(rows) - 1
+    rh = 0.33 if nrow <= 6 else (0.30 if nrow <= 12 else 0.275)
+    fs = 10.5 if nrow <= 6 else (9.5 if nrow <= 12 else 8.8)
+    end = table(s, 0.45, 1.12, SW - 0.9, rows, [1.3, 1.3, 1.3, 0.8, 0.7, 1.0, 2.0, 1.1, 2.2],
+                row_h=rh, fs=fs, head_fs=max(fs, 9.0), colors=colors)
 
     # 판독 한 줄 — 표의 숫자가 무엇을 뜻하는지 발표자가 말하지 않아도 읽히게.
     ok = [b for b in bs if (b.get("frac_ci_zero") or 0) >= 0.5]
     if ok:
-        names = "·".join(f"{b['name']} {100 * b['frac_ci_zero']:.0f}%" for b in ok)
+        names = ("·".join(f"{b['name']} {100 * b['frac_ci_zero']:.0f}%" for b in ok)
+                 if len(ok) <= 4 else
+                 f"{len(ok)}/{len(bs)}개소 — 가장 높은 곳은 "
+                 + "·".join(f"{b['name']} {100 * b['frac_ci_zero']:.0f}%" for b in
+                            sorted(ok, key=lambda q: -q["frac_ci_zero"])[:3]))
         box(s, 0.45, end + 0.12, SW - 0.9, 0.44, fill=BLUE_L, line=LINE)
         text(s, 0.68, end + 0.12, SW - 1.35, 0.44,
              [("판독 — ", 10.5, True, NAVY),
@@ -496,7 +505,7 @@ def slide2(prs, bs, meta, fig, extra=()):
                "'관리기준 이내' 판정과 어긋나지 않는다."), 10.5, False, NAVY)],
              anchor=MSO_ANCHOR.MIDDLE)
         end += 0.56
-    if fig and Path(fig).exists():
+    if fig and Path(fig).exists() and 6.92 - (end + 0.12) > 1.2:
         picture_fit(s, fig, 0.45, end + 0.12, SW - 0.9, 6.92 - (end + 0.12))
     footer(s, "LOS 변위속도는 교면 ±30 m 결합 측점의 중앙값 ± 95% 신뢰구간(부호 −=위성에서 멀어짐). "
               "'CI 가 0 포함' 이 높을수록 유의한 거동이 없다는 뜻. 현장 SHM 은 2024년 한강교량 "
@@ -1118,7 +1127,15 @@ def main() -> int:
     slide1(prs, bs, meta)
     slide_flow1(prs)
     slide_flow2(prs)
-    slide2(prs, bs, meta, a.map_fig, extra)
+    # ③ 은 **전수**로 보인다. ④·⑤ 는 그대로 몇 개소만 — 그쪽 SHM 표는 16행이면 넘친다.
+    _h16 = Path(a.root_bridges) / "hangang16.json"
+    bs16 = []
+    if _h16.exists():
+        for _b in json.loads(_h16.read_text(encoding="utf-8")):
+            _d = Path(a.root_bridges) / _b["name"]
+            if (_d / "bridge.json").exists():
+                bs16.append(read_bridge(_d))
+    slide2(prs, bs16 or bs, meta, a.map_fig, () if bs16 else extra)
     slide3(prs, bs, meta["shm"])
     slide_shm(prs, a.compare_fig, meta["shm"], meta["cmp_rows"])
     slide_gnss(prs, a.gnss_fig, meta["gnss"])
