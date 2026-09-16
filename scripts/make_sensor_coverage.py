@@ -128,6 +128,45 @@ def one(folder: Path, auto: dict, eye: dict) -> dict | None:
     return rec
 
 
+def compact_figure(rows: list, out: Path) -> None:
+    """발표자료 한 칸에 들어갈 납작한 판본 — 가로:세로 4:1.
+
+    큰 그림은 각주까지 다 담아 세로가 길다. 슬라이드의 빈 칸은 납작하므로 같은 내용을
+    줄여 따로 낸다 — 축 이름과 범례는 슬라이드 본문이 대신 말해 준다.
+    """
+    got = [r for r in rows if "_st" in r]
+    fig, ax = plt.subplots(figsize=(12.0, 3.0))
+    for i, r in enumerate(got):
+        L, st = r["_L"], r["_st"]
+        y = len(got) - 1 - i
+        ax.plot([0, 1], [y, y], lw=7, color=MPL["rule"], solid_capstyle="butt", zorder=1)
+        ax.plot([1 / 3, 2 / 3], [y, y], lw=7, color=MPL["blue_pale"],
+                solid_capstyle="butt", zorder=2)
+        rr = r.get("_r")
+        if rr is not None:
+            ax.scatter(st / L, np.full(len(st), y), s=26, c=np.abs(rr), cmap="YlOrRd",
+                       vmin=0, vmax=1, edgecolors=MPL["slate"], linewidths=.3, zorder=4)
+        else:
+            ax.scatter(st / L, np.full(len(st), y), s=20, color=MPL["gray"], zorder=4)
+        ax.plot([0.5], [y], marker="v", ms=9, color=MPL["red"], zorder=5)
+        ax.text(1.015, y, f"중앙±50 m 에 {r['n_ps_within_50m_of_mid']}점",
+                fontsize=9, va="center", color=MPL["ink"])
+    ax.set_yticks(range(len(got)))
+    ax.set_yticklabels([r["name"] for r in reversed(got)], fontsize=9.5)
+    ax.set_xlim(-0.03, 1.32)
+    ax.set_ylim(-0.6, len(got) - 0.4)
+    ax.set_xticks([0, .5, 1])
+    ax.set_xticklabels(["교대", "주경간 중앙 ▽", "교대"], fontsize=9.5)
+    ax.grid(axis="x", alpha=.25)
+    for sp in ("top", "right", "left"):
+        ax.spines[sp].set_visible(False)
+    fig.tight_layout(pad=0.6)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=170)
+    plt.close(fig)
+    print("wrote", out)
+
+
 def figure(rows: list, out: Path) -> None:
     got = [r for r in rows if "_st" in r]
     fig, ax = plt.subplots(figsize=(13.0, 0.72 * len(got) + 3.0))
@@ -211,6 +250,7 @@ def main() -> int:
                  f"{r['best_dist_to_end_m']:.0f} m" if "best_r2" in r else ""))
 
     figure(rows, Path(a.out))
+    compact_figure(rows, Path(a.out).with_name(Path(a.out).stem + "_납작.png"))
     Path(a.json_out).write_text(json.dumps(
         {"_설명": "계측기가 놓이는 자리(주경간 중앙·주탑)에 PS 가 있는지",
          "_요점": "PS 는 육상 쪽 교대·접속부에 몰린다 — 강 위 주경간은 산란체가 없다. "

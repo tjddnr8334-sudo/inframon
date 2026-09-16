@@ -1,0 +1,38 @@
+{
+ "name": "원효대교",
+ "verdict": "계측 지점에서 PS 도출 못함",
+ "why": "R² 0.262 < 0.80 — 계측 지점(주경간 중앙) ±50 m 안에 PS 가 0점이고 가장 가까운 점이 656 m 떨어져 있다",
+ "r2": 0.262,
+ "quantity": "처짐(경사계)",
+ "n_points": 14,
+ "r2_chance95": 0.515,
+ "top": [
+  {
+   "r": 0.512,
+   "r2": 0.262,
+   "station_m": -175.0
+  },
+  {
+   "r": 0.503,
+   "r2": 0.253,
+   "station_m": -165.7
+  },
+  {
+   "r": 0.439,
+   "r2": 0.193,
+   "station_m": -227.4
+  }
+ ],
+ "deck_len_m": 2212.9,
+ "mid_span_station_m": 1106.4,
+ "n_ps_within_50m_of_mid": 0,
+ "nearest_ps_to_mid_m": 655.8,
+ "ps_station_percentiles": [
+  304.8,
+  2008.5,
+  2060.4,
+  2088.7,
+  2126.8
+ ],
+ "best_dist_to_end_m": 210.7
+}
