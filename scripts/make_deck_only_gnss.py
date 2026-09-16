@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -69,14 +70,30 @@ def gnss_series(auto: dict, eye: dict, nm: str) -> list:
         out.append((c["sensor"], np.asarray(ts), np.asarray(vs)))
     e = eye.get(nm, {})
     if e.get("status") == "read":
-        ts, vs = [], []
+        # 키가 '2024' 인 곳도 있고 'DP_1_2_P10P11_2024' 처럼 센서명_연도 인 곳도 있다
+        # (천호대교). 끝의 네 자리를 연도로 읽고, 없으면 그 계열은 건너뛴다.
         for y, arr in e["monthly"].items():
+            m = re.search(r"(\d{4})$", str(y))
+            if not m:
+                continue
+            yr = int(m.group(1))
+            ts, vs = [], []
             for i, v in enumerate(arr):
                 if v is not None:
-                    ts.append(int(y) + (i + 0.5) / 12)
+                    ts.append(yr + (i + 0.5) / 12)
                     vs.append(float(v))
-        out.append((e.get("quantity", "계측"), np.asarray(ts), np.asarray(vs)))
-    return out
+            if len(ts) >= 6:
+                out.append((f"{e.get('quantity', '계측')}·{y}",
+                            np.asarray(ts), np.asarray(vs)))
+    # 같은 센서의 여러 해는 한 계열로 합쳐야 연주기가 제대로 잡힌다.
+    merged: dict[str, list] = {}
+    for name, tt, vv in out:
+        key = re.sub(r"·\d{4}$", "", name)
+        merged.setdefault(key, [[], []])
+        merged[key][0].extend(tt.tolist())
+        merged[key][1].extend(vv.tolist())
+    return [(k, np.asarray(v[0]), np.asarray(v[1])) for k, v in merged.items()
+            if len(v[0]) >= 6]
 
 
 def deck_only(folder: Path, half_min: float = 6.0) -> dict | None:
@@ -140,6 +157,19 @@ def deck_only(folder: Path, half_min: float = 6.0) -> dict | None:
             "peak_ci_months": round(ci, 2)}
 
 
+def mean_cycle(rows: list) -> np.ndarray:
+    """센서 여러 개의 달별 평균 — 어느 달에 값이 하나도 없으면 NaN 으로 둔다.
+
+    np.nanmean 은 전부 NaN 인 열에서 경고를 뱉는다. 값이 없는 달을 NaN 으로 두는 것이
+    맞는 처리이므로, 경고만 막고 결과는 그대로 둔다.
+    """
+    M = np.vstack([monthly_cycle(tt, vv) for _, tt, vv in rows])
+    out = np.full(M.shape[1], np.nan)
+    ok = ~np.all(np.isnan(M), axis=0)
+    out[ok] = np.nanmean(M[:, ok], axis=0)
+    return out
+
+
 def monthly_cycle(t: np.ndarray, v: np.ndarray) -> np.ndarray:
     """직선 성분을 뺀 뒤 달별로 모아 평균 — 연주기 모양을 눈으로 보려고."""
     A = np.vstack([np.ones_like(t), t]).T
@@ -175,7 +205,7 @@ def main() -> int:
         d["gnss_peak_month"] = round(peak_month(zg), 2)
         d["gnss_amp_mm"] = round(abs(zg), 2)
         d["phase_diff_months"] = round(dmon(d["peak_month"], d["gnss_peak_month"]), 2)
-        gm = np.nanmean(np.vstack([monthly_cycle(tt, vv) for _, tt, vv in g]), axis=0)
+        gm = mean_cycle(g)
         panels.append((d, monthly_cycle(d["t"], d["series"]), gm))
         rows.append({k: v for k, v in d.items() if k not in ("t", "series")})
         print(f"{nm:<12} 오프셋 {d['offset_m']:>+4} m · 코히 {d['coh']:.3f} · "
