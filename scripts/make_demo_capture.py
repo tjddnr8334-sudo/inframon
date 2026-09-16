@@ -214,7 +214,8 @@ def _launch_dashboard(repo: Path, port: int | None = None,
     return out or ["(대시보드 기동 출력을 받지 못했다)"]
 
 
-def render_terminal(sess: list[dict], out: Path, fps: int = FPS) -> float:
+def render_terminal(sess: list[dict], out: Path, fps: int = FPS,
+                    pace: int = 2) -> float:
     """터미널 화면을 프레임으로 그려 mp4 로. 타이핑 → 출력 → 다음 명령."""
     fh = 31
 
@@ -275,8 +276,7 @@ def render_terminal(sess: list[dict], out: Path, fps: int = FPS) -> float:
             elif ln.strip().startswith("#") or "생략" in ln:
                 col = T_YELL
             lines.append(("  " + ln[:150], col))
-            frames.append(frame())
-            frames.append(frame())
+            frames.extend([frame()] * max(1, pace))   # pace 가 클수록 천천히 흐른다
         hold(frame(), 1.1)
     hold(frame(), 1.6)
 
@@ -478,6 +478,152 @@ def record_app(url: str, out_dir: Path, seconds_per_tab: float = 9.0) -> Path:
     return vids[-1]
 
 
+# ── 2부 · 한강 교량 하나를 실제로 돌린다 ────────────────────────────────────
+DEMO_BRIDGE = "성수대교"          # 트러스 상현재가 보이고 103점이 전부 부재에 묶인다
+
+
+def _bridge_item(name: str = DEMO_BRIDGE) -> dict:
+    """배치 파일에서 그 교량의 실행 인자를 가져온다(좌표·트랙·처리폴더)."""
+    j = json.loads((ROOT / "docs/bridges/hangang16_batch.json")
+                   .read_text(encoding="utf-8"))
+    for it in j:
+        if it.get("name") == name:
+            return it
+    raise SystemExit(f"배치 파일에 {name} 이 없다")
+
+
+def collect_run_session(out_dir: Path) -> list[dict]:
+    """`bridge_run.py` 를 **진짜로** 돌리고 ①~⑩ 출력을 그대로 받는다.
+
+    산출은 `docs/bridges/…` 가 아니라 **새 폴더**에 낸다 — 커밋된 산출물을 흔들지
+    않으면서, 영상에서 보여 줄 트윈이 방금 이 실행으로 만들어진 것이 되게.
+    """
+    it = _bridge_item()
+    py = sys.executable
+    args = (f'"{py}" scripts/bridge_run.py --name {it["name"]} '
+            f'--lat {it["lat"]} --lon {it["lon"]} '
+            f'--track "{it["track"]}" --proc "{it["proc"]}" '
+            f'--master {it["master"]} --out "{out_dir}"')
+    shown = (f'python scripts/bridge_run.py --name {it["name"]} '
+             f'--lat {it["lat"]} --lon {it["lon"]} --track track_{it["name"]}.h5')
+    print(f"  $ {shown}")
+    pr = subprocess.Popen(args, cwd=str(ROOT), shell=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, encoding="utf-8",
+                          errors="replace", bufsize=1,
+                          env={**os.environ, "PYTHONIOENCODING": "utf-8",
+                               "PYTHONUNBUFFERED": "1"})
+    raw = [ln.rstrip() for ln in pr.stdout]
+    pr.wait(timeout=7200)
+    raw = [ln for ln in raw if ln.strip()]
+    return [{"cmd": shown, "out": raw, "note": f"{it['name']} — 좌표 하나로 끝까지"}]
+
+
+def record_twin(html: Path, out_dir: Path) -> Path:
+    """IFC 디지털 트윈을 **돌려 보며** 녹화한다 — 결과가 부재 위에 얹힌 것을 보인다.
+
+    three.js 뷰어(`twin.viewer.html`)는 동봉 라이브러리로 오프라인 렌더된다. 헤드리스
+    크로뮴에서도 SwiftShader 로 WebGL 이 돈다.
+
+    점 클릭은 **아무 데나 찍으면 빈 공간에 떨어진다.** 뷰어의 전역(`POS`·`cam`)으로
+    점의 화면 좌표를 직접 계산해서 그 자리를 누른다 — 그래야 '이 점이 어느 부재에
+    묶였는지' 가 실제로 뜬다.
+    """
+    from playwright.sync_api import sync_playwright
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("*.webm"):
+        old.unlink()
+
+    # 화면에 보이는 점 하나의 좌표를 돌려준다(가운데에 가까운 것부터).
+    FIND = """
+    (() => {
+      if (typeof POS === 'undefined' || typeof cam === 'undefined') return null;
+      const out = [];
+      for (let i = 0; i < POS.length; i++) {
+        const v = new THREE.Vector3(POS[i][0], POS[i][1], POS[i][2]);
+        v.project(cam);
+        if (v.z < -1 || v.z > 1) continue;
+        const x = (v.x * .5 + .5) * innerWidth, y = (-v.y * .5 + .5) * innerHeight;
+        if (x < 80 || x > innerWidth - 80 || y < 120 || y > innerHeight - 120) continue;
+        out.push([x, y, Math.hypot(x - innerWidth / 2, y - innerHeight / 2)]);
+      }
+      out.sort((a, b) => a[2] - b[2]);
+      return out.slice(0, 12).map(q => [q[0], q[1]]);
+    })()
+    """
+
+    with sync_playwright() as p:
+        br = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader",
+                                     "--enable-unsafe-swiftshader",
+                                     "--force-device-scale-factor=1"])
+        ctx = br.new_context(viewport={"width": W, "height": H},
+                             record_video_dir=str(out_dir),
+                             record_video_size={"width": W, "height": H})
+        pg = ctx.new_page()
+        pg.goto(html.resolve().as_uri(), wait_until="load", timeout=120_000)
+        pg.wait_for_timeout(5000)                 # 렌더가 자리잡을 때까지
+        _overlay(pg)
+        say(pg, "IFC 디지털 트윈 — 방금 그 실행이 만든 성수대교")
+        pg.wait_for_timeout(3000)
+
+        cx, cy = W // 2, H // 2 + 40
+        say(pg, "회색이 제원으로 세운 부재 · 색 점이 위성 측점")
+        pg.wait_for_timeout(2600)
+
+        say(pg, "드래그로 돌려 봅니다")
+        for a, b in ((-300, 50), (240, -70)):
+            pg.mouse.move(cx, cy)
+            pg.mouse.down()
+            steps = 20
+            for k in range(1, steps + 1):
+                x, y = cx + a * k / steps, cy + b * k / steps
+                pg.mouse.move(x, y)
+                pg.evaluate("([x,y]) => window.__demoMove(x,y)", [x, y])
+                pg.wait_for_timeout(45)
+            pg.mouse.up()
+            pg.wait_for_timeout(800)
+
+        say(pg, "휠로 당겨 상판 위를 봅니다")
+        pg.mouse.move(cx, cy)
+        for _ in range(4):                        # 과하게 당기면 구조 안으로 들어간다
+            pg.mouse.wheel(0, -230)
+            pg.wait_for_timeout(280)
+        pg.wait_for_timeout(1400)
+
+        say(pg, "점을 클릭하면 어느 부재에 묶였는지 나옵니다")
+        pg.wait_for_timeout(1200)
+        pts = pg.evaluate(FIND) or []
+        if not pts:                               # 안 보이면 조금 물러나 다시 찾는다
+            for _ in range(3):
+                pg.mouse.wheel(0, 240)
+                pg.wait_for_timeout(260)
+            pts = pg.evaluate(FIND) or []
+        picked = 0
+        for x, y in pts:
+            if picked >= 3:
+                break
+            pg.evaluate("([x,y]) => window.__demoMove(x,y)", [x, y])
+            pg.wait_for_timeout(700)
+            pg.evaluate("([x,y]) => window.__demoRing(x,y)", [x, y])
+            pg.mouse.click(x, y)
+            pg.wait_for_timeout(2100)
+            picked += 1
+        if not picked:
+            print("  · 화면 안에서 점을 못 찾았다 — 클릭 장면 없음")
+
+        say(pg, "IFC GlobalId 로 묶여 있어 부재별로 집계된다")
+        pg.wait_for_timeout(2800)
+        say(pg, "")
+        pg.wait_for_timeout(800)
+        ctx.close()
+        br.close()
+
+    vids = sorted(out_dir.glob("*.webm"), key=lambda q: q.stat().st_mtime)
+    if not vids:
+        raise SystemExit("트윈 녹화 실패")
+    return vids[-1]
+
+
 def webm_to_mp4(src: Path, dst: Path, fps: int = FPS) -> float:
     subprocess.run([ffmpeg(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(src),
                     "-r", str(fps), "-vf", f"scale={W}:{H}:flags=lanczos",
@@ -524,50 +670,74 @@ def write_subs(cues: list[tuple[float, float, str]], srt: Path, txt: Path) -> in
     return len(cues)
 
 
-def build_cues(t_cmd: float, t_app: float) -> list[tuple[float, float, str]]:
-    """발표자가 읽을 대본. 화면에 굽지 않으므로 길이에 여유가 있다."""
+def build_cues(d: dict) -> list[tuple[float, float, str]]:
+    """발표자가 읽을 대본. 화면에 굽지 않으므로 길이에 여유가 있다.
+
+    `d` 는 부별 길이[초] — cmd(설치) · run(교량 실행) · app(대시보드) · twin(IFC 트윈).
+    """
     c: list[tuple[float, float, str]] = []
 
     def add(t0: float, dur: float, s: str) -> None:
         c.append((t0, t0 + dur, s))
 
-    add(0.5, 5.0, "받는 사람 PC 에서 어떻게 되는지 그대로 보여 드립니다. "
-                  "저장소를 새로 받는 것부터 시작합니다.")
-    add(6.0, 5.0, "깃 클론 한 번이면 소스가 통째로 내려옵니다.")
-    seg = max(t_cmd - 12.0, 6.0) / 3.0
-    add(12.0, seg, "가상환경을 따로 만듭니다. 쓰던 파이썬 환경을 건드리지 않습니다.")
-    add(12.0 + seg, seg, "대시보드 의존성까지 한 줄로 설치합니다. "
-                         "스트림릿·플로틀리·폴리움이 여기서 같이 들어옵니다.")
-    add(12.0 + 2 * seg, seg, "설치가 끝나면 명령 한 줄로 대시보드가 뜹니다. "
-                             "여기부터는 터미널을 볼 일이 없습니다.")
+    def span(t0: float, length: float, lines: list[str]) -> None:
+        """구간을 줄 수만큼 나눠 고르게 깐다."""
+        if length <= 0 or not lines:
+            return
+        per = length / len(lines)
+        for i, s in enumerate(lines):
+            add(t0 + i * per + 0.3, min(per - 0.6, 9.0), s)
 
-    a = t_cmd
-    add(a + 0.5, 6.0, "여기가 실제 대시보드입니다. 지금 보시는 건 캡처 화면이 아니라 "
-                      "실제로 돌아가는 화면입니다.")
-    add(a + 7.0, 6.0, "왼쪽에 저장 폴더와 현재 교량이 있습니다. "
-                      "교량 이름으로 찾거나 지도에서 찍어 정합니다.")
-    n = 6
-    per = max((t_app - 14.0) / n, 4.0)
+    t = 0.0
+    span(t, d.get("cmd", 0.0), [
+        "받는 사람 PC 에서 어떻게 되는지 그대로 보여 드립니다. 저장소를 새로 받습니다.",
+        "가상환경을 따로 만듭니다. 쓰던 파이썬 환경을 건드리지 않습니다.",
+        "대시보드 의존성까지 한 줄로 설치합니다.",
+        "설치가 끝나면 명령 한 줄로 대시보드가 뜹니다.",
+    ])
+    t += d.get("cmd", 0.0)
+
+    span(t, d.get("run", 0.0), [
+        "이제 한강 교량 하나를 실제로 돌립니다 — 성수대교입니다.",
+        "준 것은 이름과 위경도, 그리고 이미 처리해 둔 위성 트랙뿐입니다.",
+        "제원을 찾고, 오픈스트리트맵에서 교면 중심선을 뽑습니다.",
+        "레이더가 옆으로 밀어 찍은 만큼 되돌린 뒤, 교면 삼십 미터 안쪽 점만 남깁니다.",
+        "고른 점이 정말 다리 위 점인지 잔차고도로 검사합니다.",
+        "제원대로 IFC 트윈을 세우고, 점을 가장 가까운 부재에 묶습니다.",
+        "물리식을 함께 푸는 신경망이 거동을 나누고, 공진위험지수를 냅니다.",
+        "마지막으로 스스로 감사하고 결과 문서를 씁니다. 여기까지가 명령 한 줄입니다.",
+    ])
+    t += d.get("run", 0.0)
+
+    a = t
+    add(a + 0.5, 6.0, "같은 산출물을 대시보드에서도 봅니다. 캡처가 아니라 실제 화면입니다.")
+    add(a + 7.0, 5.5, "왼쪽에 저장 폴더와 현재 교량이 있습니다.")
     texts = [
-        "영 번, 시작 탭입니다. 이 컴퓨터가 돌릴 준비가 됐는지 먼저 점검합니다. "
-        "필요한 도구가 없으면 여기서 바로 받습니다.",
-        "일 번, 인사 탭입니다. 위성 영상에서 뽑은 변위 시계열이 여기 들어옵니다. "
-        "지도에서 교량을 찍으면 그 교량의 점만 골라 봅니다.",
-        "이 번, 핀 탭입니다. 물리식을 함께 푸는 신경망이 거동을 성분으로 나눕니다 — "
-        "열, 하중, 침하, 그리고 설명되지 않는 이상 성분.",
-        "삼 번, 프램 탭입니다. 공진 위험 지수를 계산해 네 단계 경보를 냅니다.",
+        "영 번, 시작 탭입니다. 이 컴퓨터가 돌릴 준비가 됐는지 먼저 점검합니다.",
+        "일 번, 인사 탭입니다. 위성에서 뽑은 변위 시계열이 여기 들어옵니다.",
+        "이 번, 핀 탭입니다. 열·하중·침하·이상 성분으로 거동을 나눕니다.",
+        "삼 번, 프램 탭입니다. 공진 위험 지수로 네 단계 경보를 냅니다.",
         "사 번, 잔존수명 탭입니다. 사용성 한계까지 남은 시간을 봅니다.",
-        "오 번, 피에스아이 방법론 탭입니다. 피에스와 에스바스, 큐피에스를 "
-        "같은 자료에 대고 비교합니다.",
+        "오 번, 피에스아이 방법론 탭입니다. 피에스·에스바스·큐피에스를 같은 자료에 대고 비교합니다.",
     ]
-    for i, s in enumerate(texts):
-        add(a + 14.0 + i * per, min(per - 0.5, 9.0), s)
+    span(a + 13.0, max(d.get("app", 0.0) - 13.0, 0.0), texts)
+    t += d.get("app", 0.0)
+
+    span(t, d.get("twin", 0.0), [
+        "그리고 이게 결과가 올라간 IFC 디지털 트윈입니다. 방금 그 실행이 만든 것입니다.",
+        "회색이 표준데이터 제원으로 세운 부재 — 슬래브, 교각, 교대, 그리고 트러스 상현재입니다.",
+        "색 점이 위성 측점입니다. 파란색은 멀어지는 쪽, 붉은색은 가까워지는 쪽입니다.",
+        "점을 클릭하면 그 점이 어느 부재에 묶였는지 나옵니다.",
+        "IFC 글로벌아이디로 묶여 있어 교각별·경간별로 집계할 수 있습니다.",
+        "이게 비맵스로 넘어가는 형태 그대로입니다.",
+    ])
     return c
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", default="all", choices=["all", "cmd", "app", "join"])
+    ap.add_argument("--stage", default="all",
+                    choices=["all", "cmd", "run", "app", "twin", "join"])
     ap.add_argument("--reuse", action="store_true",
                     help="이미 받아 둔 설치 기록으로 1부만 다시 그린다(설치를 또 돌리지 않음)")
     ap.add_argument("--url", default="http://localhost:8599/")
@@ -575,7 +745,11 @@ def main() -> int:
     a = ap.parse_args()
 
     SCRATCH.mkdir(parents=True, exist_ok=True)
-    p_cmd, p_app = SCRATCH / "part1_cmd.mp4", SCRATCH / "part2_app.mp4"
+    p_cmd = SCRATCH / "part1_cmd.mp4"
+    p_run = SCRATCH / "part2_run.mp4"
+    p_app = SCRATCH / "part3_app.mp4"
+    p_twin = SCRATCH / "part4_twin.mp4"
+    run_out = SCRATCH / f"run_{DEMO_BRIDGE}"
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -592,23 +766,44 @@ def main() -> int:
         d = render_terminal(sess, p_cmd)
         print(f"  → {p_cmd} ({d:.1f}초)")
 
+    if a.stage in ("all", "run"):
+        print(f"2부 · {DEMO_BRIDGE} — 파이프라인을 실제로 돌립니다(수 분)")
+        saved = SCRATCH / "run_session.json"
+        if a.reuse and saved.exists():
+            sess = json.loads(saved.read_text(encoding="utf-8"))
+        else:
+            sess = collect_run_session(run_out)
+            saved.write_text(json.dumps(sess, ensure_ascii=False, indent=1),
+                             encoding="utf-8")
+        d = render_terminal(sess, p_run, pace=7)   # 실행 장면은 읽을 수 있게 천천히
+        print(f"  → {p_run} ({d:.1f}초)")
+
     if a.stage in ("all", "app"):
         print("2부 · 대시보드 — 실제로 조작하며 녹화합니다")
         webm = record_app(a.url, SCRATCH / "webm")
         d = webm_to_mp4(webm, p_app)
         print(f"  → {p_app} ({d:.1f}초)")
 
+    if a.stage in ("all", "twin"):
+        print("4부 · IFC 디지털 트윈 — 돌려 보며 녹화합니다")
+        html = run_out / "twin.viewer.html"
+        if not html.exists():                    # 아직 안 돌렸으면 커밋된 것으로
+            html = ROOT / f"docs/bridges/{DEMO_BRIDGE}/twin.viewer.html"
+        webm = record_twin(html, SCRATCH / "webm_twin")
+        d = webm_to_mp4(webm, p_twin)
+        print(f"  → {p_twin} ({d:.1f}초)")
+
     if a.stage in ("all", "join"):
-        parts = [q for q in (p_cmd, p_app) if q.exists()]
+        parts = [q for q in (p_cmd, p_run, p_app, p_twin) if q.exists()]
         if not parts:
             print("합칠 조각이 없다", file=sys.stderr)
             return 2
         total = join(parts, out)
-        t_cmd = probe_dur(p_cmd) if p_cmd.exists() else 0.0
-        t_app = probe_dur(p_app) if p_app.exists() else 0.0
-        n = write_subs(build_cues(t_cmd, t_app),
-                       out.with_suffix(".srt"), out.with_suffix(".txt"))
-        print(f"wrote {out}  ({total:.1f}초 = 터미널 {t_cmd:.0f}s + 대시보드 {t_app:.0f}s)")
+        d = {k: (probe_dur(v) if v.exists() else 0.0) for k, v in
+             (("cmd", p_cmd), ("run", p_run), ("app", p_app), ("twin", p_twin))}
+        n = write_subs(build_cues(d), out.with_suffix(".srt"), out.with_suffix(".txt"))
+        print(f"wrote {out}  ({total:.1f}초 = 설치 {d['cmd']:.0f}s + 실행 {d['run']:.0f}s"
+              f" + 대시보드 {d['app']:.0f}s + 트윈 {d['twin']:.0f}s)")
         print(f"자막 {n}줄(화면에 굽지 않음) — {out.with_suffix('.srt')} · "
               f"{out.with_suffix('.txt')}")
     return 0
