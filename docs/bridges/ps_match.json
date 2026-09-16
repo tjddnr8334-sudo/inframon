@@ -1,0 +1,90 @@
+{
+ "_설명": "보고서 계측과 가장 닮은 PS 점 탐색",
+ "_주의": "여러 점 중 최댓값을 고른 값이다. 무작위 섞기 200회의 최대 |r| 95 백분위(null95_max_abs_r)를 넘지 못하면 우연과 구분되지 않는다.",
+ "bridges": [
+  {
+   "name": "가양대교",
+   "what": "처짐(경사계)",
+   "how": "눈 판독",
+   "n_pairs": 19,
+   "n_points": 167,
+   "best_r": -0.662,
+   "best_r2": 0.438,
+   "best_station_m": 1106.2,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.721,
+   "beats_null": false,
+   "median_abs_r": 0.144
+  },
+  {
+   "name": "원효대교",
+   "what": "처짐(경사계)",
+   "how": "눈 판독",
+   "n_pairs": 19,
+   "n_points": 45,
+   "best_r": -0.362,
+   "best_r2": 0.131,
+   "best_station_m": 832.3,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.649,
+   "beats_null": false,
+   "median_abs_r": 0.158
+  },
+  {
+   "name": "올림픽대교",
+   "what": "처짐(레이저)",
+   "how": "눈 판독",
+   "n_pairs": 29,
+   "n_points": 56,
+   "best_r": 0.38,
+   "best_r2": 0.145,
+   "best_station_m": 1474.5,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.541,
+   "beats_null": false,
+   "median_abs_r": 0.092
+  },
+  {
+   "name": "암사대교",
+   "what": "신축변위",
+   "how": "눈 판독",
+   "n_pairs": 6,
+   "n_points": 237,
+   "best_r": 0.867,
+   "best_r2": 0.752,
+   "best_station_m": 285.3,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.981,
+   "beats_null": false,
+   "median_abs_r": 0.357
+  },
+  {
+   "name": "샛강문화다리",
+   "what": "GNSS 연직변위 (P1_U)",
+   "how": "자동 판독",
+   "n_pairs": 18,
+   "n_points": 50,
+   "best_r": -0.543,
+   "best_r2": 0.295,
+   "best_station_m": 122.3,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.659,
+   "beats_null": false,
+   "median_abs_r": 0.184
+  },
+  {
+   "name": "월드컵대교",
+   "what": "GNSS 연직변위 (GP_S1M_01_Z)",
+   "how": "자동 판독",
+   "n_pairs": 6,
+   "n_points": 82,
+   "best_r": -0.936,
+   "best_r2": 0.877,
+   "best_station_m": 1407.2,
+   "best_member": "슬래브",
+   "null95_max_abs_r": 0.949,
+   "beats_null": false,
+   "median_abs_r": 0.772
+  }
+ ]
+}
