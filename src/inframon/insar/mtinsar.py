@@ -56,6 +56,11 @@ def adi_from_star_ifg(ifg_magnitude: np.ndarray) -> dict:
                      "결맞음 변동이 섞여 참 ADI 보다 크게 나온다 — 보수적으로 뽑힌다.")}
 
 
+def amplitude_stability_index(adi: np.ndarray) -> np.ndarray:
+    """ASI = 1 − ADI — SARPROZ 가 점을 고를 때 쓰는 이름. 높을수록 안정하다."""
+    return 1.0 - np.asarray(adi, dtype=np.float64)
+
+
 def ps_mask(adi: np.ndarray, *, adi_max: float = 0.25,
             gamma: np.ndarray | None = None,
             gamma_min: float | None = None) -> np.ndarray:
@@ -107,6 +112,37 @@ def baseline_network(days: np.ndarray, bperp_m: np.ndarray, *,
             "max_bperp_m": float(max_bperp_m)}
 
 
+def baseline_table(dates: list, days: np.ndarray, bperp_m: np.ndarray,
+                   master: str | None = None) -> dict:
+    """시점별 수직·시간 기선표 — SARPROZ 의 baseline plot 이 그리는 그 값이다.
+
+    마스터를 기준으로 한 star 망의 좌표(B⊥, Bt)와, 거기서 유도한 소기선 쌍의
+    통계를 함께 낸다. 높이 모호도(height ambiguity)는 'B⊥ 가 이만큼일 때 위상
+    한 바퀴가 높이 몇 m 인가' 로, 잔차고도를 얼마나 잘 볼 수 있는지의 척도다.
+    """
+    d = np.asarray(days, dtype=np.float64).ravel()
+    b = np.asarray(bperp_m, dtype=np.float64).ravel()
+    rows = [{"date": str(dates[i]), "bperp_m": round(float(b[i]), 2),
+             "btemp_days": round(float(d[i] - d.min()), 1),
+             "is_master": bool(master is not None and str(dates[i]) == str(master))}
+            for i in range(len(d))]
+    return {"epochs": rows, "n_epochs": len(rows),
+            "bperp_min_m": round(float(b.min()), 1),
+            "bperp_max_m": round(float(b.max()), 1),
+            "bperp_span_m": round(float(b.max() - b.min()), 1),
+            "bperp_std_m": round(float(b.std()), 1),
+            "btemp_span_days": round(float(d.max() - d.min()), 1)}
+
+
+def height_ambiguity_m(bperp_m: float, slant_range_m: float, incidence_deg: float,
+                       *, wavelength_m: float = RADAR_WAVELENGTH_M) -> float:
+    """위상 한 바퀴(2π)에 해당하는 높이 [m] — 작을수록 높이를 잘 본다."""
+    s = np.sin(np.radians(float(incidence_deg)))
+    if abs(bperp_m) < 1e-9 or abs(s) < 1e-9:
+        return float("inf")
+    return float(wavelength_m * slant_range_m * s / (2.0 * abs(bperp_m)))
+
+
 def closure_errors(pairs: list, los_mm: np.ndarray) -> dict:
     """세 시점 고리(i,j,k)의 닫힘오차 — 언래핑 실수를 잡는 지표.
 
@@ -146,24 +182,39 @@ class PointFit:
     sigma_dh: np.ndarray
     gamma: np.ndarray            # 시간결맞음 0~1
     residual_mm: np.ndarray      # [N,K]
+    thermal_mm_per_C: np.ndarray | None = None
+    sigma_thermal: np.ndarray | None = None
 
 
 def solve_velocity_dem_error(t_years: np.ndarray, K: np.ndarray,
                              los_mm: np.ndarray, *,
+                             temperature_C: np.ndarray | None = None,
                              wavelength_m: float = RADAR_WAVELENGTH_M) -> PointFit:
-    """점마다 `los = c + v·t + K·Δh` 를 한 번에 푼다.
+    """점마다 한 번에 푼다 — SARPROZ 의 다중영상 해석과 같은 변수 묶음.
 
-    속도와 DEM 오차를 따로 풀면 서로 샌다 — B⊥ 와 시간이 완전히 독립이 아니기
-    때문이다. 같이 풀고, 잔차 위상으로 시간결맞음 γ = |⟨e^{iφ_res}⟩| 를 낸다.
-    γ 는 '이 점이 모델을 얼마나 잘 따르는가' 이고, PS 선별의 두 번째 문턱이다.
+        los = c + v·t + K·Δh [+ α·(T − T̄)]
+
+    ① 속도 v, ② DEM 오차 Δh, ③ **열팽창 α**(온도를 주면), 그리고 잔차에서 ④ 시간결맞음.
+    따로 풀면 서로 샌다 — B⊥ 도 온도도 시간과 완전히 독립이 아니기 때문이다.
+
+    열팽창을 넣는 이유는 실용적이다. 보고서가 신축변위계로 **mm/°C 를 직접 재 놓았다**
+    (양화대교 EM_01 −1.46 · EM_02 −1.35, R²=0.99). 같은 단위가 나오면 눈금을 맞대
+    비교할 수 있다 — 연주기 위상만 보는 것보다 훨씬 강한 대조다.
+
+    γ = |⟨e^{iφ_res}⟩| 는 '이 점이 모델을 얼마나 잘 따르는가' 이고 PS 선별의 문턱이다.
     """
     t = np.asarray(t_years, dtype=np.float64).ravel()
     k = np.asarray(K, dtype=np.float64).ravel()
     L = np.atleast_2d(np.asarray(los_mm, dtype=np.float64))
-    A = np.vstack([np.ones_like(t), t, k]).T                 # [K,3]
-    coef, *_ = np.linalg.lstsq(A, L.T, rcond=None)           # [3,N]
-    resid = L.T - A @ coef                                   # [K,N]
-    dof = max(len(t) - 3, 1)
+    cols = [np.ones_like(t), t, k]
+    has_T = temperature_C is not None
+    if has_T:
+        T = np.asarray(temperature_C, dtype=np.float64).ravel()
+        cols.append(T - float(np.mean(T)))
+    A = np.vstack(cols).T                                    # [K,3] 또는 [K,4]
+    coef, *_ = np.linalg.lstsq(A, L.T, rcond=None)
+    resid = L.T - A @ coef
+    dof = max(len(t) - A.shape[1], 1)
     s2 = np.sum(resid ** 2, axis=0) / dof
     cov = np.linalg.pinv(A.T @ A)
     # 잔차를 위상으로 되돌려 시간결맞음 — 부호 규약은 γ 에 영향을 주지 않는다.
@@ -172,7 +223,9 @@ def solve_velocity_dem_error(t_years: np.ndarray, K: np.ndarray,
     return PointFit(velocity_mm_yr=coef[1], dh_m=coef[2],
                     sigma_v=np.sqrt(s2 * cov[1, 1]),
                     sigma_dh=np.sqrt(s2 * cov[2, 2]),
-                    gamma=gamma, residual_mm=resid.T)
+                    gamma=gamma, residual_mm=resid.T,
+                    thermal_mm_per_C=(coef[3] if has_T else None),
+                    sigma_thermal=(np.sqrt(s2 * cov[3, 3]) if has_T else None))
 
 
 # ── ④ APS ─────────────────────────────────────────────────────────────────
@@ -262,6 +315,7 @@ def remove_aps(los_mm: np.ndarray, aps_mm: np.ndarray) -> np.ndarray:
 def run(los_mm: np.ndarray, t_years: np.ndarray, bperp_m: np.ndarray,
         xy_m: np.ndarray, *, slant_range_m: float, incidence_deg: float,
         amplitude: np.ndarray | None = None,
+        temperature_C: np.ndarray | None = None,
         adi_max: float = 0.25, gamma_min: float = 0.5,
         aps_radius_m: float = 300.0, n_iter: int = 2,
         aps_source_frac: float = 0.5, aps_window_years: float = 0.25,
@@ -275,7 +329,8 @@ def run(los_mm: np.ndarray, t_years: np.ndarray, bperp_m: np.ndarray,
     K = height_phase_factor(bperp_m, slant_range_m, incidence_deg)
     steps = []
     aps = np.zeros_like(L)
-    fit = solve_velocity_dem_error(t_years, K, L, wavelength_m=wavelength_m)
+    fit = solve_velocity_dem_error(t_years, K, L, temperature_C=temperature_C,
+                                   wavelength_m=wavelength_m)
     steps.append({"iter": 0, "gamma_median": float(np.nanmedian(fit.gamma)),
                   "resid_rms_mm": float(np.sqrt(np.nanmean(fit.residual_mm ** 2)))})
     for it in range(1, int(n_iter) + 1):
@@ -288,7 +343,8 @@ def run(los_mm: np.ndarray, t_years: np.ndarray, bperp_m: np.ndarray,
                          source_mask=src, exclude_self=True)
         aps += a
         L = remove_aps(L, a)
-        fit = solve_velocity_dem_error(t_years, K, L, wavelength_m=wavelength_m)
+        fit = solve_velocity_dem_error(t_years, K, L, temperature_C=temperature_C,
+                                       wavelength_m=wavelength_m)
         steps.append({"iter": it, "aps_rms_mm": float(np.sqrt(np.nanmean(a ** 2))),
                       "aps_source_points": int(src.sum()),
                       "gamma_median": float(np.nanmedian(fit.gamma)),
@@ -304,7 +360,9 @@ def run(los_mm: np.ndarray, t_years: np.ndarray, bperp_m: np.ndarray,
     keep = (ps_mask(adi, adi_max=adi_max, gamma=fit.gamma, gamma_min=gamma_min)
             if np.isfinite(adi).any() else fit.gamma >= gamma_min)
     return {"los_corrected_mm": L, "aps_mm": aps, "K_mm_per_m": K,
-            "fit": fit, "adi": adi, "adi_note": adi_info["note"],
+            "fit": fit, "adi": adi, "asi": amplitude_stability_index(adi),
+            "adi_note": adi_info["note"],
+            "has_thermal": bool(temperature_C is not None),
             "ps_mask": keep, "n_kept": int(keep.sum()), "n_points": int(L.shape[0]),
             "iterations": steps, "aps_radius_m": float(aps_radius_m),
             "aps_source_frac": float(aps_source_frac),

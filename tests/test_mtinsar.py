@@ -217,3 +217,77 @@ def test_sigma_dh_가_형하고보다_크면_그대로_보고된다():
     los = s["dh_true"][:, None] * s["K"][None, :] + rng.normal(0, 20.0, (40, 51))
     fit = mt.solve_velocity_dem_error(s["t"], s["K"], los)
     assert np.median(fit.sigma_dh) > 8.0
+
+
+# ── SARPROZ 식 변수 묶음 — 열팽창 · ASI · 기선표 ─────────────────────────────
+def test_열팽창계수를_되찾는다():
+    """SARPROZ 의 thermal dilation — 보고서가 mm/°C 를 직접 재 놓아 눈금을 맞댈 수 있다."""
+    rng = np.random.default_rng(20)
+    n_ep = 60
+    t = np.linspace(0, 5, n_ep)
+    T = 12.0 + 14.0 * np.sin(2 * np.pi * (t - 0.3))          # 계절 기온
+    bperp = rng.uniform(-120, 120, n_ep)
+    K = mt.height_phase_factor(bperp, 888_000.0, 36.25)
+    a_true = np.array([-1.46, -1.35, 0.0, 2.2])              # 보고서 EM_01·EM_02 값
+    v_true = np.array([0.5, -1.0, 0.0, 3.0])
+    los = (v_true[:, None] * t[None, :]
+           + a_true[:, None] * (T - T.mean())[None, :]
+           + rng.normal(0, 0.5, (4, n_ep)))
+    fit = mt.solve_velocity_dem_error(t, K, los, temperature_C=T)
+    assert np.allclose(fit.thermal_mm_per_C, a_true, atol=0.1)
+    assert np.allclose(fit.velocity_mm_yr, v_true, atol=0.3)
+    assert np.all(fit.sigma_thermal > 0)
+
+
+def test_온도를_안주면_열팽창은_None():
+    s = _synth(n_pts=5, n_ep=30, seed=21)
+    fit = mt.solve_velocity_dem_error(s["t"], s["K"], s["los"])
+    assert fit.thermal_mm_per_C is None
+    assert fit.sigma_thermal is None
+
+
+def test_열팽창을_빼면_속도로_샌다():
+    """온도 항을 안 넣으면 계절 신축이 속도 추정으로 흘러든다."""
+    rng = np.random.default_rng(22)
+    t = np.linspace(0, 3.2, 40)                     # 정수 년이 아니라 계절이 안 상쇄된다
+    T = 12.0 + 14.0 * np.sin(2 * np.pi * (t - 0.3))
+    K = mt.height_phase_factor(rng.uniform(-100, 100, 40), 888_000.0, 36.25)
+    v_true = np.zeros(6)
+    a_true = rng.uniform(-2, 2, 6)
+    los = v_true[:, None] * t[None, :] + a_true[:, None] * (T - T.mean())[None, :]
+    with_T = mt.solve_velocity_dem_error(t, K, los, temperature_C=T)
+    without = mt.solve_velocity_dem_error(t, K, los)
+    assert np.abs(with_T.velocity_mm_yr).max() < np.abs(without.velocity_mm_yr).max()
+
+
+def test_ASI_는_ADI_의_여집합():
+    adi = np.array([0.1, 0.4, 0.9])
+    assert np.allclose(mt.amplitude_stability_index(adi), 1.0 - adi)
+
+
+def test_기선표는_마스터를_표시한다():
+    dates = ["20220330", "20180619", "20180806"]
+    days = np.array([0.0, -1380.0, -1332.0])
+    bperp = np.array([0.0, -41.2, -54.7])
+    tb = mt.baseline_table(dates, days, bperp, master="20220330")
+    assert tb["n_epochs"] == 3
+    assert sum(r["is_master"] for r in tb["epochs"]) == 1
+    assert tb["bperp_span_m"] == pytest.approx(54.7, abs=0.1)
+
+
+def test_높이모호도는_기선이_클수록_작다():
+    a = mt.height_ambiguity_m(50.0, 888_000.0, 36.25)
+    b = mt.height_ambiguity_m(150.0, 888_000.0, 36.25)
+    assert b < a
+    assert mt.height_ambiguity_m(0.0, 888_000.0, 36.25) == float("inf")
+
+
+def test_run_은_온도를_받아_열팽창을_같이_낸다():
+    s = _synth(n_pts=40, n_ep=40, seed=23)
+    T = 12.0 + 14.0 * np.sin(2 * np.pi * (s["t"] - 0.3))
+    out = mt.run(s["los"], s["t"], s["bperp"], s["xy"],
+                 slant_range_m=s["R"], incidence_deg=s["inc"],
+                 temperature_C=T, n_iter=1)
+    assert out["has_thermal"]
+    assert out["fit"].thermal_mm_per_C is not None
+    assert out["asi"].shape == out["adi"].shape

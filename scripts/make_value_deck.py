@@ -164,13 +164,16 @@ def slide_perf_gnss(prs, fix: dict):
 
     fig = VAL / "교면전용_GNSS대조.png"
     if fig.exists():
-        box(s, 0.45, 1.28, SW - 0.9, 3.16, fill=WHITE, line=RULE, lw=1.0)
-        picture_fit(s, fig, 0.5, 1.33, SW - 1.0, 3.06)
+        box(s, 0.45, 1.28, 7.4, 3.16, fill=WHITE, line=RULE, lw=1.0)
+        picture_fit(s, fig, 0.5, 1.33, 7.3, 3.06)
+    mt = VAL / "MTInSAR_요약.png"
+    if mt.exists():
+        box(s, 8.05, 1.28, SW - 0.45 - 8.05, 3.16, fill=WHITE, line=RULE, lw=1.0)
+        picture_fit(s, mt, 8.1, 1.33, SW - 0.45 - 8.15, 3.06)
 
     got = [v for v in fix.values() if "phase_diff_months" in v]
     dif = sorted(abs(v["phase_diff_months"]) for v in got)
     same = sum(1 for v in got if v.get("same_seasonal_behaviour"))
-    n_pt = [v["n_deck"] for v in fix.values() if "n_deck" in v]
 
     y0 = panel(s, 0.45, 4.62, SW - 0.9, 1.3, "지금 수준을 있는 그대로", tab=RED)
     cw = (SW - 1.44 - 0.5) / 2
@@ -182,14 +185,15 @@ def slide_perf_gnss(prs, fix: dict):
     ], fs=10.2, spacing=1.34)
     bullets(s, 0.72 + cw + 0.25, y0 + 0.04, cw, 1.2, [
         ("근본 원인 ", "한강 15개소 중 11개소에서 교량 위 점의 계절 위상이 "
-                  "100~200 m 떨어진 맨땅과 1.5개월 안으로 같다"),
-        ("즉 ", f"교면 점이 {min(n_pt)}~{max(n_pt)}개뿐이고 그마저 주변 지반과 "
-              "섞여 있다 — 통계가 아니라 분해능 문제다"),
+                  "100~200 m 떨어진 맨땅과 1.5개월 안으로 같다 — 지반을 봤다"),
+        ("그래서 MT-InSAR 를 넣었다 ", "ADI·기선망·점별 DEM 오차·APS. 잔차가 "
+                               "전 교량에서 줄고(행주 29→18 mm), σ_Δh 가 26 → 8~13 m, "
+                               "3개소에서 교면 열팽창이 지반과 갈라진다"),
     ], fs=10.2, spacing=1.34)
 
     band(s, 6.02,
-         "Sentinel-1 은 지상 5×20 m, 데크 폭은 1~2 화소다 — 지금 낸 것은 '맞는다' 가 "
-         "아니라 '무엇이 있어야 맞출 수 있는가' 다", fill=BLUE_F, fs=11.5)
+         "처리를 고치니 교면이 갈라지기 시작했다 — 남은 벽은 분해능이다"
+         "(Sentinel-1 5×20 m · 데크 폭 1~2 화소)", fill=BLUE_F, fs=11.5)
     footer(s, "※ 오프셋은 평균 코히런스가 가장 높은 자리로 정했다 — GNSS 를 보지 않고 "
               "정하는 기준이라 '맞도록 고른' 값이 아니다. 판정 근거: "
               "scripts/make_deck_vs_ground.py · make_deck_fix.py · 교량별 교면전용.json. "
