@@ -80,11 +80,20 @@ EDITS = [
 ]
 
 
-def bold_groups(runs) -> list:
-    """볼드가 같은 이웃 run 끼리 묶는다 — 그 묶음이 원문의 강조 구조다."""
+def _style(r):
+    """그 run 의 겉모습 — 볼드와 크기. 이 둘이 같으면 한 묶음으로 본다.
+
+    처음에는 볼드만 봤는데, 큰 숫자 + 작은 단위로 된 타일("16/16" 24pt + "개소" 12pt)
+    이 한 묶음으로 뭉쳐 버렸다. 크기도 함께 봐야 원문의 생김새가 지켜진다.
+    """
+    return (r.font.bold, None if r.font.size is None else r.font.size.pt)
+
+
+def style_groups(runs) -> list:
+    """겉모습이 같은 이웃 run 끼리 묶는다 — 그 묶음이 원문의 강조 구조다."""
     groups: list = []
     for i, r in enumerate(runs):
-        if groups and runs[groups[-1][0]].font.bold == r.font.bold:
+        if groups and _style(runs[groups[-1][0]]) == _style(r):
             groups[-1].append(i)
         else:
             groups.append([i])
@@ -99,7 +108,7 @@ def set_para(shape, idx: int, parts: list) -> str:
     지켜지지만 **원문의 강조가 통째로 사라진다** — 이 자료는 「볼드 머리말 : 일반 설명
     + 끝에 볼드 강조」 꼴이기 때문이다.
 
-    그래서 볼드가 같은 이웃 run 을 묶고, `parts[i]` 를 i번째 묶음의 첫 run 에 넣는다.
+    그래서 겉모습(볼드·크기)이 같은 이웃 run 을 묶고, `parts[i]` 를 i번째 묶음의 첫 run 에 넣는다.
     나머지 run 은 빈 글자로 둔다(지우지 않는다). 크기·글꼴·색·볼드는 전부 있던 run 의
     것을 그대로 쓰므로, 바뀌는 것은 글자뿐이다.
     """
@@ -109,7 +118,7 @@ def set_para(shape, idx: int, parts: list) -> str:
         raise ValueError(f"문단 {idx} 에 run 이 없다")
     old = "".join(r.text for r in runs)
 
-    groups = bold_groups(runs)
+    groups = style_groups(runs)
     if len(parts) > len(groups):
         raise ValueError(f"문단 {idx}: 글 {len(parts)}조각인데 강조 묶음은 "
                          f"{len(groups)}개뿐이다 — 넣을 자리가 없다")
@@ -176,10 +185,10 @@ def main() -> int:
                         "찾던 글": needle, "그 자리 글": cur[:90]})
             ok = False
             continue
-        g = bold_groups(pa.runs)
+        g = style_groups(pa.runs)
         before = shape_of(g, pa.runs)
         old = cur if a.dry_run else set_para(sh, pi, parts)
-        after = shape_of(bold_groups(pa.runs), pa.runs)
+        after = shape_of(style_groups(pa.runs), pa.runs)
         LOG.append({"도형": shi, "문단": pi, "이전": old,
                     "이후": "".join(parts), "이유": why,
                     "강조 묶음": f"{len(parts)}/{len(g)} 사용",
