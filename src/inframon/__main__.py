@@ -202,6 +202,10 @@ def main() -> None:
     p.add_argument("--insar-tools-install", action="store_true",
                    help="F코어 툴체인을 WSL 에 **실제 설치**(00_setup_env.sh 실행, 수 GB·수십 분). "
                         "ISCE2 는 필수로 강제 — 실패 시 exit 1. WSL 미설치면 설치 명령 안내 후 종료.")
+    p.add_argument("--stamps-install", action="store_true",
+                   help="StaMPS 를 WSL 에 **내려받아 전처리기(mt_prep_*)까지 빌드**(git clone + make, "
+                        "수백 MB·몇 분). MATLAB 없이도 여기까지는 된다 — 시계열을 푸는 stamps(1,8) "
+                        "만 MATLAB 이 필요하며, 있는지 따로 알려준다.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--locate", default=None, metavar="X,Y",
@@ -1571,7 +1575,7 @@ def main() -> None:
         print("=" * 56)
         return
 
-    if args.insar_tools or args.insar_tools_install:
+    if args.insar_tools or args.insar_tools_install or args.stamps_install:
         import sys as _sys
 
         from .insar.toolchain import (check_toolchain, format_report, format_wsl_report,
@@ -1581,6 +1585,25 @@ def main() -> None:
         print(format_wsl_report(ws))
         if not ws["ready"]:
             _sys.exit(1)
+
+        if args.stamps_install:
+            from .insar.toolchain import provision_stamps
+
+            r = provision_stamps()
+            if r["status"]:
+                print(format_report(r["status"]))
+            if not r["ok"]:
+                print(f"  ⛔ {r['error']}")
+                _sys.exit(1)
+            print("  ✅ StaMPS 전처리기(mt_prep_*) 빌드 완료")
+            # 빌드 성공과 MATLAB 유무는 다른 문제다 — 묶어서 말하면 원인을 못 가린다.
+            if r["matlab"]:
+                print("  ✅ matlab 감지됨 — scripts/wsl_stamps/30_stamps_matlab.sh 로 진행")
+            else:
+                print("  ⚠️ matlab 이 없습니다. 20단계(mt_prep_snap)까지는 되지만 "
+                      "시계열을 푸는 stamps(1,8) 은 MATLAB 라이선스가 필요합니다.")
+                print("     대안: SARvey 레인(scripts/wsl_sarvey/) 또는 SNAP+snaphu 레인")
+            return
 
         if args.insar_tools_install:
             r = provision_toolchain()

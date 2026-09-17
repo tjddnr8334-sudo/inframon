@@ -151,6 +151,27 @@ def test_SNAP_산출물이_없어도_StaMPS_만으로_끝까지_돈다(tmp_path,
         assert (folder / f).exists(), f
 
 
+def test_기선과_감마가_결과md_에_올라간다(tmp_path, monkeypatch):
+    """값이 json 안에만 있으면 없는 것과 같다 — 문서에 보여야 한다."""
+    folder, d = make_bridge(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (folder / "결과.md").write_text("# 가상교" + chr(10), encoding="utf-8")
+
+    rec = rm.one(folder, args(stamps_root=str(d.parent)))
+    md = (folder / "결과.md").read_text(encoding="utf-8")
+    assert "## 기선망과 시간결맞음" in md
+    assert "수직기선 B⊥" in md and "γ 중앙값" in md
+    assert "기선망 | 쌍" in md and "높이 모호성" in md
+    assert "γ 통과 점이 어디 있나" in md          # 값보다 자리가 중요하다
+    assert "StaMPS" in md                        # 어느 사슬로 나왔는지도 적는다
+    assert f"{rec['n_epochs']}시점" in md
+
+    # 두 번 돌려도 절이 하나뿐이어야 한다(덧붙지 않는다).
+    rm.one(folder, args(stamps_root=str(d.parent)))
+    md2 = (folder / "결과.md").read_text(encoding="utf-8")
+    assert md2.count("## 기선망과 시간결맞음") == 1
+
+
 def test_StaMPS_가_깨졌으면_이유를_남기고_건너뛴다(tmp_path, monkeypatch):
     """조용히 SNAP 으로 되돌아가면 어느 자료로 나온 값인지 알 수 없게 된다."""
     from scipy.io import savemat

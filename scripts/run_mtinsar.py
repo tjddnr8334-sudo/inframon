@@ -48,6 +48,7 @@ from inframon.insar.atmo import resolve_temperature                   # noqa: E4
 from inframon.insar.residual_height import collect_bperp              # noqa: E402
 from insar_series import dec_year                                     # noqa: E402
 from kaia_theme import MPL, use_mpl_style                             # noqa: E402
+import write_mtinsar_section                                         # noqa: E402
 from make_deck_vs_ground import (                                     # noqa: E402
     annual_z, dist_to_polyline, dmon, peak_month, to_local,
 )
@@ -258,6 +259,8 @@ def one(folder: Path, a) -> dict | None:
         or (after_ps is not None and abs(after_ps) >= 1.5))
     # SARPROZ 가 내는 표와 같은 꼴 — 시점별 기선, 점별 변수.
     write_products(folder, rec, tab, temp, out, dist)
+    # json 에만 두면 없는 것과 같다 — 기선과 γ 를 결과.md 에도 올린다.
+    write_mtinsar_section.update_md(folder, rec)
     baseline_figure(folder, rec, tab, net, temp)
     figure(folder, rec, t, los, out, near, far, dist)
     (folder / "mtinsar.json").write_text(
