@@ -1,0 +1,125 @@
+<graph id="snap_stamps_pair">
+  <version>1.0</version>
+  <!--
+    마스터·슬레이브 한 쌍을 StaMPS 형식으로 내보낸다 (10_snap_export.sh 가 쌍마다 부른다).
+
+    한 번에 스택 전체를 올리지 않는 이유: IW 전체를 다 물리면 중간 산출이 수십 GB 가
+    되어 흔한 장비에서 멎는다. 쌍마다 돌리면 느리지만 끝까지 간다.
+
+    TopoPhaseRemoval 에 outputElevation/outputLatLon 을 켜 두는 것이 중요하다 —
+    StampsExport 가 geo/ 와 dem/ 을 채우는 데 그 밴드를 쓴다. 이게 빠지면 mt_prep_snap
+    이 조용히 좌표 없는 결과를 낸다.
+  -->
+  <node id="Read-Master">
+    <operator>Read</operator>
+    <parameters><file>${master}</file></parameters>
+  </node>
+  <node id="Read-Slave">
+    <operator>Read</operator>
+    <parameters><file>${slave}</file></parameters>
+  </node>
+
+  <node id="Split-Master">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-Master"/></sources>
+    <parameters>
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>${pol}</selectedPolarisations>
+    </parameters>
+  </node>
+  <node id="Split-Slave">
+    <operator>TOPSAR-Split</operator>
+    <sources><sourceProduct refid="Read-Slave"/></sources>
+    <parameters>
+      <subswath>${subswath}</subswath>
+      <selectedPolarisations>${pol}</selectedPolarisations>
+    </parameters>
+  </node>
+
+  <node id="Orbit-Master">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-Master"/></sources>
+    <parameters>
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <polyDegree>3</polyDegree>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+  <node id="Orbit-Slave">
+    <operator>Apply-Orbit-File</operator>
+    <sources><sourceProduct refid="Split-Slave"/></sources>
+    <parameters>
+      <orbitType>Sentinel Precise (Auto Download)</orbitType>
+      <polyDegree>3</polyDegree>
+      <continueOnFail>true</continueOnFail>
+    </parameters>
+  </node>
+
+  <node id="Back-Geocoding">
+    <operator>Back-Geocoding</operator>
+    <sources>
+      <sourceProduct refid="Orbit-Master"/>
+      <sourceProduct.1 refid="Orbit-Slave"/>
+    </sources>
+    <parameters>
+      <demName>SRTM 1Sec HGT</demName>
+      <demResamplingMethod>BICUBIC_INTERPOLATION</demResamplingMethod>
+      <resamplingType>BISINC_5_POINT_INTERPOLATION</resamplingType>
+      <maskOutAreaWithoutElevation>false</maskOutAreaWithoutElevation>
+      <outputDerampDemodPhase>true</outputDerampDemodPhase>
+    </parameters>
+  </node>
+
+  <node id="ESD">
+    <operator>Enhanced-Spectral-Diversity</operator>
+    <sources><sourceProduct refid="Back-Geocoding"/></sources>
+    <parameters>
+      <fineWinWidthStr>512</fineWinWidthStr>
+      <fineWinHeightStr>512</fineWinHeightStr>
+      <esdEstimator>Periodogram</esdEstimator>
+    </parameters>
+  </node>
+
+  <node id="Interferogram">
+    <operator>Interferogram</operator>
+    <sources><sourceProduct refid="ESD"/></sources>
+    <parameters>
+      <subtractFlatEarthPhase>true</subtractFlatEarthPhase>
+      <srpPolynomialDegree>5</srpPolynomialDegree>
+      <srpNumberPoints>501</srpNumberPoints>
+      <!-- StaMPS 는 PS 를 단일 화소로 본다 — 여기서 멀티룩하면 안 된다. -->
+      <includeCoherence>true</includeCoherence>
+      <cohWinAz>3</cohWinAz>
+      <cohWinRg>10</cohWinRg>
+      <squarePixel>false</squarePixel>
+      <subtractTopographicPhase>false</subtractTopographicPhase>
+    </parameters>
+  </node>
+
+  <node id="Deburst">
+    <operator>TOPSAR-Deburst</operator>
+    <sources><sourceProduct refid="Interferogram"/></sources>
+    <parameters><selectedPolarisations>${pol}</selectedPolarisations></parameters>
+  </node>
+
+  <node id="TopoPhaseRemoval">
+    <operator>TopoPhaseRemoval</operator>
+    <sources><sourceProduct refid="Deburst"/></sources>
+    <parameters>
+      <demName>SRTM 1Sec HGT</demName>
+      <tileExtensionPercent>100</tileExtensionPercent>
+      <outputTopoPhaseBand>true</outputTopoPhaseBand>
+      <outputElevationBand>true</outputElevationBand>
+      <outputLatLonBands>true</outputLatLonBands>
+    </parameters>
+  </node>
+
+  <node id="StampsExport">
+    <operator>StampsExport</operator>
+    <sources><sourceProduct refid="TopoPhaseRemoval"/></sources>
+    <parameters>
+      <targetFolder>${target}</targetFolder>
+      <psiFormat>true</psiFormat>
+    </parameters>
+  </node>
+</graph>

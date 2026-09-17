@@ -5,6 +5,9 @@
 데까지이고, 시계열 InSAR 가 그다음에 하는 일이 빠져 있다. 이 스크립트가 그 뒤를 잇는다.
 
   ① 수직기선 B⊥ 를 SNAP 처리폴더(`snaphu_<master>_<slave>/wrapped.dim`)에서 읽는다.
+     **StaMPS 처리폴더를 주면 거기서 읽는다** — `--stamps` / `--stamps-root`.
+     StaMPS 는 B⊥·입사각·슬랜트거리를 처리폴더에 이미 갖고 있어 SNAP 산출물이
+     없어도 된다. SARvey 가 논문으로 인용하기 마땅치 않아 갈아 끼울 길을 둔 것이다.
   ② 소기선 망을 유도해 연결성·중복도를 본다(star 망의 시간기선이 얼마나 벌어졌는지).
   ③ 점마다 `los = c + v·t + K·Δh` 를 **같이** 풀고 시간결맞음 γ 를 낸다.
   ④ γ 높은 점에서 APS 를 추정해(시간 고역통과 → 공간 저역통과) 전 점에서 뺀다.
@@ -15,6 +18,8 @@
 
     python scripts/run_mtinsar.py --only 가양대교 월드컵대교
     python scripts/run_mtinsar.py                      # 처리폴더가 있는 전 교량
+    python scripts/run_mtinsar.py --only 가양대교 --stamps /mnt/d/stamps/가양대교
+    python scripts/run_mtinsar.py --stamps-root /mnt/d/stamps    # 전 교량 StaMPS 로
 
 산출(교량마다): docs/bridges/<교량>/mtinsar.json · mtinsar.png
 전체 요약: docs/bridges/mtinsar_all.json
@@ -65,6 +70,42 @@ def load_track(folder: Path) -> dict | None:
                            for s in h["epochs"][()]]}
 
 
+def stamps_dir(folder: Path, b: dict, a) -> Path | None:
+    """이 교량의 StaMPS 처리폴더 — 준 것 · 루트 아래 이름 · bridge.json 순으로 본다."""
+    for cand in (a.stamps, (Path(a.stamps_root) / folder.name) if a.stamps_root
+                 else None, b.get("stamps")):
+        if cand and Path(cand).is_dir():
+            return Path(cand)
+    return None
+
+
+def load_stamps(d: Path, a) -> dict:
+    """StaMPS 처리폴더에서 `one()` 이 쓰는 입력을 그대로 만든다.
+
+    SNAP 경로가 `wrapped.dim` 에서 읽던 B⊥·슬랜트거리·입사각이 StaMPS 에는 처리폴더
+    안에 이미 있다. 그래서 SNAP 산출물이 없어도 MT-InSAR 를 돌릴 수 있다.
+    """
+    from inframon.insar.stamps_io import read_stamps
+
+    st = read_stamps(d)
+    bp = np.asarray(st.bperp_m, float)
+    src = dict(st.sources)
+    if bp.ndim == 2:
+        # 점별 B⊥ 는 한 교량(≲1 km) 안에서 차이가 무시할 만하다 — 시점 중앙값을 쓴다.
+        bp = np.nanmedian(bp, axis=0)
+        src["bperp"] += " → 시점별 중앙값으로 축약(교량 안에서는 차이가 없다)"
+    R = st.slant_range_m
+    if R is None:
+        R = float(a.slant_range)
+        src["slant_range"] = (f"ps2.mat 에 mean_range 가 없어 --slant-range 기본값 "
+                              f"{R:,.0f} m 를 썼다 — 잔차고도 Δh 가 그만큼 치우친다")
+    return {"tr": {"ll": st.lonlat, "los": st.los_mm, "coh": st.coherence,
+                   "inc": st.incidence_deg, "epochs": list(st.epochs)},
+            "bperp": bp, "R": float(R),
+            "inc": float(np.nanmedian(st.incidence_deg)),
+            "master": st.master or "", "sources": src}
+
+
 def deck_split(folder: Path, ll: np.ndarray):
     """교량 위(0~10 m) · 먼 맨땅(100~200 m) 마스크 — 채점에 쓴다."""
     dp = folder / "deck_polyline.json"
@@ -88,29 +129,48 @@ def phase_gap(t: np.ndarray, los: np.ndarray,
 
 
 def one(folder: Path, a) -> dict | None:
-    tr = load_track(folder)
     bj = folder / "bridge.json"
-    if tr is None or not bj.exists():
+    if not bj.exists():
         return None
     b = json.loads(bj.read_text(encoding="utf-8"))
-    proc, master = b.get("proc"), str(b.get("master") or "")
-    if not proc or not Path(proc).exists():
-        return {"name": folder.name,
-                "skipped": f"SNAP 처리폴더가 없다 — B⊥ 를 못 읽는다 ({proc})"}
-    bp = collect_bperp(proc, master)
-    if len(bp) < 5:
-        return {"name": folder.name, "skipped": f"B⊥ 쌍이 {len(bp)}개뿐이다"}
 
-    # 마스터 자신은 B⊥=0 · Bt=0 이다(쌍이 없다) — 목록에 채워 넣는다.
-    ep = tr["epochs"]
-    bperp = np.asarray([0.0 if e == master else bp.get(e, {}).get("bperp_m", np.nan)
-                        for e in ep], float)
-    ok = np.isfinite(bperp)
+    # ── 입력을 어디서 가져오나 — StaMPS 처리폴더가 있으면 그쪽, 없으면 SNAP ──
+    sd = stamps_dir(folder, b, a)
+    if sd is not None:
+        from inframon.insar.stamps_io import StampsError
+        try:
+            S = load_stamps(sd, a)
+        except StampsError as exc:
+            return {"name": folder.name, "skipped": f"StaMPS: {exc}"}
+        tr, bperp, R, inc = S["tr"], S["bperp"], S["R"], S["inc"]
+        master, ep = S["master"], tr["epochs"]
+        ok = np.isfinite(bperp)
+        origin = {"toolchain": "StaMPS", "dir": str(sd), **S["sources"]}
+    else:
+        tr = load_track(folder)
+        if tr is None:
+            return None
+        proc, master = b.get("proc"), str(b.get("master") or "")
+        if not proc or not Path(proc).exists():
+            return {"name": folder.name,
+                    "skipped": f"SNAP 처리폴더가 없다 — B⊥ 를 못 읽는다 ({proc}). "
+                               "StaMPS 로 돌리려면 --stamps 나 --stamps-root 를 준다"}
+        bp = collect_bperp(proc, master)
+        if len(bp) < 5:
+            return {"name": folder.name, "skipped": f"B⊥ 쌍이 {len(bp)}개뿐이다"}
+
+        # 마스터 자신은 B⊥=0 · Bt=0 이다(쌍이 없다) — 목록에 채워 넣는다.
+        ep = tr["epochs"]
+        bperp = np.asarray([0.0 if e == master else bp.get(e, {}).get("bperp_m", np.nan)
+                            for e in ep], float)
+        ok = np.isfinite(bperp)
+        any_pair = next(iter(bp.values()))
+        R = float(any_pair["slant_range_m"])
+        inc = float(np.nanmedian(tr["inc"])) or float(any_pair["incidence_deg"])
+        origin = {"toolchain": "SNAP", "dir": str(proc),
+                  "bperp": "snaphu_*/wrapped.dim"}
     if ok.sum() < 5:
         return {"name": folder.name, "skipped": "시점과 B⊥ 가 맞는 것이 5개 미만"}
-    any_pair = next(iter(bp.values()))
-    R = float(any_pair["slant_range_m"])
-    inc = float(np.nanmedian(tr["inc"])) or float(any_pair["incidence_deg"])
 
     t = np.asarray([dec_year(e) for e in ep], float)[ok]
     days = (t - t.min()) * 365.25
@@ -143,6 +203,7 @@ def one(folder: Path, a) -> dict | None:
     rec = {
         "name": folder.name, "n_points": out["n_points"], "n_epochs": int(ok.sum()),
         "master": master, "slant_range_m": round(R, 1), "incidence_deg": round(inc, 2),
+        "origin": origin,
         "bperp_min_m": round(float(bperp.min()), 1),
         "bperp_max_m": round(float(bperp.max()), 1),
         "bperp_std_m": round(float(bperp.std()), 1),
@@ -448,6 +509,13 @@ def main() -> int:
     ap.add_argument("--iters", type=int, default=2)
     ap.add_argument("--max-btemp", type=float, default=400.0)
     ap.add_argument("--max-bperp", type=float, default=150.0)
+    ap.add_argument("--stamps", default=None,
+                    help="StaMPS 처리폴더 하나(--only 로 교량 하나를 지정할 때)")
+    ap.add_argument("--stamps-root", default=None,
+                    help="교량 이름별 StaMPS 처리폴더가 있는 상위 폴더 "
+                         "(<root>/<교량이름>). 있으면 SNAP 대신 이것을 쓴다")
+    ap.add_argument("--slant-range", type=float, default=880_000.0,
+                    help="ps2.mat 에 mean_range 가 없을 때 쓸 슬랜트 거리[m]")
     ap.add_argument("--temperature-csv", default=None,
                     help="취득일 기온 CSV(date,temp_C) — 주면 네트워크를 안 쓴다")
     ap.add_argument("--no-fetch", action="store_true",
@@ -467,7 +535,8 @@ def main() -> int:
         if r.get("skipped"):
             print(f"{d.name:<12} 건너뜀 — {r['skipped']}")
             continue
-        print(f"{d.name:<12} γ중앙 {r['gamma_median']:.2f} · {r['n_kept']:>5}/"
+        tag = "S" if r.get("origin", {}).get("toolchain") == "StaMPS" else " "
+        print(f"{d.name:<12}{tag}γ중앙 {r['gamma_median']:.2f} · {r['n_kept']:>5}/"
               f"{r['n_points']}점 · σΔh {r['sigma_dh_median_m']:>4.0f} m · "
               f"APS {r['aps_rms_mm']:>5.1f} mm · 잔차 {r['resid_rms_before_mm']:.1f}"
               f"→{r['resid_rms_after_mm']:.1f} mm | 위상차 "
@@ -482,6 +551,8 @@ def main() -> int:
     summary_figure(rows, Path(a.summary))
     Path(a.json_out).write_text(json.dumps(
         {"_설명": "MT-InSAR 네 가지 적용 결과 — ADI·기선망·점별 DEM 오차·APS",
+         "_출처": "origin.toolchain 이 SNAP 이면 snaphu_*/wrapped.dim 에서 B⊥ 를 읽은 "
+                "것이고, StaMPS 면 처리폴더의 ps2/bp2/la2 를 읽은 것이다",
          "_채점": "교량 위(0~10 m)와 먼 맨땅(100~200 m)의 연주기 위상차가 1.5개월 "
                 "이상 갈라지면 교면 신호가 살아난 것으로 본다",
          "bridges": rows}, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -1,5 +1,10 @@
 """InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 감지·프로비저닝 안내 — 프로그램 관리.
 
+StaMPS 는 **선택 도구**로 같이 본다. SARvey 가 논문으로 인용하기 마땅치 않아
+갈아 끼울 길이 필요하지만(Hooper 2004·2007), StaMPS 는 MATLAB 기반이라 conda 로
+못 깔고 라이선스도 따로다. 없다고 F코어를 미준비로 판정하면 SARvey 로 잘 돌리는
+사람까지 막히므로, **필수에서 빼고 있으면 알려 주기만** 한다.
+
 바이너리 자체는 파이썬 패키지에 담을 수 없다(각 수 GB·ISCE2 컴파일·시스템 라이브러리).
 대신 inframon 이 **도구 존재를 감지**하고, 없으면 리포에 저장된 **재현가능 레시피**(conda
 `scripts/wsl_sarvey/00_setup_env.sh` 또는 컨테이너 `scripts/wsl_sarvey/Dockerfile`)로 구축하도록
@@ -34,6 +39,17 @@ def _conda_probe() -> str:
     return "{ " + alts + "; } 2>/dev/null"
 
 
+def _stamps_probe() -> str:
+    """StaMPS 는 MATLAB 코드다 — 환경변수 $STAMPS 또는 mt_prep_* 실행파일로 찾는다."""
+    alts = " || ".join((
+        "ls $STAMPS/matlab/ps_load_initial_gamma.m",
+        "ls $STAMPS/bin/mt_prep_snap",
+        "command -v mt_prep_snap",
+        "command -v mt_prep_gamma",
+    ))
+    return "{ " + alts + "; } 2>/dev/null && echo stamps"
+
+
 def _env_probe(env: str, marker: str, *modules: str) -> str:
     """<env> 환경에서 modules 중 하나라도 import 되면 marker 를 출력(발견)."""
     alts = " || ".join(f"{c} run -n {env} python -c 'import {m}'"
@@ -41,17 +57,22 @@ def _env_probe(env: str, marker: str, *modules: str) -> str:
     return "{ " + alts + f"; }} 2>/dev/null && echo {marker}"
 
 
-# (키, 사람이름, 감지 셸명령) — 변수/루프 없이 self-contained. 발견 시 표식(버전/이름) 출력.
-PROBES: list[tuple[str, str, str]] = [
-    ("conda", "conda/mamba (환경관리자)", _conda_probe()),
-    ("isce2", "ISCE2 (스택·코레지스트레이션)", _env_probe("isce2", "isce", "isce")),
+# (키, 사람이름, 감지 셸명령, 필수인가) — 변수/루프 없이 self-contained.
+# 발견 시 표식(버전/이름) 출력. 필수가 아닌 것은 없어도 ready 를 막지 않는다.
+PROBES: list[tuple[str, str, str, bool]] = [
+    ("conda", "conda/mamba (환경관리자)", _conda_probe(), True),
+    ("isce2", "ISCE2 (스택·코레지스트레이션)", _env_probe("isce2", "isce", "isce"), True),
     ("miaplpy", "MiaplPy/MintPy (위상연결)",
-     _env_probe("miaplpy", "miaplpy", "miaplpy", "mintpy")),
-    ("sarvey", "SARvey (MTI 시계열)", _env_probe("sarvey", "sarvey", "sarvey")),
+     _env_probe("miaplpy", "miaplpy", "miaplpy", "mintpy"), True),
+    ("sarvey", "SARvey (MTI 시계열)", _env_probe("sarvey", "sarvey", "sarvey"), True),
+    ("stamps", "StaMPS (PS/SBAS 시계열 · MATLAB · 선택)", _stamps_probe(), False),
 ]
+
+REQUIRED_KEYS: tuple[str, ...] = tuple(k for k, _, _, req in PROBES if req)
 
 SETUP_CONDA = "bash scripts/wsl_sarvey/00_setup_env.sh"
 SETUP_CONTAINER = "docker build -t inframon-insar -f scripts/wsl_sarvey/Dockerfile ."
+SETUP_STAMPS = "scripts/wsl_stamps/README.md  (MATLAB 필요 — conda 로 못 깐다)"
 
 
 @dataclass
@@ -85,22 +106,28 @@ def default_runner(cmd: str) -> tuple[int, str]:
 def check_toolchain(runner=default_runner) -> dict:
     """F코어 도구 4종을 감지해 준비상태·부족분·프로비저닝 명령을 돌려준다."""
     statuses: list[ToolStatus] = []
-    for key, label, probe in PROBES:
+    for key, label, probe, _req in PROBES:
         rc, out = runner(probe)
         found = rc == 0 and bool(out.strip())
         # 표식은 항상 마지막 줄(발견 echo) — import 시 라이브러리가 찍는 배너는 버린다.
         detail = out.strip().splitlines()[-1][:120] if out.strip() else ""
         statuses.append(ToolStatus(key, label, found, detail))
-    missing = [s.key for s in statuses if not s.found]
+    # StaMPS 처럼 선택인 도구는 ready 를 막지 않는다 — 없으면 알려만 준다.
+    missing = [s.key for s in statuses if not s.found and s.key in REQUIRED_KEYS]
+    optional_missing = [s.key for s in statuses
+                        if not s.found and s.key not in REQUIRED_KEYS]
     ready = not missing
     return {
         "ready": ready,
-        "tools": [{"key": s.key, "label": s.label, "found": s.found, "detail": s.detail}
+        "tools": [{"key": s.key, "label": s.label, "found": s.found,
+                   "detail": s.detail, "required": s.key in REQUIRED_KEYS}
                   for s in statuses],
         "missing": missing,
+        "optional_missing": optional_missing,
         "provision": None if ready else {
             "conda": SETUP_CONDA,
             "container": SETUP_CONTAINER,
+            "stamps": SETUP_STAMPS,
             "note": "도구 바이너리는 리포에 담기 불가(수 GB·컴파일). 위 레시피로 1회 구축하면 "
                     "이후 재사용된다. 컨테이너 정의(Dockerfile)는 리포에 버전 저장됨.",
         },
@@ -208,10 +235,13 @@ def format_report(status: dict) -> str:
     """check_toolchain 결과를 사람이 읽는 리포트 문자열로."""
     lines = ["=" * 56, "  InSAR F코어 처리도구 상태 (ISCE2/MiaplPy/SARvey)", "=" * 56]
     for t in status["tools"]:
-        mark = "✅" if t["found"] else "❌"
+        mark = "✅" if t["found"] else ("❌" if t.get("required", True) else "–")
         lines.append(f"  {mark} {t['label']}"
                      + (f"  [{t['detail']}]" if t["found"] and t["detail"] else ""))
     lines.append("-" * 56)
+    if status.get("optional_missing"):
+        lines.append(f"  선택(없어도 됨): {status['optional_missing']} — "
+                     f"{SETUP_STAMPS}")
     if status["ready"]:
         lines.append("  준비 완료 — WSL2 F코어 실행 가능")
     else:
