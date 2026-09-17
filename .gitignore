@@ -75,4 +75,6 @@ out/
 docs/bridges/*.zip
 
 # 참고용으로 받아 둔 남의 발표자료 — 250 MB 라 리포에 넣지 않는다(GitHub 100 MB 제한)
-docs/2026 KAIA 자문회의 ppt_v2.pptx
+# KAIA 자문회의 원본 자료(제3자·수백 MB) — 판마다 새 이름으로 들어와서
+# v2 만 막아 두면 v11 같은 새 판이 그대로 딸려 들어간다. 이름 전체를 막는다.
+docs/2026 KAIA 자문회의*.pptx
