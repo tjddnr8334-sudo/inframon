@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Track A (StaMPS PS-InSAR) MATLAB .mat → inframon Track H5.
 
+⚠ **대개는 `scripts/wsl_stamps/40_to_inframon.py` 를 쓰는 편이 낫다.**
+이 파일은 `ps_plot` 으로 **따로 내보낸** .mat 하나만 받는데, 그 내보내기에는
+**수직기선 B⊥ 와 입사각이 없다.** 그 둘이 있어야 점별 잔차고도 Δh 와 열팽창을 같이
+풀 수 있어서(`scripts/run_mtinsar.py`), 없으면 MT-InSAR 의 절반을 못 한다.
+`inframon.insar.stamps_io.read_stamps()` 는 StaMPS **처리폴더**(ps2/phuw2/bp2/la2/
+pm2/hgt2/parms)를 직접 읽어 셋 다 가져온다. 이 파일은 처리폴더가 없고 내보낸 .mat
+만 남은 옛 자료를 위해 남겨 둔다.
+
 StaMPS `ps_plot('v-do','ts')` 등이 내보내는 .mat 에는 보통:
   - lonlat : [N,2] (lon,lat)        점 좌표
   - ph_mm  : [N,M] (mm)             LOS 변위 시계열 (PS 점별)

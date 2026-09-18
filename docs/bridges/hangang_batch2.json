@@ -1,0 +1,38 @@
+[
+ {
+  "name": "성산대교",
+  "lat": 37.552057,
+  "lon": 126.891156,
+  "track": "F:/SLC/seoul_work/track_성산대교.h5",
+  "proc": "F:/SLC/seoul_work/성산대교",
+  "master": "20220330",
+  "out": "docs/bridges/성산대교"
+ },
+ {
+  "name": "원효대교",
+  "lat": 37.526808,
+  "lon": 126.945404,
+  "track": "F:/SLC/seoul_work/track_원효대교.h5",
+  "proc": "F:/SLC/seoul_work/원효대교",
+  "master": "20220330",
+  "out": "docs/bridges/원효대교"
+ },
+ {
+  "name": "청담대교",
+  "lat": 37.525609,
+  "lon": 127.063966,
+  "track": "F:/SLC/seoul_work/track_청담대교.h5",
+  "proc": "F:/SLC/seoul_work/청담대교",
+  "master": "20220330",
+  "out": "docs/bridges/청담대교"
+ },
+ {
+  "name": "가양대교",
+  "lat": 37.569588,
+  "lon": 126.861186,
+  "track": "F:/SLC/seoul_work/track_가양대교.h5",
+  "proc": "F:/SLC/seoul_work/가양대교",
+  "master": "20220330",
+  "out": "docs/bridges/가양대교"
+ }
+]

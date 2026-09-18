@@ -1,0 +1,38 @@
+[
+ {
+  "name": "월드컵대교",
+  "lat": 37.556493,
+  "lon": 126.885528,
+  "track": "F:/SLC/seoul_work/track_월드컵대교.h5",
+  "proc": "F:/SLC/seoul_work/월드컵대교",
+  "master": "20220330",
+  "out": "docs/bridges/월드컵대교"
+ },
+ {
+  "name": "서강대교",
+  "lat": 37.540105,
+  "lon": 126.927044,
+  "track": "F:/SLC/seoul_work/track_서강대교.h5",
+  "proc": "F:/SLC/seoul_work/서강대교",
+  "master": "20220330",
+  "out": "docs/bridges/서강대교"
+ },
+ {
+  "name": "영동대교",
+  "lat": 37.531106,
+  "lon": 127.057747,
+  "track": "F:/SLC/seoul_work/track_영동대교.h5",
+  "proc": "F:/SLC/seoul_work/영동대교",
+  "master": "20220330",
+  "out": "docs/bridges/영동대교"
+ },
+ {
+  "name": "행주대교",
+  "lat": 37.597965,
+  "lon": 126.80983,
+  "track": "F:/SLC/seoul_work/track_행주대교.h5",
+  "proc": "F:/SLC/seoul_work/행주대교",
+  "master": "20220330",
+  "out": "docs/bridges/행주대교"
+ }
+]

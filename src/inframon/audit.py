@@ -81,6 +81,8 @@ class ArtifactAudit:
     stress_abs_max_pa: float | None = None  # |응력| 최대[Pa]
     # ④ CRI
     cri_worst: float | None = None
+    cri_provisional: bool = False            # CRI 판정이 학습 regime 밖이라 잠정인가
+    cri_regime_note: str = ""                # 어떻게 다른가(노이즈·기간·에폭)
     # ⑤ 재현
     has_run_record: bool = False
     record_note: str = ""
@@ -122,6 +124,9 @@ def audit_artifact(path: str | Path, *, target: tuple[float, float] | None = Non
             a.los_abs_max = float(np.abs(v).max()) if v.size else None
             if "fram" in f:
                 a.cri_worst = _worst_cri(f)
+                ref = _json_attr(f["fram"], "reference_range")
+                a.cri_provisional = bool(ref.get("provisional"))
+                a.cri_regime_note = str(ref.get("regime_mismatch") or "")
             if "pinn" in f:
                 inp = _json_attr(f["pinn"], "inputs")
                 a.pinn_span_m = _num(inp.get("total_length_m") or inp.get("span_m"))
@@ -307,6 +312,12 @@ def _judge(a: ArtifactAudit) -> None:
     elif a.span_ratio is not None and a.span_ratio > SPAN_RATIO_MAX:
         hard.append(f"PINN 경간 {a.pinn_span_m:.0f}m 가 실연장 "
                     f"{a.official_length_m:.0f}m 의 {a.span_ratio:.1f}배")
+    # ④ CRI 판정이 기준치 학습 조건 밖이면 등급을 그대로 읽으면 안 된다. 정상범위 밴드는
+    # 폭이 좁아(정상 0.641 · 위험 0.809) 노이즈가 조금만 달라도 분포가 통째로 밀린다 —
+    # 실측 SHM 이 '관리기준 이내'라고 한 한강 교량들이 노이즈 14~24mm 로 '위험'이 됐다.
+    if a.cri_provisional:
+        soft.append(f"CRI 등급은 **잠정** — 관측조건이 기준치 학습 조건과 다르다"
+                    f"({a.cri_regime_note}). 등급을 구조 상태로 읽으면 안 된다")
     if a.target is None:
         soft.append("대상 좌표 미지정 — 교량 포함 여부 미확인")
     if not a.has_run_record:

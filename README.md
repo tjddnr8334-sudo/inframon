@@ -60,6 +60,7 @@ python start.py --full --tools --dashboard                  # 4. 전부 설치 �
 | 실 교량 시연 44초 (명령줄) | `.venv\Scripts\python scripts\demo_4pm.py` |
 | 실 교량·트윈용 패키지까지 | `python start.py --full` |
 | 새 교량 명령 한 줄 | `.venv\Scripts\python scripts\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
+| 이미 받아 둔 SLC 아카이브로 여러 교량 | `.venv\Scripts\python scripts\bridges_from_archive.py --slc-dir E:\SLC\서울-인천 --bridges docs\bridges\seoul.json --out E:\SLC\work --every 2 --workers 6 --unwrap` — 다운로드 없이 `.SAFE`·zip 을 그 자리에서 읽어 교량별 Track H5 |
 | SNAP·snaphu·Earthdata 토큰·SLC 폴더 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기, SLC 폴더는 드라이브 고르기 (토큰만: `.venv\Scripts\python -m inframon --earthdata-save <토큰>`) |
 | 이 PC 에 뭐가 없나 | `.venv\Scripts\python -m inframon --doctor` |
 | 다른 사람에게 넘길 때 | 주소 한 줄 + `.venv\Scripts\python scripts\pack_handoff.py` 가 만든 zip (파트너 CSV·처리 결과 h5, ~25 MB). 받는 쪽 `--unpack` |

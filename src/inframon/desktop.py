@@ -100,7 +100,15 @@ def run_app() -> int:
     try:
         import webview  # pywebview
     except ImportError:
-        print("데스크톱 창에는 pywebview 가 필요합니다: `pip install pywebview`", file=sys.stderr)
+        # 그냥 `pip install pywebview` 라고만 적으면 PATH 에 먼저 잡히는 **시스템 pip** 이
+        # 돌아 가상환경 밖에 깔린다. 그러면 여기서 또 못 찾고, 쓰는 사람은 "분명 깔았는데"
+        # 가 된다. 지금 돌고 있는 해석기를 그대로 박아서 보여 준다.
+        exe = sys.executable
+        print("데스크톱 창에는 pywebview 가 필요합니다. 지금 이 파이썬에 설치하세요:\n"
+              f'  "{exe}" -m pip install pywebview\n'
+              "\n브라우저로 바로 보려면(설치 없이):\n"
+              f'  "{exe}" -m streamlit run "{_dashboard_path()}"',
+              file=sys.stderr)
         return 1
 
     if not _dashboard_path().exists():
