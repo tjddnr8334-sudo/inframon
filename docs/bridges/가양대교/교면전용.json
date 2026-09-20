@@ -8,7 +8,7 @@
  "n_ground": 1601,
  "n_epochs": 51,
  "span": [
-  "20220330",
+  "20180619",
   "20251227"
  ],
  "velocity_mm_yr": 0.03,
@@ -114,5 +114,12 @@
    77,
    0.49710891405483343
   ]
- ]
+ ],
+ "gnss_sensors": [
+  "처짐(경사계)"
+ ],
+ "gnss_amp_mm": 22.59,
+ "gnss_peak_month": 0.98,
+ "phase_diff_months": -3.13,
+ "same_seasonal_behaviour": false
 }

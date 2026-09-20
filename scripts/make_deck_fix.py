@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`docs/bridges` 전 교량을 **교면 전용**으로 다시 뽑고, GNSS 대조까지 붙인다.
+"""`docs/bridges` 전 교량을 **교면 전용**으로 다시 뽑는다.
 
 지금까지의 교량별 산출물은 '교량 중심선에서 ±30 m' 로 점을 골랐다. 교량 폭이
 11~35 m 인데 ±30 m 는 60 m 폭이라 강변 지반이 통째로 딸려 들어왔고, 그래서 계절
@@ -14,8 +14,9 @@
   ③ 100~400 m 밖 점들의 시점별 중앙값(지반·대기 공통성분)을 뺀다.
   ④ 직선(속도)·연주기를 달력 시간축으로 맞추고, 점 붓스트랩으로 95% 구간을 낸다.
 
-그리고 보고서 GNSS 가 있는 교량은 같은 그림에 겹쳐 그린다 — 맞는지 안 맞는지를
-교량 폴더 안에서 바로 볼 수 있어야 한다.
+보고서 계측은 겹쳐 그리지 않는다. 지금 값으로는 대조가 아무것도 주장하지 못해
+결과물 전반에서 걷어냈는데(`strip_gnss_from_bridges.py`), 여기서 다시 그리면 이
+스크립트를 돌릴 때마다 되살아난다.
 
     python scripts/make_deck_fix.py              # 전 교량
     python scripts/make_deck_fix.py --only 가양대교 월드컵대교
@@ -47,7 +48,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from inframon.insar.geolocation import los_ground_unit                 # noqa: E402
 from kaia_theme import MPL, use_mpl_style                              # noqa: E402
 from make_deck_only_gnss import (                                      # noqa: E402
-    gnss_series, mean_cycle, monthly_cycle, z1,
+    gnss_series, monthly_cycle, z1,
 )
 from make_deck_vs_ground import (                                      # noqa: E402
     dist_to_polyline, dmon, peak_month, to_local,
@@ -85,6 +86,13 @@ def pick(folder: Path) -> dict | None:
         coh = np.asarray(h["coh"][()], float)
         ep = [s.decode() if isinstance(s, bytes) else str(s)
               for s in h["epochs"][()]]
+    # **시점 목록은 시간순이 아니다** — 마스터가 맨 앞에 오고 그 뒤에 나머지가 온다.
+    # 그대로 그리면 첫 선분이 마스터(가운데 어딘가)에서 가장 이른 시점으로 거꾸로
+    # 그어져, 시작점과 가운데점을 잇는 가짜 선이 생긴다. 최소제곱·조화적합은 순서를
+    # 타지 않아 숫자는 멀쩡했지만, 그림은 틀렸다. 읽자마자 세워 둔다.
+    order = np.argsort(ep)
+    ep = [ep[i] for i in order]
+    los = los[:, order]
     poly = np.asarray(json.loads(dp.read_text(encoding="utf-8"))["geometry"], float)
     if poly.shape[0] < 2:
         return None
@@ -190,17 +198,10 @@ def per_bridge_figure(r: dict, g: list, out: Path) -> None:
     ax.plot(mo, ins / a1, "-o", ms=4, lw=2.0, color=MPL["blue"], label="InSAR 교면")
     ttl = (f"연주기 {r['annual_amp_mm']:.1f} mm · 최대 {r['annual_peak_month']:.1f}월 "
            f"(±{r['annual_peak_ci95_months']:.1f})")
-    if g:
-        gm = mean_cycle(g)
-        a2 = np.nanmax(np.abs(gm)) or 1.0
-        ax.plot(mo, gm / a2, "-o", ms=4, lw=2.0, color=MPL["red"], label="현장 계측")
-        zg = np.mean([z1(tt, vv) for _, tt, vv in g])
-        d = dmon(r["annual_peak_month"], peak_month(zg))
-        ttl += f"\n계측 최대 {peak_month(zg):.1f}월 → 어긋남 {d:+.1f}개월"
-        col = MPL["green"] if abs(d) <= 1.5 else MPL["red"]
-    else:
-        ttl += "\n보고서 GNSS 없음"
-        col = MPL["gray"]
+    # 계측 곡선은 겹치지 않는다 — 지금 값으로는 대조가 아무것도 주장하지 못해
+    # 결과물 전반에서 걷어냈다(strip_gnss_from_bridges.py). 여기서 다시 그리면
+    # 이 스크립트를 돌릴 때마다 되살아난다.
+    col = MPL["ink"]
     ax.axhline(0, color=MPL["rule"], lw=1)
     ax.set_xticks([1, 4, 7, 10])
     ax.set_xticklabels(["1월", "4월", "7월", "10월"], fontsize=9)
@@ -209,7 +210,7 @@ def per_bridge_figure(r: dict, g: list, out: Path) -> None:
     ax.legend(fontsize=8.4, loc="lower left", framealpha=.9)
     ax.set_title(ttl, fontsize=10, color=col, pad=6)
 
-    fig.suptitle(f"{r['name']} — 교면 전용 재선별과 GNSS 대조",
+    fig.suptitle(f"{r['name']} — 교면 전용 재선별",
                  fontsize=14, fontweight="bold", color=MPL["ink"], y=0.985)
     fig.text(0.006, 0.012,
              "※ 회랑을 ±30 m 에서 ±폭/2 로 좁히고, 코히런스로 지오로케이션 밀림을 되돌리고, "
@@ -242,17 +243,8 @@ def update_md(folder: Path, r: dict, g: list) -> None:
         f"| 연주기 | 진폭 {r['annual_amp_mm']:.1f} ± {r['annual_amp_ci95_mm']:.1f} mm ·"
         f" 최대 {r['annual_peak_month']:.1f}월 ± {r['annual_peak_ci95_months']:.1f} |",
     ]
-    if g:
-        zg = np.mean([z1(tt, vv) for _, tt, vv in g])
-        d = dmon(r["annual_peak_month"], peak_month(zg))
-        lines += [
-            f"| 보고서 GNSS | 진폭 {abs(zg):.1f} mm · 최대 {peak_month(zg):.1f}월"
-            f" (센서 {len(g)}개) |",
-            f"| **대조** | 연주기 위상 **{d:+.1f}개월** 어긋남 —"
-            f" {'같은 계절 거동' if abs(d) <= 1.5 else '같은 거동으로 보기 어렵다'} |",
-        ]
-    else:
-        lines += ["| 보고서 GNSS | 없음 — 대조 불가 |"]
+    # 보고서 GNSS 대조 행은 쓰지 않는다 — 결과물 전반에서 걷어낸 것이라
+    # 여기서 다시 쓰면 이 스크립트를 돌릴 때마다 되살아난다.
     lines += ["", "![교면전용](교면전용.png)", ""]
     block = "\n".join(lines)
 

@@ -173,6 +173,13 @@ def one(folder: Path, a) -> dict | None:
     if ok.sum() < 5:
         return {"name": folder.name, "skipped": "시점과 B⊥ 가 맞는 것이 5개 미만"}
 
+    # 시점 목록은 시간순이 아니다(마스터가 맨 앞). 그림에서 첫 선분이 거꾸로 그어지고
+    # 기선 표도 뒤죽박죽이 된다. 적합은 순서를 안 타지만 보기에 틀리므로 세워 둔다.
+    order = np.argsort(ep)
+    ep = [ep[i] for i in order]
+    bperp, ok = bperp[order], ok[order]
+    tr = {**tr, "los": tr["los"][:, order]}
+
     t = np.asarray([dec_year(e) for e in ep], float)[ok]
     days = (t - t.min()) * 365.25
     los = tr["los"][:, ok]

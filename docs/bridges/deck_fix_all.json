@@ -12,7 +12,7 @@
    "n_ground": 1601,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 0.03,
@@ -118,7 +118,14 @@
      77,
      0.49710891405483343
     ]
-   ]
+   ],
+   "gnss_sensors": [
+    "처짐(경사계)"
+   ],
+   "gnss_amp_mm": 22.59,
+   "gnss_peak_month": 0.98,
+   "phase_diff_months": -3.13,
+   "same_seasonal_behaviour": false
   },
   {
    "name": "샛강문화다리",
@@ -130,7 +137,7 @@
    "n_ground": 202,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -0.42,
@@ -236,7 +243,16 @@
      13,
      0.43846102402760434
     ]
-   ]
+   ],
+   "gnss_sensors": [
+    "P1_U",
+    "1_2_U",
+    "P2_U"
+   ],
+   "gnss_amp_mm": 5.83,
+   "gnss_peak_month": 0.85,
+   "phase_diff_months": 3.01,
+   "same_seasonal_behaviour": false
   },
   {
    "name": "서강대교",
@@ -248,7 +264,7 @@
    "n_ground": 606,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 0.45,
@@ -366,7 +382,7 @@
    "n_ground": 321,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -2.37,
@@ -484,7 +500,7 @@
    "n_ground": 213,
    "n_epochs": 101,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 1.12,
@@ -602,7 +618,7 @@
    "n_ground": 457,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 0.3,
@@ -720,7 +736,7 @@
    "n_ground": 416,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -0.89,
@@ -838,7 +854,7 @@
    "n_ground": 181,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -0.2,
@@ -956,7 +972,7 @@
    "n_ground": 467,
    "n_epochs": 101,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -0.48,
@@ -1062,7 +1078,14 @@
      42,
      0.5806370356253215
     ]
-   ]
+   ],
+   "gnss_sensors": [
+    "처짐(레이저)"
+   ],
+   "gnss_amp_mm": 8.34,
+   "gnss_peak_month": 1.44,
+   "phase_diff_months": -5.6,
+   "same_seasonal_behaviour": false
   },
   {
    "name": "원효대교",
@@ -1074,7 +1097,7 @@
    "n_ground": 601,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -1.32,
@@ -1180,7 +1203,14 @@
      19,
      0.520274524625979
     ]
-   ]
+   ],
+   "gnss_sensors": [
+    "처짐(경사계)"
+   ],
+   "gnss_amp_mm": 16.52,
+   "gnss_peak_month": 10.86,
+   "phase_diff_months": 1.26,
+   "same_seasonal_behaviour": true
   },
   {
    "name": "월드컵대교",
@@ -1192,7 +1222,7 @@
    "n_ground": 257,
    "n_epochs": 29,
    "span": [
-    "20220330",
+    "20210907",
     "20251227"
    ],
    "velocity_mm_yr": -4.41,
@@ -1298,7 +1328,16 @@
      48,
      0.6939489835252365
     ]
-   ]
+   ],
+   "gnss_sensors": [
+    "GP_S1M_01_Z",
+    "GP_T1T_01_Z",
+    "GP_S2M_01_Z"
+   ],
+   "gnss_amp_mm": 7.7,
+   "gnss_peak_month": 7.98,
+   "phase_diff_months": 5.81,
+   "same_seasonal_behaviour": false
   },
   {
    "name": "잠수교",
@@ -1310,7 +1349,7 @@
    "n_ground": 42,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -1.91,
@@ -1530,7 +1569,7 @@
    "n_ground": 473,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": -0.13,
@@ -1852,7 +1891,7 @@
    "n_ground": 52,
    "n_epochs": 101,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 0.1,
@@ -1970,7 +2009,7 @@
    "n_ground": 438,
    "n_epochs": 51,
    "span": [
-    "20220330",
+    "20180619",
     "20251227"
    ],
    "velocity_mm_yr": 0.09,

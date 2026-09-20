@@ -8,7 +8,7 @@
  "n_ground": 202,
  "n_epochs": 51,
  "span": [
-  "20220330",
+  "20180619",
   "20251227"
  ],
  "velocity_mm_yr": -0.42,
@@ -114,5 +114,14 @@
    13,
    0.43846102402760434
   ]
- ]
+ ],
+ "gnss_sensors": [
+  "P1_U",
+  "1_2_U",
+  "P2_U"
+ ],
+ "gnss_amp_mm": 5.83,
+ "gnss_peak_month": 0.85,
+ "phase_diff_months": 3.01,
+ "same_seasonal_behaviour": false
 }
