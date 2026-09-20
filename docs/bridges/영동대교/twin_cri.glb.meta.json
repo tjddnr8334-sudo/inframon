@@ -1,0 +1,110 @@
+{
+ "schema": "inframon.gltf.meta/1.0",
+ "glb": "twin_cri.glb",
+ "n_points": 10,
+ "value_channel": "cri",
+ "legend": {
+  "kind": "cri",
+  "vmin": 0.0,
+  "vmax": 1.0,
+  "units": "CRI(무차원)"
+ },
+ "georef": {
+  "origin_lon": 127.0592126873657,
+  "origin_lat": 37.53323936753524,
+  "origin_height_m": 0.0,
+  "projection": "EPSG:5186",
+  "frame": "ENU_meters",
+  "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
+  "z_source": "ifc_element_top",
+  "z_detail": "ifc_element_top · 지면 4m · z 13~13m (IFC 부재 상단 + 원점 표고 4m)",
+  "ground_m": 4.0,
+  "deck_z_median_m": 12.8
+ },
+ "binding": {
+  "key": "element_globalid",
+  "note": "IFC 4.3 부재 GlobalId 외래키. --bim-align 이 채우면 시계열↔부재 영구결합"
+ },
+ "features": [
+  {
+   "index": 0,
+   "point_id": 0,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.5764143501771948,
+   "lon": 127.05556552731218,
+   "lat": 37.52688827847651
+  },
+  {
+   "index": 1,
+   "point_id": 1,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.675793952743849,
+   "lon": 127.05556552731218,
+   "lat": 37.52676251433674
+  },
+  {
+   "index": 2,
+   "point_id": 2,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.6495760757812348,
+   "lon": 127.05569129145195,
+   "lat": 37.52701404261629
+  },
+  {
+   "index": 3,
+   "point_id": 3,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.564280748280837,
+   "lon": 127.05933845150548,
+   "lat": 37.5334280137449
+  },
+  {
+   "index": 4,
+   "point_id": 4,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.6049256550562416,
+   "lon": 127.05569129145195,
+   "lat": 37.52713980675607
+  },
+  {
+   "index": 5,
+   "point_id": 5,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.5167455264597887,
+   "lon": 127.05933845150548,
+   "lat": 37.53330224960513
+  },
+  {
+   "index": 6,
+   "point_id": 6,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.6094190301011532,
+   "lon": 127.0592126873657,
+   "lat": 37.53330224960513
+  },
+  {
+   "index": 7,
+   "point_id": 7,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.6303464993229693,
+   "lon": 127.0592126873657,
+   "lat": 37.53317648546535
+  },
+  {
+   "index": 8,
+   "point_id": 8,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.5827473809717596,
+   "lon": 127.05946421564526,
+   "lat": 37.53393107030401
+  },
+  {
+   "index": 9,
+   "point_id": 9,
+   "element_globalid": "2FZRCD07P$WPNUFCXWC_Q4",
+   "value": 0.5982798644811098,
+   "lon": 127.05933845150548,
+   "lat": 37.53355377788468
+  }
+ ]
+}

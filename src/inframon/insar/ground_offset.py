@@ -55,26 +55,21 @@ class GroundOffset:
 
 
 def fetch_roads(lat: float, lon: float, radius_m: float = 500.0, *, cache: Path | None = None,
-                retries: int = 3) -> list[list[tuple[float, float]]]:
-    """OSM 차도(교량 제외) 폴리라인 [[(lat,lon),...],...]. 캐시가 있으면 그것."""
+                retries: int = 5) -> list[list[tuple[float, float]]]:
+    """OSM 차도(교량 제외) 폴리라인 [[(lat,lon),...],...]. 캐시가 있으면 그것.
+
+    재시도는 `_overpass_query` 한 곳에만 둔다 — 그쪽이 이미 미러를 돌려 가며 백오프한다.
+    여기서 한 번 더 감쌌더니 3회 × 7회 × 120초, 교량 하나에 30분을 서 있었다. 겹친
+    재시도는 대기시간이 곱해지고, 서버에는 같은 질의를 21번 던지는 꼴이다.
+    """
     if cache and Path(cache).exists():
         d = json.loads(Path(cache).read_text(encoding="utf-8"))
         return [[tuple(p) for p in r] for r in d["roads"]]
-    import time
 
     from .osm_bridge import _overpass_query
-    q = (f'[out:json][timeout:90];way(around:{radius_m:.0f},{lat},{lon})'
+    q = (f'[out:json][timeout:60];way(around:{radius_m:.0f},{lat},{lon})'
          f'["highway"~"^({ROAD_TAGS})$"]["bridge"!~"."];out geom;')
-    last: Exception | None = None
-    for i in range(retries):
-        try:
-            els = _overpass_query(q, timeout=120)["elements"]
-            break
-        except Exception as e:                   # noqa: BLE001 — Overpass 는 자주 504 다
-            last = e
-            time.sleep(8 * (i + 1))
-    else:
-        raise RuntimeError(f"Overpass 실패 {retries}회: {last}")
+    els = _overpass_query(q, timeout=60, retries=retries)["elements"]
     roads = [[(g["lat"], g["lon"]) for g in e.get("geometry", []) if "lat" in g] for e in els]
     roads = [r for r in roads if len(r) >= 2]
     if cache:

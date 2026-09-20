@@ -1,0 +1,895 @@
+{
+ "_설명": "교량 직각거리 구간별 연주기 — 교면 점과 맨땅이 구별되는지",
+ "_판정": "|교량 위 − 맨땅| < 1.5개월이면 구별 안 됨 = 그 점들은 지반이다",
+ "_시간축": "date_labels 의 달력 날짜(dec_year). insar/dates 는 첫 촬영일 기준 경과일이라 그대로 쓰면 위상이 밀린다",
+ "bridges": [
+  {
+   "name": "가양대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1305.0,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 71,
+     "peak_month": 9.03,
+     "amp_mm": 4.96,
+     "phase_R": 0.593
+    },
+    {
+     "band_m": "10~25",
+     "n": 95,
+     "peak_month": 9.22,
+     "amp_mm": 3.78,
+     "phase_R": 0.41
+    },
+    {
+     "band_m": "25~50",
+     "n": 119,
+     "peak_month": 9.78,
+     "amp_mm": 2.85,
+     "phase_R": 0.344
+    },
+    {
+     "band_m": "50~100",
+     "n": 163,
+     "peak_month": 9.18,
+     "amp_mm": 2.97,
+     "phase_R": 0.34
+    },
+    {
+     "band_m": "100~200",
+     "n": 490,
+     "peak_month": 9.21,
+     "amp_mm": 2.87,
+     "phase_R": 0.456
+    },
+    {
+     "band_m": "200~400",
+     "n": 1111,
+     "peak_month": 8.2,
+     "amp_mm": 2.02,
+     "phase_R": 0.37
+    }
+   ],
+   "near_minus_far_months": -0.18
+  },
+  {
+   "name": "샛강문화다리",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 348.9,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 20,
+     "peak_month": 9.31,
+     "amp_mm": 4.54,
+     "phase_R": 0.785
+    },
+    {
+     "band_m": "10~25",
+     "n": 27,
+     "peak_month": 9.72,
+     "amp_mm": 5.1,
+     "phase_R": 0.847
+    },
+    {
+     "band_m": "25~50",
+     "n": 42,
+     "peak_month": 10.02,
+     "amp_mm": 5.82,
+     "phase_R": 0.868
+    },
+    {
+     "band_m": "50~100",
+     "n": 125,
+     "peak_month": 9.75,
+     "amp_mm": 5.98,
+     "phase_R": 0.848
+    },
+    {
+     "band_m": "100~200",
+     "n": 146,
+     "peak_month": 9.69,
+     "amp_mm": 6.51,
+     "phase_R": 0.881
+    },
+    {
+     "band_m": "200~400",
+     "n": 56,
+     "peak_month": 8.72,
+     "amp_mm": 7.95,
+     "phase_R": 0.943
+    }
+   ],
+   "near_minus_far_months": -0.38
+  },
+  {
+   "name": "서강대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1794.4,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 5
+    },
+    {
+     "band_m": "10~25",
+     "n": 18,
+     "peak_month": 7.89,
+     "amp_mm": 2.28,
+     "phase_R": 0.079
+    },
+    {
+     "band_m": "25~50",
+     "n": 56,
+     "peak_month": 10.34,
+     "amp_mm": 0.72,
+     "phase_R": 0.213
+    },
+    {
+     "band_m": "50~100",
+     "n": 99,
+     "peak_month": 2.18,
+     "amp_mm": 0.21,
+     "phase_R": 0.305
+    },
+    {
+     "band_m": "100~200",
+     "n": 209,
+     "peak_month": 2.31,
+     "amp_mm": 0.42,
+     "phase_R": 0.235
+    },
+    {
+     "band_m": "200~400",
+     "n": 397,
+     "peak_month": 2.24,
+     "amp_mm": 0.16,
+     "phase_R": 0.128
+    }
+   ]
+  },
+  {
+   "name": "성산대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1074.5,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 8,
+     "peak_month": 2.47,
+     "amp_mm": 3.59,
+     "phase_R": 0.619
+    },
+    {
+     "band_m": "10~25",
+     "n": 26,
+     "peak_month": 1.94,
+     "amp_mm": 6.45,
+     "phase_R": 0.794
+    },
+    {
+     "band_m": "25~50",
+     "n": 50,
+     "peak_month": 1.98,
+     "amp_mm": 6.98,
+     "phase_R": 0.767
+    },
+    {
+     "band_m": "50~100",
+     "n": 14,
+     "peak_month": 2.76,
+     "amp_mm": 5.76,
+     "phase_R": 0.618
+    },
+    {
+     "band_m": "100~200",
+     "n": 70,
+     "peak_month": 1.6,
+     "amp_mm": 3.38,
+     "phase_R": 0.107
+    },
+    {
+     "band_m": "200~400",
+     "n": 251,
+     "peak_month": 2.35,
+     "amp_mm": 2.4,
+     "phase_R": 0.151
+    }
+   ],
+   "near_minus_far_months": 0.87
+  },
+  {
+   "name": "성수대교",
+   "n_epochs": 101,
+   "first_epoch": "20220330",
+   "deck_len_m": 1157.0,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 26,
+     "peak_month": 7.22,
+     "amp_mm": 1.84,
+     "phase_R": 0.671
+    },
+    {
+     "band_m": "10~25",
+     "n": 27,
+     "peak_month": 7.06,
+     "amp_mm": 2.61,
+     "phase_R": 0.805
+    },
+    {
+     "band_m": "25~50",
+     "n": 57,
+     "peak_month": 6.52,
+     "amp_mm": 2.01,
+     "phase_R": 0.646
+    },
+    {
+     "band_m": "50~100",
+     "n": 35,
+     "peak_month": 6.04,
+     "amp_mm": 2.11,
+     "phase_R": 0.616
+    },
+    {
+     "band_m": "100~200",
+     "n": 81,
+     "peak_month": 6.87,
+     "amp_mm": 3.74,
+     "phase_R": 0.655
+    },
+    {
+     "band_m": "200~400",
+     "n": 132,
+     "peak_month": 7.07,
+     "amp_mm": 3.44,
+     "phase_R": 0.764
+    }
+   ],
+   "near_minus_far_months": 0.35
+  },
+  {
+   "name": "암사대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1199.2,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 55,
+     "peak_month": 1.58,
+     "amp_mm": 4.92,
+     "phase_R": 0.805
+    },
+    {
+     "band_m": "10~25",
+     "n": 85,
+     "peak_month": 1.61,
+     "amp_mm": 5.39,
+     "phase_R": 0.897
+    },
+    {
+     "band_m": "25~50",
+     "n": 148,
+     "peak_month": 1.67,
+     "amp_mm": 5.54,
+     "phase_R": 0.927
+    },
+    {
+     "band_m": "50~100",
+     "n": 157,
+     "peak_month": 1.65,
+     "amp_mm": 6.56,
+     "phase_R": 0.831
+    },
+    {
+     "band_m": "100~200",
+     "n": 220,
+     "peak_month": 1.99,
+     "amp_mm": 8.05,
+     "phase_R": 0.942
+    },
+    {
+     "band_m": "200~400",
+     "n": 237,
+     "peak_month": 2.08,
+     "amp_mm": 7.78,
+     "phase_R": 0.922
+    }
+   ],
+   "near_minus_far_months": -0.41
+  },
+  {
+   "name": "양화대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1491.8,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 24,
+     "peak_month": 1.09,
+     "amp_mm": 3.63,
+     "phase_R": 0.451
+    },
+    {
+     "band_m": "10~25",
+     "n": 25,
+     "peak_month": 1.29,
+     "amp_mm": 4.74,
+     "phase_R": 0.629
+    },
+    {
+     "band_m": "25~50",
+     "n": 22,
+     "peak_month": 1.32,
+     "amp_mm": 3.95,
+     "phase_R": 0.55
+    },
+    {
+     "band_m": "50~100",
+     "n": 57,
+     "peak_month": 9.23,
+     "amp_mm": 1.46,
+     "phase_R": 0.237
+    },
+    {
+     "band_m": "100~200",
+     "n": 110,
+     "peak_month": 8.08,
+     "amp_mm": 2.82,
+     "phase_R": 0.707
+    },
+    {
+     "band_m": "200~400",
+     "n": 306,
+     "peak_month": 0.83,
+     "amp_mm": 2.34,
+     "phase_R": 0.249
+    }
+   ],
+   "near_minus_far_months": 5.01
+  },
+  {
+   "name": "영동대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 982.9,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 16,
+     "peak_month": 8.49,
+     "amp_mm": 2.54,
+     "phase_R": 0.195
+    },
+    {
+     "band_m": "10~25",
+     "n": 31,
+     "peak_month": 7.98,
+     "amp_mm": 3.54,
+     "phase_R": 0.088
+    },
+    {
+     "band_m": "25~50",
+     "n": 31,
+     "peak_month": 7.93,
+     "amp_mm": 5.22,
+     "phase_R": 0.233
+    },
+    {
+     "band_m": "50~100",
+     "n": 51,
+     "peak_month": 8.07,
+     "amp_mm": 3.13,
+     "phase_R": 0.297
+    },
+    {
+     "band_m": "100~200",
+     "n": 56,
+     "peak_month": 1.99,
+     "amp_mm": 4.57,
+     "phase_R": 0.835
+    },
+    {
+     "band_m": "200~400",
+     "n": 125,
+     "peak_month": 1.85,
+     "amp_mm": 4.0,
+     "phase_R": 0.847
+    }
+   ],
+   "near_minus_far_months": -5.5
+  },
+  {
+   "name": "올림픽대교",
+   "n_epochs": 101,
+   "first_epoch": "20220330",
+   "deck_len_m": 1670.8,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 12,
+     "peak_month": 2.91,
+     "amp_mm": 0.96,
+     "phase_R": 0.39
+    },
+    {
+     "band_m": "10~25",
+     "n": 32,
+     "peak_month": 3.07,
+     "amp_mm": 1.26,
+     "phase_R": 0.32
+    },
+    {
+     "band_m": "25~50",
+     "n": 52,
+     "peak_month": 11.79,
+     "amp_mm": 0.29,
+     "phase_R": 0.091
+    },
+    {
+     "band_m": "50~100",
+     "n": 80,
+     "peak_month": 0.89,
+     "amp_mm": 1.27,
+     "phase_R": 0.281
+    },
+    {
+     "band_m": "100~200",
+     "n": 149,
+     "peak_month": 0.71,
+     "amp_mm": 1.6,
+     "phase_R": 0.392
+    },
+    {
+     "band_m": "200~400",
+     "n": 318,
+     "peak_month": 0.7,
+     "amp_mm": 2.72,
+     "phase_R": 0.514
+    }
+   ],
+   "near_minus_far_months": 2.2
+  },
+  {
+   "name": "원효대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 2212.9,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 19,
+     "peak_month": 1.05,
+     "amp_mm": 5.3,
+     "phase_R": 0.798
+    },
+    {
+     "band_m": "10~25",
+     "n": 24,
+     "peak_month": 0.91,
+     "amp_mm": 5.46,
+     "phase_R": 0.809
+    },
+    {
+     "band_m": "25~50",
+     "n": 58,
+     "peak_month": 0.93,
+     "amp_mm": 4.6,
+     "phase_R": 0.741
+    },
+    {
+     "band_m": "50~100",
+     "n": 178,
+     "peak_month": 0.78,
+     "amp_mm": 4.44,
+     "phase_R": 0.694
+    },
+    {
+     "band_m": "100~200",
+     "n": 195,
+     "peak_month": 1.68,
+     "amp_mm": 3.53,
+     "phase_R": 0.518
+    },
+    {
+     "band_m": "200~400",
+     "n": 406,
+     "peak_month": 2.09,
+     "amp_mm": 2.08,
+     "phase_R": 0.33
+    }
+   ],
+   "near_minus_far_months": -0.63
+  },
+  {
+   "name": "월드컵대교",
+   "n_epochs": 29,
+   "first_epoch": "20220330",
+   "deck_len_m": 1484.3,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 19,
+     "peak_month": 1.61,
+     "amp_mm": 10.05,
+     "phase_R": 0.936
+    },
+    {
+     "band_m": "10~25",
+     "n": 23,
+     "peak_month": 1.6,
+     "amp_mm": 9.7,
+     "phase_R": 0.891
+    },
+    {
+     "band_m": "25~50",
+     "n": 46,
+     "peak_month": 1.61,
+     "amp_mm": 8.96,
+     "phase_R": 0.884
+    },
+    {
+     "band_m": "50~100",
+     "n": 78,
+     "peak_month": 1.45,
+     "amp_mm": 5.05,
+     "phase_R": 0.466
+    },
+    {
+     "band_m": "100~200",
+     "n": 123,
+     "peak_month": 11.72,
+     "amp_mm": 1.53,
+     "phase_R": 0.172
+    },
+    {
+     "band_m": "200~400",
+     "n": 134,
+     "peak_month": 1.35,
+     "amp_mm": 4.7,
+     "phase_R": 0.227
+    }
+   ],
+   "near_minus_far_months": 1.89
+  },
+  {
+   "name": "잠수교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 956.2,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 32,
+     "peak_month": 12.3,
+     "amp_mm": 7.44,
+     "phase_R": 0.949
+    },
+    {
+     "band_m": "10~25",
+     "n": 37,
+     "peak_month": 12.23,
+     "amp_mm": 6.9,
+     "phase_R": 0.959
+    },
+    {
+     "band_m": "25~50",
+     "n": 0
+    },
+    {
+     "band_m": "50~100",
+     "n": 2
+    },
+    {
+     "band_m": "100~200",
+     "n": 18,
+     "peak_month": 12.48,
+     "amp_mm": 2.41,
+     "phase_R": 0.071
+    },
+    {
+     "band_m": "200~400",
+     "n": 24,
+     "peak_month": 3.98,
+     "amp_mm": 4.37,
+     "phase_R": 0.849
+    }
+   ],
+   "near_minus_far_months": -0.18
+  },
+  {
+   "name": "정자교",
+   "n_epochs": 201,
+   "first_epoch": "20170224",
+   "deck_len_m": 110.6,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 0
+    },
+    {
+     "band_m": "10~25",
+     "n": 9,
+     "peak_month": 6.83,
+     "amp_mm": 3.05,
+     "phase_R": 0.986
+    },
+    {
+     "band_m": "25~50",
+     "n": 3
+    },
+    {
+     "band_m": "50~100",
+     "n": 35,
+     "peak_month": 7.62,
+     "amp_mm": 2.57,
+     "phase_R": 0.891
+    },
+    {
+     "band_m": "100~200",
+     "n": 12,
+     "peak_month": 7.66,
+     "amp_mm": 2.05,
+     "phase_R": 0.951
+    },
+    {
+     "band_m": "200~400",
+     "n": 0
+    }
+   ]
+  },
+  {
+   "name": "천호대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1176.6,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 22,
+     "peak_month": 1.59,
+     "amp_mm": 3.96,
+     "phase_R": 0.784
+    },
+    {
+     "band_m": "10~25",
+     "n": 37,
+     "peak_month": 2.06,
+     "amp_mm": 2.73,
+     "phase_R": 0.673
+    },
+    {
+     "band_m": "25~50",
+     "n": 42,
+     "peak_month": 1.93,
+     "amp_mm": 2.83,
+     "phase_R": 0.676
+    },
+    {
+     "band_m": "50~100",
+     "n": 80,
+     "peak_month": 1.98,
+     "amp_mm": 3.17,
+     "phase_R": 0.816
+    },
+    {
+     "band_m": "100~200",
+     "n": 164,
+     "peak_month": 1.8,
+     "amp_mm": 2.08,
+     "phase_R": 0.544
+    },
+    {
+     "band_m": "200~400",
+     "n": 309,
+     "peak_month": 1.11,
+     "amp_mm": 2.55,
+     "phase_R": 0.554
+    }
+   ],
+   "near_minus_far_months": -0.21
+  },
+  {
+   "name": "청담대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 976.2,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 6,
+     "peak_month": 1.55,
+     "amp_mm": 5.45,
+     "phase_R": 0.808
+    },
+    {
+     "band_m": "10~25",
+     "n": 9,
+     "peak_month": 1.2,
+     "amp_mm": 5.62,
+     "phase_R": 0.677
+    },
+    {
+     "band_m": "25~50",
+     "n": 23,
+     "peak_month": 1.32,
+     "amp_mm": 2.92,
+     "phase_R": 0.412
+    },
+    {
+     "band_m": "50~100",
+     "n": 30,
+     "peak_month": 1.0,
+     "amp_mm": 3.97,
+     "phase_R": 0.465
+    },
+    {
+     "band_m": "100~200",
+     "n": 34,
+     "peak_month": 0.69,
+     "amp_mm": 7.35,
+     "phase_R": 0.959
+    },
+    {
+     "band_m": "200~400",
+     "n": 7,
+     "peak_month": 0.8,
+     "amp_mm": 6.66,
+     "phase_R": 0.972
+    }
+   ],
+   "near_minus_far_months": 0.86
+  },
+  {
+   "name": "청양교",
+   "n_epochs": 25,
+   "first_epoch": "20201217",
+   "deck_len_m": 80.9,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 10,
+     "peak_month": 10.02,
+     "amp_mm": 2.06,
+     "phase_R": 0.298
+    },
+    {
+     "band_m": "10~25",
+     "n": 26,
+     "peak_month": 9.48,
+     "amp_mm": 2.5,
+     "phase_R": 0.343
+    },
+    {
+     "band_m": "25~50",
+     "n": 12,
+     "peak_month": 9.46,
+     "amp_mm": 1.67,
+     "phase_R": 0.347
+    },
+    {
+     "band_m": "50~100",
+     "n": 0
+    },
+    {
+     "band_m": "100~200",
+     "n": 0
+    },
+    {
+     "band_m": "200~400",
+     "n": 0
+    }
+   ]
+  },
+  {
+   "name": "한강대교",
+   "n_epochs": 101,
+   "first_epoch": "20220330",
+   "deck_len_m": 999.4,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 18,
+     "peak_month": 6.83,
+     "amp_mm": 3.5,
+     "phase_R": 0.739
+    },
+    {
+     "band_m": "10~25",
+     "n": 20,
+     "peak_month": 6.9,
+     "amp_mm": 2.48,
+     "phase_R": 0.628
+    },
+    {
+     "band_m": "25~50",
+     "n": 31,
+     "peak_month": 6.6,
+     "amp_mm": 1.85,
+     "phase_R": 0.392
+    },
+    {
+     "band_m": "50~100",
+     "n": 44,
+     "peak_month": 6.74,
+     "amp_mm": 4.89,
+     "phase_R": 0.688
+    },
+    {
+     "band_m": "100~200",
+     "n": 32,
+     "peak_month": 7.57,
+     "amp_mm": 2.18,
+     "phase_R": 0.342
+    },
+    {
+     "band_m": "200~400",
+     "n": 20,
+     "peak_month": 4.42,
+     "amp_mm": 3.19,
+     "phase_R": 0.646
+    }
+   ],
+   "near_minus_far_months": -0.74
+  },
+  {
+   "name": "행주대교",
+   "n_epochs": 51,
+   "first_epoch": "20220330",
+   "deck_len_m": 1012.1,
+   "bands": [
+    {
+     "band_m": "0~10",
+     "n": 21,
+     "peak_month": 1.89,
+     "amp_mm": 9.11,
+     "phase_R": 0.905
+    },
+    {
+     "band_m": "10~25",
+     "n": 44,
+     "peak_month": 1.82,
+     "amp_mm": 8.34,
+     "phase_R": 0.757
+    },
+    {
+     "band_m": "25~50",
+     "n": 71,
+     "peak_month": 1.49,
+     "amp_mm": 11.09,
+     "phase_R": 0.816
+    },
+    {
+     "band_m": "50~100",
+     "n": 74,
+     "peak_month": 1.5,
+     "amp_mm": 8.29,
+     "phase_R": 0.824
+    },
+    {
+     "band_m": "100~200",
+     "n": 150,
+     "peak_month": 1.4,
+     "amp_mm": 8.83,
+     "phase_R": 0.629
+    },
+    {
+     "band_m": "200~400",
+     "n": 288,
+     "peak_month": 1.07,
+     "amp_mm": 9.18,
+     "phase_R": 0.789
+    }
+   ],
+   "near_minus_far_months": 0.49
+  }
+ ]
+}

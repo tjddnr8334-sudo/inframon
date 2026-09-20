@@ -17,6 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# 기본 조회 기간. 두 곳(②④ 프레임 조회·⑧ 취득)에 따로 박혀 있어 사용자가 기간을
+# 늘릴 방법이 없었다 — 장면 수를 늘리려면 기간부터 늘어야 한다. 한 곳에 둔다.
+SEARCH_START, SEARCH_END = "2024-01-01", "2025-07-01"
+
 
 @dataclass
 class StageResult:
@@ -113,6 +117,7 @@ def run_bridge_pipeline(
     registry: str | Path | None = None, bridge_id: str | None = None,
     twin_value: str = "cri", engine: str = "snap",
     engine_source: str | Path | None = None, bridge_name: str | None = None,
+    start: str = SEARCH_START, end: str = SEARCH_END,
 ) -> PipelineReport:
     """정규 순서로 교량 파이프라인 실행/계획. mode: 'plan'(경량만)|'full'(전체 실행).
 
@@ -134,7 +139,8 @@ def run_bridge_pipeline(
     rep = PipelineReport(lat=lat, lon=lon)
     ctx = rep.context
 
-    _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name)
+    _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name,
+                  snap_count=snap_count, start=start, end=end)
 
     # ⑧⑨⑫⑬⑭ 중량 단계 — plan 이면 계획, full 이면 실행
     _twin_how = ("export_insar_gltf + write_3dtiles_tileset"
@@ -159,7 +165,7 @@ def run_bridge_pipeline(
             _run_heavy(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
                        ifc=ifc, bim_elements=bim_elements, registry=registry,
                        bridge_id=bridge_id, twin_value=twin_value,
-                       engine=engine, engine_source=engine_source)
+                       engine=engine, engine_source=engine_source, start=start, end=end)
         else:
             for step, how in heavy:
                 rep.add(StageResult(step, "planned", f"mode=full 시 실행: {how}"))
@@ -171,6 +177,7 @@ def run_bridge_pipeline(
                 "mode": mode, "engine": engine,
                 "engine_source": str(engine_source) if engine_source else None,
                 "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
+                "start": start, "end": end,
                 "ifc": str(ifc) if ifc else None,
                 "bim_elements": str(bim_elements) if bim_elements else None,
                 "registry": str(registry) if registry else None,
@@ -300,7 +307,8 @@ def _stage_bridge(rep, ctx, lat, lon, out, bridge_name: str | None = None):
         ctx["bridge"] = {**b_dict, "name": name, "source": "osm"}
         warn = ""
         if official is not None and want_len and b_dict.get("length_m"):
-            from .insar.osm_bridge import name_matches, Bridge as _B
+            from .insar.osm_bridge import Bridge as _B
+            from .insar.osm_bridge import name_matches
             _fake = _B("way", 0, b_dict.get("name") or "", None, b_dict.get("tags") or {}, [], (0, 0, 0, 0))
             if (abs(b_dict["length_m"] - want_len) > 0.25 * want_len
                     and not name_matches(_fake, want_name)):
@@ -333,7 +341,9 @@ def _stage_bridge(rep, ctx, lat, lon, out, bridge_name: str | None = None):
     return None
 
 
-def _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name: str | None = None) -> None:
+def _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name: str | None = None,
+                  *, snap_count: int = 8, start: str = SEARCH_START,
+                  end: str = SEARCH_END) -> None:
     """경량 단계 — ①교량선정 ③ROI ②④SLC·트랙 ⑤⑥⑦(계획) ⑪교량메타. 네트워크 조회만, 수 초.
 
     ⓪ 전체 실행(plan/full)과 대시보드 ① InSAR 탭의 단계 실행이 같은 코드를 쓴다.
@@ -359,14 +369,16 @@ def _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name: str | None = 
     # ②④ SLC/트랙 조회 → 최적 프레임 선정
     try:
         from .insar.snap_acquire import search_frames
-        cands = search_frames(lat, lon, start="2024-01-01", end="2025-07-01")
+        cands = search_frames(lat, lon, start=start, end=end)
         top = cands[0] if cands else None
         ctx["frames"] = [c.label() for c in cands[:4]]
         if top:
             ctx["frame"] = {"label": top.label(), "n_scenes": top.n_scenes,
                             "centrality_km": round(top.centrality_km, 1)}
+            _use = min(int(snap_count), top.n_scenes)
             rep.add(StageResult("②④SLC·트랙·프레임", "done",
-                                f"{top.label()} · {top.n_scenes}장 · 중심성 {top.centrality_km:+.1f}km"))
+                                f"{top.label()} · {top.n_scenes}장 중 {_use}장 사용"
+                                f"({start}~{end}) · 중심성 {top.centrality_km:+.1f}km"))
         else:
             rep.add(StageResult("②④SLC·트랙·프레임", "partial", "교량 커버 트랙 없음"))
     except Exception as e:  # noqa: BLE001
@@ -524,6 +536,7 @@ def _twin_and_register(rep, ctx, lat, lon, out, *, ifc, bim_elements, registry,
 
 
 def _stage_insar(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
+                 start=SEARCH_START, end=SEARCH_END,
                  engine="snap", engine_source=None):
     """⑧ InSAR 처리 → ⑨ 교량 데크 PS/DS. 성공하면 하류에 넘길 deck h5 경로, ⑧ 실패면 None.
 
@@ -531,15 +544,20 @@ def _stage_insar(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
     stamps). 하류가 보는 계약은 Track H5 경로 하나라, 엔진이 바뀌어도 ⑨ 이후는 같다.
     """
     from .insar import processing_engine as pe
-    from .insar.snap_backend import (amplitude_pairs, build_bridge_track_ps_ds,
-                                     platform_heading, scene_date)
+    from .insar.snap_backend import (
+        amplitude_pairs,
+        build_bridge_track_ps_ds,
+        platform_heading,
+        scene_date,
+    )
     _label = f"⑧InSAR처리({engine})"
     try:
         # ①에서 확인된 연장을 넘겨 가져오기형이 교량 범위로 자를 수 있게 한다 —
         # 없으면 광역 PSI 필드가 그대로 하류(PINN·CRI)로 흘러 지반을 교량으로 계산한다.
         _blen = (ctx.get("bridge") or {}).get("length_m")
         eres = pe.run(engine, lat, lon, out, out / "track.h5", token=token,
-                      count=snap_count, source=engine_source, bridge_length_m=_blen)
+                      count=snap_count, source=engine_source, bridge_length_m=_blen,
+                      start=start, end=end)
     except Exception as e:  # noqa: BLE001
         rep.add(StageResult(_label, "error", str(e)[:120]))
         # 뒤 단계를 조용히 빠뜨리면 "왜 트윈이 없지?" 가 된다 — 사유와 함께 명시 보고.
@@ -690,14 +708,15 @@ def _stage_life(rep, ctx, proj):
 
 def _run_heavy(rep, ctx, lat, lon, out, token, snap_count, do_adi=False, *,
                ifc=None, bim_elements=None, registry=None, bridge_id=None,
-               twin_value="cri", engine="snap", engine_source=None):
+               twin_value="cri", engine="snap", engine_source=None,
+               start=SEARCH_START, end=SEARCH_END):
     """중량 단계 전부(mode='full') — ⑧처리→⑨PS/DS→⑩인제스트→⑫PINN·FRAM→⑬⑭트윈·등록.
 
     각 단계는 위의 _stage_* 하나씩이다. 대시보드 ①~④ 탭은 같은 함수를 한 단계씩 부른다
     (run_bridge_stage). 실패는 단계별 보고하고 뒤 단계는 사유와 함께 skip.
     """
     deck_h5 = _stage_insar(rep, ctx, lat, lon, out, token, snap_count, do_adi,
-                           engine=engine, engine_source=engine_source)
+                           engine=engine, engine_source=engine_source, start=start, end=end)
     if deck_h5 is None:
         return
     proj = _stage_import(rep, ctx, out, deck_h5)
@@ -738,7 +757,7 @@ def run_bridge_stage(
     ifc: str | Path | None = None, bim_elements: str | Path | None = None,
     registry: str | Path | None = None, bridge_id: str | None = None,
     twin_value: str = "cri", roi_sizes=(1.0, 2.0, 3.0, 5.0, 7.0, 10.0),
-    bridge_name: str | None = None,
+    bridge_name: str | None = None, start: str = SEARCH_START, end: str = SEARCH_END,
 ) -> PipelineReport:
     """한 단계만 실행 — 대시보드 ① InSAR · ② PINN · ③ FRAM · ④ 잔존수명 · 트윈 탭의 '▶ 이 단계 실행'.
 
@@ -766,9 +785,11 @@ def run_bridge_stage(
 
     try:
         if stage == "insar":
-            _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name)
+            _light_stages(rep, ctx, lat, lon, out, roi_sizes, bridge_name=bridge_name,
+                          snap_count=snap_count, start=start, end=end)
             deck_h5 = _stage_insar(rep, ctx, lat, lon, out, earthdata_token, snap_count, do_adi,
-                                   engine=engine, engine_source=engine_source)
+                                   engine=engine, engine_source=engine_source,
+                                   start=start, end=end)
             if deck_h5 is not None:
                 _stage_import(rep, ctx, out, deck_h5)
         elif stage == "pinn":
@@ -801,6 +822,7 @@ def run_bridge_stage(
                 "stage": stage, "engine": engine,
                 "engine_source": str(engine_source) if engine_source else None,
                 "out_dir": str(out), "snap_count": snap_count, "do_adi": do_adi,
+                "start": start, "end": end,
                 "ifc": str(ifc) if ifc else None})
         except OSError as e:
             rep.add(StageResult("실행기록", "error", f"pipeline_report_{stage}.json 기록 실패: {e}"))

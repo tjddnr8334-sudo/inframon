@@ -1,0 +1,11 @@
+[
+ {"name": "성수대교",  "lat": 37.537353, "lon": 127.035055,
+  "track": "F:/SLC/seoul_work/track_성수대교.h5",  "proc": "F:/SLC/seoul_work/성수대교",
+  "master": "20220330", "out": "docs/bridges/성수대교"},
+ {"name": "한강대교",  "lat": 37.517823, "lon": 126.959030,
+  "track": "F:/SLC/seoul_work/track_한강대교.h5",  "proc": "F:/SLC/seoul_work/한강대교",
+  "master": "20220330", "out": "docs/bridges/한강대교"},
+ {"name": "올림픽대교", "lat": 37.533715, "lon": 127.104319,
+  "track": "F:/SLC/seoul_work/track_올림픽대교.h5", "proc": "F:/SLC/seoul_work/올림픽대교",
+  "master": "20220330", "out": "docs/bridges/올림픽대교"}
+]

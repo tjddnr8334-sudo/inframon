@@ -1,0 +1,29 @@
+{
+ "name": "가양대교",
+ "n_deck_ps": 12,
+ "gamma_used": 0.25,
+ "offset_m": 5,
+ "half_m": 17.0,
+ "coh_mean": 0.56,
+ "gamma_median_deck": 0.276,
+ "n_epochs": 51,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": 0.46,
+ "elements": 61,
+ "points": 12,
+ "bound": 12,
+ "cri": 0.7985382661255778,
+ "warning": "경고",
+ "notes": [
+  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "OSM 어느 way 도 연장 1700 m 와 안 맞음 (토막난 way) → 표준데이터 시점–종점 선분 사용",
+  "⚠ '교면 위' 점이 지면보다 유의하게 **낮다**(z<−2) — 교면 산란체가 아닐 수 있다(제방·교대 주변 지면). 평면 선택을 다시 볼 것"
+ ],
+ "cri_point_median": 0.128,
+ "cri_point_max": 0.22,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.802,
+ "velocity_median_mm_yr": 0.53,
+ "n_points": 12,
+ "EI_median": 7142347231551.119
+}

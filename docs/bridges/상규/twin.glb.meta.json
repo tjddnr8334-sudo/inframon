@@ -19,7 +19,7 @@
   "z_source": "ifc_element_top",
   "z_detail": "ifc_element_top · 지면 163m · z 174~174m (IFC 부재 상단 + 원점 표고 163m)",
   "ground_m": 163.0,
-  "deck_z_median_m": 173.97
+  "deck_z_median_m": 173.55
  },
  "binding": {
   "key": "element_globalid",

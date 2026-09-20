@@ -91,6 +91,7 @@ def create_app(registry: BridgeRegistry, *, to_crs: str = WGS84,
             "wgs84_center": list(e.wgs84_center) if e.wgs84_center else None,
             "last_run_utc": e.last_run_utc,
             "warning_level": None, "cri_global_max": None, "has_insar": False,
+            "warning_provisional": False,
         }
         if not e.project_h5.exists():
             return brief
@@ -103,6 +104,8 @@ def create_app(registry: BridgeRegistry, *, to_crs: str = WGS84,
                 brief["cri_global_max"] = summ["cri_global_max"]
                 if summ["warning"]:
                     brief["warning_level"] = summ["warning"]["level"]
+                    brief["warning_provisional"] = bool(
+                        summ["warning"].get("provisional"))
         except (OSError, ContractViolation, ResultNotFound):
             pass  # 목록은 한 교량 실패로 전체가 죽지 않게 관대하게.
         return brief

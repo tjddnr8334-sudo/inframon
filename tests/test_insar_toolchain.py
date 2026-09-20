@@ -5,6 +5,8 @@ from __future__ import annotations
 from inframon.insar import toolchain
 from inframon.insar.toolchain import (
     PROBES,
+    REQUIRED_KEYS,
+    SETUP_STAMPS,
     SETUP_CONDA,
     SETUP_CONTAINER,
     WSL_INSTALL_CMD,
@@ -28,7 +30,7 @@ def test_all_found_ready():
 def test_none_found_provision_guidance():
     status = check_toolchain(runner=lambda cmd: (127, ""))
     assert status["ready"] is False
-    assert set(status["missing"]) == {p[0] for p in PROBES}
+    assert set(status["missing"]) == set(REQUIRED_KEYS)
     pv = status["provision"]
     assert pv["conda"] == SETUP_CONDA
     assert pv["container"] == SETUP_CONTAINER
@@ -53,7 +55,7 @@ def test_empty_stdout_counts_as_missing():
     # rc=0 이지만 출력이 비면(명령은 성공했으나 도구 없음) 미발견 처리
     status = check_toolchain(runner=lambda cmd: (0, "  "))
     assert status["ready"] is False
-    assert set(status["missing"]) == {p[0] for p in PROBES}
+    assert set(status["missing"]) == set(REQUIRED_KEYS)
 
 
 def test_format_report_marks():
@@ -136,3 +138,44 @@ def test_provision_reports_setup_failure(monkeypatch):
     monkeypatch.setattr(toolchain.subprocess, "Popen", lambda *a, **k: _FakePopen(1))
     r = provision_toolchain(runner=lambda cmd: (0, "found"), stream=lambda s: None)
     assert r["ok"] is False and "00_setup_env.sh" in r["error"]
+
+
+# ── StaMPS 는 선택 도구 — 없다고 F코어를 미준비로 판정하면 안 된다 ──
+def test_stamps_는_필수가_아니다():
+    """SARvey 가 논문 인용이 마땅치 않아 갈아 끼울 길로 둔 것이지, 없으면 못 도는 게
+    아니다. MATLAB 기반이라 conda 로 깔 수도 없다."""
+    assert "stamps" not in REQUIRED_KEYS
+    assert "stamps" in {p[0] for p in PROBES}
+
+
+def test_stamps_만_없으면_준비완료다():
+    def runner(cmd):
+        return (1, "") if "$STAMPS" in cmd else (0, "found")
+    st = check_toolchain(runner=runner)
+    assert st["ready"] is True                    # 선택 도구는 ready 를 막지 않는다
+    assert st["missing"] == []
+    assert st["optional_missing"] == ["stamps"]
+    assert st["provision"] is None
+
+
+def test_stamps_만_있고_필수가_없으면_미준비다():
+    def runner(cmd):
+        return (0, "stamps") if "$STAMPS" in cmd else (1, "")
+    st = check_toolchain(runner=runner)
+    assert st["ready"] is False
+    assert set(st["missing"]) == set(REQUIRED_KEYS)
+    assert st["optional_missing"] == []
+    assert st["provision"]["stamps"] == SETUP_STAMPS
+
+
+def test_stamps_프로브는_환경변수와_실행파일을_본다():
+    probe = next(p[2] for p in PROBES if p[0] == "stamps")
+    assert "$STAMPS" in probe and "mt_prep_snap" in probe
+
+
+def test_리포트는_선택_도구를_실패로_표시하지_않는다():
+    def runner(cmd):
+        return (1, "") if "$STAMPS" in cmd else (0, "found")
+    text = format_report(check_toolchain(runner=runner))
+    assert "준비 완료" in text
+    assert "선택(없어도 됨)" in text and "stamps" in text

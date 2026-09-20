@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import zipfile
 from pathlib import Path
 
 _CONFIG_FILE = Path.home() / ".inframon" / "config.json"
@@ -100,6 +101,44 @@ def scan(root: str | Path | None = None) -> list[Path]:
     return sorted(Path(root).rglob(_SLC_GLOB), key=lambda p: p.name)
 
 
+def zip_complete(path: str | Path) -> bool:
+    """받아둔 SLC `.zip` 이 **끝까지** 받아졌는지 — 재개 판정의 단일 기준.
+
+    존재·크기>0 만 보던 예전 판정은 중간에 끊긴 조각을 '받은 것'으로 남겼다. 실제로
+    다운로드를 Ctrl+C 로 끊자 0.84 GB 조각이 남았고, 재개가 그것을 건너뛰어 SNAP 이
+    BadZipFile 로 죽었다. zip 의 중앙디렉터리(EOCD)는 파일 맨 끝에 있어 절단되면 반드시
+    깨지므로 끝부분만 읽어 판정한다 — 7 GB 라도 즉시 끝난다.
+
+    내용이 상한(CRC) 경우까지는 못 잡는다. 전체 CRC 검사는 장당 수 분이라 하지 않는다.
+    """
+    p = Path(path)
+    try:
+        if not p.is_file() or p.stat().st_size <= 0:
+            return False
+        return zipfile.is_zipfile(p)
+    except OSError:
+        return False
+
+
+def discard_incomplete(*paths: str | Path) -> list[str]:
+    """끝까지 안 받아진 zip 을 지운다 → 다음 다운로드가 **실제로** 다시 받는다.
+
+    지우지 않으면 asf_search 가 "파일이 이미 있다"며 건너뛴다(download.py 의 isfile
+    검사). 보관 폴더와 작업 폴더가 하드링크로 같은 파일을 가리키므로 두 경로를 함께
+    받는다 — 한쪽만 지우면 다른 쪽이 남아 같은 일이 반복된다.
+    """
+    gone: list[str] = []
+    for path in paths:
+        p = Path(path)
+        if p.exists() and not zip_complete(p):
+            try:
+                p.unlink()
+                gone.append(str(p))
+            except OSError:                      # 다른 프로세스가 쥐고 있으면 다음 실행에
+                pass
+    return gone
+
+
 def provide(names: list[str], dest: str | Path, root: str | Path | None = None) -> list[str]:
     """필요한 장면(names, .zip 유무 무관)을 보관 폴더에서 dest 로 끌어온다.
 
@@ -119,10 +158,16 @@ def provide(names: list[str], dest: str | Path, root: str | Path | None = None) 
         if src is None:
             continue
         tgt = dest / f"{stem}.zip"
-        if not (tgt.exists() and tgt.stat().st_size > 0):
-            try:
-                os.link(src, tgt)               # 같은 드라이브 → 디스크 추가 사용 0
-            except OSError:
-                shutil.copy2(src, tgt)          # 다른 드라이브/권한 → 복사 폴백
+        if zip_complete(tgt):
+            satisfied.append(stem)              # 이미 온전히 있다
+            continue
+        # 작업 폴더의 조각은 우리가 만든 것 — 지워야 다운로더가 다시 받는다.
+        discard_incomplete(tgt)
+        if not zip_complete(src):
+            continue                            # 보관본도 조각 → 다운로드에 맡긴다
+        try:
+            os.link(src, tgt)                   # 같은 드라이브 → 디스크 추가 사용 0
+        except OSError:
+            shutil.copy2(src, tgt)              # 다른 드라이브/권한 → 복사 폴백
         satisfied.append(stem)
     return satisfied

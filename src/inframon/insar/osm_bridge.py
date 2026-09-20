@@ -17,13 +17,16 @@ Overpass 공용 서버는 504 Gateway Timeout 이 잦다. `_overpass_query` 는 
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # 504 가 나면 이 순서로 다른 서버를 돈다(전부 같은 OSM 데이터, 키 불필요).
@@ -34,7 +37,7 @@ OVERPASS_MIRRORS: tuple[str, ...] = (
     OVERPASS_URL,
 )
 _RETRY_HTTP = frozenset({429, 500, 502, 503, 504})   # 일시 오류 — 다시 시도할 가치가 있는 코드
-_BACKOFF_S = (2.0, 4.0, 8.0)                         # 시도 사이 대기(초)
+_BACKOFF_S = (2.0, 4.0, 8.0, 12.0, 20.0, 30.0)       # 시도 사이 대기(초)
 _sleep = time.sleep                                  # 테스트에서 바꿔치기
 
 
@@ -82,6 +85,46 @@ def _overpass_once(url: str, ql: str, *, timeout: float) -> dict:
         return json.loads(resp.read().decode())
 
 
+# ── 응답 캐시 ─────────────────────────────────────────────────────────────
+# 교량 형상은 하루 사이에 바뀌지 않는데, 공용 Overpass 는 몇 분씩 통째로 죽는다. 그
+# 몇 분 때문에 데크선이 빠진 산출물이 나오면(브리프 그림 없음·반경으로 점 선택) 같은
+# 명령이 어제와 다른 결과를 낸다. 응답을 적어 두고, 신선하면 그대로 쓰고, 네트워크가
+# 전부 실패하면 오래된 것이라도 쓴다 — 없는 것보다 낫다.
+CACHE_TTL_S = 7 * 24 * 3600
+
+
+def cache_dir() -> Path:
+    return Path(os.environ.get("INFRAMON_OSM_CACHE")
+                or (Path.home() / ".inframon" / "osm_cache"))
+
+
+def _cache_file(ql: str) -> Path:
+    return cache_dir() / (hashlib.sha256(ql.encode("utf-8")).hexdigest()[:24] + ".json")
+
+
+def _cache_read(ql: str, *, max_age_s: float | None) -> dict | None:
+    f = _cache_file(ql)
+    try:
+        age = time.time() - f.stat().st_mtime
+        if max_age_s is not None and age > max_age_s:
+            return None
+        d = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) and "elements" in d else None
+
+
+def _cache_write(ql: str, data: dict) -> None:
+    f = _cache_file(ql)
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(f)                       # 반쯤 쓰인 캐시를 남기지 않는다
+    except (OSError, ValueError, TypeError):
+        pass                                 # 캐시 실패가 조회를 막으면 안 된다
+
+
 def _short_err(e: BaseException | None) -> str:
     if isinstance(e, urllib.error.HTTPError):
         return f"HTTP {e.code}"
@@ -90,14 +133,27 @@ def _short_err(e: BaseException | None) -> str:
     return f"{type(e).__name__}: {e}"[:60]
 
 
-def _overpass_query(ql: str, *, timeout: float = 30.0, retries: int = 4,
-                    urls: tuple[str, ...] | None = None) -> dict:
+def _overpass_query(ql: str, *, timeout: float = 30.0, retries: int = 7,
+                    urls: tuple[str, ...] | None = None,
+                    cache_ttl_s: float | None = CACHE_TTL_S) -> dict:
     """Overpass API 에 QL 질의를 보내고 JSON 을 반환한다(네트워크 격리 지점).
 
     504·429·503, 연결 실패, 깨진 JSON(과부하 서버의 HTML 응답)은 **미러를 바꿔 가며**
-    최대 `retries` 회 시도하고 사이에 2·4·8초 쉰다. 400(질의 오류)처럼 다시 해도
+    최대 `retries` 회 시도하고 사이에 점점 오래 쉰다. 400(질의 오류)처럼 다시 해도
     같은 실패는 즉시 올린다. 전부 실패하면 `OverpassError`.
+
+    기본 7회 = 미러 3곳을 두 바퀴 이상. 4회(한 바퀴)로는 공용 서버가 동시에 붐비는
+    몇 분을 넘기지 못했고, 그때마다 데크선이 없어 브리프 그림과 교면 점 선택이 통째로
+    빠진 산출물이 나왔다 — 조회 하나가 실패했을 뿐인데 결과가 달라 보인다.
+
+    응답은 `cache_dir()` 에 적어 둔다(`INFRAMON_OSM_CACHE` 로 위치 변경). `cache_ttl_s`
+    보다 신선하면 네트워크를 타지 않고, 전부 실패하면 낡은 캐시라도 쓴다. 캐시를 끄려면
+    `cache_ttl_s=None`.
     """
+    if cache_ttl_s is not None:
+        hit = _cache_read(ql, max_age_s=cache_ttl_s)
+        if hit is not None:
+            return hit
     servers = tuple(urls or OVERPASS_MIRRORS)
     last: BaseException | None = None
     tried: list[str] = []
@@ -105,7 +161,10 @@ def _overpass_query(ql: str, *, timeout: float = 30.0, retries: int = 4,
         url = servers[attempt % len(servers)]
         tried.append(url.split("//", 1)[-1].split("/", 1)[0])
         try:
-            return _overpass_once(url, ql, timeout=timeout)
+            got = _overpass_once(url, ql, timeout=timeout)
+            if cache_ttl_s is not None:
+                _cache_write(ql, got)
+            return got
         except urllib.error.HTTPError as e:
             if e.code not in _RETRY_HTTP:
                 raise
@@ -114,6 +173,10 @@ def _overpass_query(ql: str, *, timeout: float = 30.0, retries: int = 4,
             last = e                                     # ValueError = JSON 아님(과부하 HTML)
         if attempt < retries - 1:
             _sleep(_BACKOFF_S[min(attempt, len(_BACKOFF_S) - 1)])
+    if cache_ttl_s is not None:                 # 낡았어도 캐시가 있으면 그것을 쓴다
+        stale = _cache_read(ql, max_age_s=None)
+        if stale is not None:
+            return stale
     raise OverpassError(
         f"OSM(Overpass) {len(tried)}회 실패 — 마지막 {_short_err(last)} · "
         f"시도 서버 {', '.join(dict.fromkeys(tried))}", last)

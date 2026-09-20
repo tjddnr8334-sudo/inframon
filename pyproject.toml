@@ -42,6 +42,10 @@ search = ["asf_search>=7.0"]
 # rasterio 는 변환기(products_to_track_h5)용 — insar extra 와 공유.
 hyp3 = ["hyp3_sdk>=6.0", "asf_search>=7.0", "rasterio>=1.3"]
 dashboard = ["streamlit>=1.33", "plotly>=5.20", "folium>=0.16", "streamlit-folium>=0.20"]
+# 데스크톱 전용 창(--app · inframon_app.bat 더블클릭) — 대시보드를 주소창 없는 창에 감싼다.
+# 브라우저로 볼 거면 필요 없다(dashboard 만으로 `streamlit run` 이 된다).
+app = ["pywebview>=5", "streamlit>=1.33", "plotly>=5.20", "folium>=0.16",
+       "streamlit-folium>=0.20"]
 # VLM 입력 패키지(--export-vlm) figures PNG 렌더 — --no-figures 면 불필요
 report = ["matplotlib>=3.7"]
 # FRAM 실시간 서빙(--serve) + 6측면 함수망 그래프

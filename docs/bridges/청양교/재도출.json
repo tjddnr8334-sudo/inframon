@@ -1,0 +1,27 @@
+{
+ "name": "청양교",
+ "n_deck_ps": 13,
+ "gamma_used": 0.15,
+ "offset_m": -35,
+ "half_m": 11.0,
+ "coh_mean": 0.59,
+ "gamma_median_deck": 0.478,
+ "n_epochs": 25,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": 0.064,
+ "elements": 7,
+ "points": 13,
+ "bound": 13,
+ "cri": 0.6243310297705079,
+ "warning": "정상",
+ "notes": [
+  "경간수 없음 → 30 m 규칙으로 3 가정"
+ ],
+ "cri_point_median": 0.113,
+ "cri_point_max": 0.314,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.979,
+ "velocity_median_mm_yr": -0.6,
+ "n_points": 13,
+ "EI_median": 495000000000.0
+}

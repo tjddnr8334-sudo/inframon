@@ -1,0 +1,66 @@
+{
+ "name": "잠수교",
+ "lat": 37.51475,
+ "lon": 126.996468,
+ "track": "F:/SLC/seoul_work/track_잠수교.h5",
+ "proc": "F:/SLC/seoul_work/잠수교",
+ "master": "20220330",
+ "baselines": null,
+ "out": "docs/bridges/잠수교",
+ "length_m": 795.0,
+ "n_spans": 26,
+ "superstructure": true,
+ "max_span_m": null,
+ "span_layout": "auto",
+ "width_m": 18.0,
+ "clearance_m": 2.0,
+ "ground_m": 4.0,
+ "deck_az_deg": -69.19986581891727,
+ "bridge_type": "girder",
+ "material": "steel",
+ "n_epochs": 51,
+ "geometry": [
+  [
+   37.518974,
+   126.994372
+  ],
+  [
+   37.5184807,
+   126.9945948
+  ],
+  [
+   37.5180218,
+   126.9948203
+  ],
+  [
+   37.5168888,
+   126.995365
+  ],
+  [
+   37.5149771,
+   126.9962871
+  ],
+  [
+   37.513367,
+   126.9970633
+  ],
+  [
+   37.5108951,
+   126.9982411
+  ]
+ ],
+ "notes": [
+  "경간수 없음 → 30 m 규칙으로 26 가정"
+ ],
+ "sources": {
+  "specs": "파트너 실측 CSV '잠수교' (380 m)",
+  "bridge_type": "CSV '강플레이트거더교' → girder",
+  "clearance": "전국교량표준데이터 교량높이 2 m",
+  "deck_match": "CSV 연장 795 m 에 맞는 '잠수교' way 선택(7후보 중)",
+  "deck": "OSM '잠수교' 961 m · 방위 -69.2°",
+  "ground": "Open-Meteo DEM",
+  "ground_offset": "처리 오프셋 ≈ 0 (|B| 0.0 m < 3 m · 지면 점 0 · 도로 양쪽 대칭)",
+  "points": "쉬프트 2.3 m(heading -13.3°) 보정 후 데크 ±30 m 안 68/20000",
+  "span_layout": "equal — 최대경간장 실측이 없어 등간격"
+ }
+}

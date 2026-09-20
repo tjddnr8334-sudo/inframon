@@ -362,6 +362,11 @@ def import_track_h5(
             "path": str(Path(track_h5)),
             "attrs": td.attrs,
             "unit": "mm",
+            # 취입 경로의 xyz 는 트랙의 pixel_lonlat 를 그대로 쓴다 — **경위도(도)**지
+            # 계약 주석이 말하는 EPSG:5179 미터가 아니다. 적어 두지 않았더니 하류
+            # (Bmaps API)가 5179 로 알고 재투영해 점을 남중국해로 보냈다.
+            "xyz_frame": "lonlat:EPSG:4326",
+            "l_unit": "m",
             "z_source": z_source,
             "dem": dem_meta,
             "mode": "import",

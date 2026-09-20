@@ -126,18 +126,34 @@ def deck_bbox(lat: float, lon: float, *, length_m: float | None = None,
 
 # ── 처리형 ────────────────────────────────────────────────────────────────
 def _run_snap(lat, lon, out_dir, out_h5, *, token=None, count=8,
-              start="2024-01-01", end="2025-07-01", **_) -> EngineResult:
+              start="2024-01-01", end="2025-07-01",
+              unwrap=None, unwrap_half_km=2.0, **_) -> EngineResult:
     from .snap_acquire import acquire
     from .snap_backend import run as snap_run
 
     acq = acquire(lat, lon, str(out_dir), count=count, start=start, end=end, token=token)
-    scenes = [str(x) for x in Path(acq.slc_dir).glob("*.zip")]
+    # 취득이 **이번 프레임으로 확정한** 장면만 넘긴다. 폴더를 glob 하면 같은 작업
+    # 폴더를 쓴 이전 교량의 다른 궤도·프레임 zip 까지 한 스택에 섞여 들어간다.
+    scenes = list(acq.downloaded)
+    if not scenes:
+        raise RuntimeError(
+            f"{acq.frame.label()}: 쓸 수 있는 SLC 가 없습니다 "
+            f"(손상 {len(acq.damaged)}장). 다시 실행하면 조각을 지우고 받습니다.")
+    # 언래핑을 안 하면 LOS 가 ±λ/4(±13.9mm)에 갇혀 감사가 "보고 불가"로 막는다 —
+    # 좌표 하나로 보고 가능한 산출까지 가는 것이 이 경로의 목적이므로, snaphu 가
+    # 있으면 기본으로 푼다. 없으면 사유를 남기고 래핑으로 간다(예전 동작 유지).
+    if unwrap is None:
+        from .snap_unwrap import find_snaphu
+        unwrap = find_snaphu() is not None
     res = snap_run(scenes, lat, lon, out_dir=str(out_dir), out_h5=str(out_h5),
-                   era5_master=True)
+                   era5_master=True, unwrap=unwrap, unwrap_half_km=unwrap_half_km)
     ok = sum(p.ok for p in res.pairs)
+    # 뺀 장면은 세지 않으면 사라진다 — 보고서에 남겨 "왜 쌍이 적은지"가 드러나게.
+    dmg = f" · 손상제외 {len(acq.damaged)}장" if acq.damaged else ""
+    unw = "언래핑" if unwrap else "래핑(snaphu 없음 → 감사가 막는다)"
     return EngineResult(engine="snap", track_h5=str(res.track_h5),
                         n_points=int(getattr(res, "n_points", 0) or 0),
-                        detail=f"{res.reference} · 쌍 {ok}/{len(res.pairs)}",
+                        detail=f"{res.reference} · 쌍 {ok}/{len(res.pairs)} · {unw}{dmg}",
                         native=res, extra={"slc_dir": acq.slc_dir})
 
 
