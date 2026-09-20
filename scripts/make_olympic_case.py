@@ -240,6 +240,49 @@ def figure(rec: dict, mt: dict, rb: dict, out: Path) -> None:
     print("wrote", out)
 
 
+def simple_figure(rec: dict, out: Path) -> None:
+    """제안서용 한 장 — **두 곡선이 같이 움직인다**만 보인다.
+
+    예시안 그림은 다섯 칸짜리 기술 도판이라 비전문가에게는 오히려 안 읽힌다.
+    여기서는 달마다의 두 곡선만 크게 그린다. 양이 다르므로(위성 시선 vs 연직 처짐)
+    축을 따로 두고 **모양**을 맞대게 한다 — 그것이 실제로 우리가 주장하는 바다.
+    """
+    best, mo = rec["_best"], np.flatnonzero(rec["_ok"]) + 1
+    x, y = rec["_X"][best], rec["_y"]
+    fig, ax = plt.subplots(figsize=(10.6, 4.5))
+    ax.plot(mo, x, color=MPL["blue"], lw=2.6, marker="o", ms=7,
+            label="위성이 잰 변위 (InSAR)", zorder=3)
+    ax.set_ylabel("위성 시선 변위 [mm]", color=MPL["blue"], fontsize=12)
+    ax.tick_params(axis="y", labelcolor=MPL["blue"], labelsize=11)
+    ax.set_xticks(range(1, 13))
+    ax.set_xticklabels([f"{m}월" for m in range(1, 13)], fontsize=11)
+    ax.grid(alpha=.2)
+    ax.set_xlim(0.4, 12.6)
+
+    ax2 = ax.twinx()
+    ax2.plot(mo, y, color=MPL["orange"], lw=2.6, marker="s", ms=6.5,
+             label="현장 계측 (처짐)", zorder=3)
+    ax2.set_ylabel("현장 계측 처짐 [mm]", color=MPL["orange"], fontsize=12)
+    ax2.tick_params(axis="y", labelcolor=MPL["orange"], labelsize=11)
+
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, fontsize=11.5, loc="upper center", ncol=2,
+              framealpha=.96, borderpad=.7)
+    ax.set_title(f"올림픽대교 — 위성이 잰 변위와 현장 계측이 같이 움직인다"
+                 f"   (일치도 R² {rec['r2_best']:.3f})",
+                 fontsize=13.5, fontweight="bold", color=MPL["ink"], pad=12)
+    fig.text(0.008, 0.015,
+             "※ 해마다 같은 달끼리 평균을 낸 값이다. 두 값은 재는 방향이 달라(위성은 "
+             "비스듬한 시선, 계측은 연직) 축을 따로 두고 모양을 맞댄다.",
+             fontsize=9.5, color=MPL["gray"])
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print("wrote", out)
+
+
 def markdown(rec: dict, mt: dict, rb2: dict) -> str:
     n = chr(10)
     bl = mt.get("baseline", {})
@@ -318,6 +361,7 @@ def main() -> int:
 
     out = folder / "예시안.png"
     figure(rec, mt, rb, out)
+    simple_figure(rec, ROOT / "docs" / "img" / "proposal" / "올림픽대교_계측대조.png")
     import shutil
     Path(a.slide_out).parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(out, a.slide_out)
