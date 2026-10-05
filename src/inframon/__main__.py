@@ -431,6 +431,15 @@ def main() -> None:
                    help="--serve-api 좌표계: wgs84(기본, 재투영) | 5179(Bmaps 가 5179 타일일 때 재투영 생략)")
     p.add_argument("--cors-origin", action="append", default=[], metavar="URL",
                    help="--serve-api CORS 허용 출처(반복 가능). 미지정 시 전체 허용(*)")
+    # ── ⑥ 광역(지자체) 교량 감시 — 엔진 bridge-insar-monitor 를 CLI 로 구동하고 결과를 읽는다 ──
+    p.add_argument("--region", metavar="REGION_JSON",
+                   help="광역 감시 설정(configs/<지역>/region.json). 단독이면 현황 요약 출력")
+    p.add_argument("--region-update", action="store_true",
+                   help="--region: 엔진 한 주기 실행(새 영상 다운로드 → 기준 격자 정합(보간) → 판정 → 알람)")
+    p.add_argument("--region-report", action="store_true",
+                   help="--region: 처리 없이 알람·처리오류·대시보드만 다시 생성")
+    p.add_argument("--region-export", metavar="BRIDGE_ID",
+                   help="--region: 교량 하나를 project.h5 로 내보냄(--out 폴더, ②PINN·③FRAM·④잔존수명 입력)")
     p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
                    help="--out 모니터링(PINN+FRAM 재계산·경보)을 SECONDS 간격 Prefect 스케줄 실행")
     p.add_argument(
@@ -1642,6 +1651,41 @@ def main() -> None:
         print(f"  점당 평균 트랙  : {rep['mean_tracks_per_point']:.2f}")
         print("=" * 56)
         print(f"  다음: python -m inframon --import-track-h5 {args.out} --out data/project.h5")
+        return
+
+    if args.region:
+        from .region import cycle as _rc
+        from .region import results as _rr
+        rc = _rc.load_region(args.region)
+        if args.region_update or args.region_report:
+            code = _rc.run_engine(rc, "update" if args.region_update else "report")
+            if code:
+                p.error(f"엔진 실행 실패(종료코드 {code}) — {rc['engine_dir']} 의 로그를 확인하세요")
+        root = Path(_rr.local_path(rc["results_dir"]))
+        rows = _rr.bridge_rows(_rr.load_state(root))
+        if args.region_export:
+            from .region.export import export_bridge
+            full = next((b for b in _rr.load_state(root)["bridges"] if b["id"] == args.region_export), None)
+            if full is None:
+                p.error(f"교량 ID 를 결과에서 찾지 못했습니다: {args.region_export}")
+            npz = _rr.local_path((full.get("r") or {}).get("npz"))
+            if not npz or not Path(npz).exists():
+                p.error("엔진 StaMPS 점 파일(npz)이 없습니다 — --region-report 로 결과를 다시 만드세요")
+            res = export_bridge(full, npz, Path(args.out).parent if str(args.out).endswith(".h5") else args.out)
+            print("=" * 56)
+            print(f"  광역 감시 교량 → project.h5 : {full['n']}")
+            print(f"  결과            : {res.get('project') or res.get('reason')}")
+            if res.get("ok"):
+                print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
+            print("=" * 56)
+            return
+        al, he, cnt = _rr.load_alerts(root), _rr.load_health(root), _rr.counts(rows)
+        print("=" * 56)
+        print(f"  광역 교량 감시  : {rc.get('title', '')}")
+        print(f"  교량            : {len(rows):,}개 · " + " · ".join(f"{k} {v:,}" for k, v in sorted(cnt.items())))
+        print(f"  교량 알람       : {len(al.get('alerts', []))}건 · 처리 오류 알람 {len(he.get('events', []))}건")
+        print(f"  결과 폴더       : {root}")
+        print("=" * 56)
         return
 
     if args.import_track_h5:

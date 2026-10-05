@@ -1,0 +1,8 @@
+{
+  "title": "강원특별자치도 (전체 18개 시·군)",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/gangwon_alltracks.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/gangwon",
+  "update_days": 12
+}

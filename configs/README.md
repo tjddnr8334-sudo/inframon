@@ -28,6 +28,7 @@
 | `bim_map_conversion.json` | IFC 로컬↔지도 좌표 변환 | IFC `IfcMapConversion` 또는 수기 |
 | `bim_control_points.json` | 측량 기준점 쌍(IfcMapConversion 없을 때) | 측량 성과 |
 | `life_limits.json` | 잔존수명 한계값(침하·처짐·각변위) | 설계도서·지반조사 |
+| `region.json` (`configs/<지역>_region/`) | ⑥ 광역 모니터링: 엔진 위치·엔진 설정·결과 폴더·갱신 주기 | [docs/광역_모니터링.md](../docs/광역_모니터링.md) |
 
 **전부 선택**이다. 있는 것만 두면 되고, 없으면 해당 기능이 기본값으로 동작하거나
 사유와 함께 비활성된다.
