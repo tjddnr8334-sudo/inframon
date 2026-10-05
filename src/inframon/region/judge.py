@@ -1,8 +1,8 @@
-"""inframon 한계값(``life.limits``) 기준 허용변위 비율 — 엔진 판정과 **병기**한다.
+"""inframon 한계값(``life.limits``) 기준 허용변위 비율 — 광역 감시의 **단일 기준**.
 
-엔진(bridge-insar-monitor) 기본값: 허용 총침하 50 mm, 각변위 0.004(연속·강결)/0.008(단순) — AASHTO.
-inframon ``life.limits.DEFAULTS``: 침하 25 mm, 각변위 1/500. 같은 측정값이라도 기준이 다르면 비율이
-두 배까지 달라지므로, 어느 기준으로 본 값인지 출처 라벨과 함께 돌려준다(조용히 섞지 않는다).
+엔진(bridge-insar-monitor) 설정(criteria.yaml)도 같은 값(침하 25 mm, 각변위 1/500)으로 통일돼 있다.
+이 함수는 엔진이 낸 측정값(누적 수직변위·각변위)으로 비율을 다시 계산해, 엔진 설정과 inframon 한계값이
+어긋나지 않았는지 확인하는 데에도 쓴다. 출처 라벨을 함께 돌려준다.
 """
 
 from __future__ import annotations

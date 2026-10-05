@@ -3,7 +3,7 @@
 보여주는 것:
   - 교량 알람(신규 경보·등급 상승·확인 필요)과 **처리 오류 알람**(자료 지연·다운로드·정합·구역 실패·저장공간)
   - 지도(등급 색) · 시군/등급 필터 목록
-  - 교량별: 대장 정보, 허용변위 대비 비율(엔진 기준 + inframon ``life.limits`` 기준 병기), 궤도별 판정,
+  - 교량별: 대장 정보, 허용변위 대비 비율(``life.limits`` 기준: 침하 25 mm, 각변위 1/500), 궤도별 판정,
     변위 시계열(LOS / 수직 / 수직-열신축보정, 모두 주변 지반 대비), 주기별 판정 이력
   - ▶ project.h5 로 내보내기 → ②PINN·③FRAM·④잔존수명 탭에서 이어서 해석
 """
@@ -98,6 +98,10 @@ def tab_region(data_root: str) -> None:
     _bridge_detail(root, cfg, row, full, data_root)
 
 
+def inframon_proj_years() -> int:
+    return 10
+
+
 def _bridge_detail(root: Path, cfg, row: dict, full: dict, data_root: str) -> None:
     r = full.get("r") or {}
     st.markdown(f"##### {row['name']} — {row['status']}{' · 확인 필요(자료 부족)' if row['review'] else ''}")
@@ -110,10 +114,11 @@ def _bridge_detail(root: Path, cfg, row: dict, full: dict, data_root: str) -> No
     inf = judge.ratios(r.get("dn"), r.get("bn"), d_proj_mm=r.get("d10"), beta_proj=r.get("b10"))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("누적 수직변위 (지반 대비)", f"{r.get('dn')} mm", help=f"관측 {r.get('tob')}년")
-    c2.metric("허용변위 대비 · 엔진 기준", f"{round(100 * (r.get('rn') or 0))} %",
-              help=f"총침하 {r.get('sa')} mm, 각변위 {r.get('ba')} (경간 {r.get('sp')} m 가정). 10년 예측 {round(100 * (r.get('r10') or 0))} %")
-    c3.metric("허용변위 대비 · inframon 기준", f"{round(100 * (inf['ratio_now'] or 0))} %",
-              help=f"life.limits: 침하 {inf['settlement_mm']} mm, 각변위 {inf['angular_distortion']:.4f}. 10년 예측 {round(100 * (inf['ratio_proj'] or 0))} %")
+    c2.metric("허용변위 대비", f"{round(100 * (r.get('rn') or 0))} %",
+              help=f"life.limits 기준: 침하 {inf['settlement_mm']:.0f} mm, 각변위 1/{1 / inf['angular_distortion']:.0f} "
+                   f"(경간 {r.get('sp')} m 가정)")
+    c3.metric(f"{inframon_proj_years()}년 예측", f"{round(100 * (r.get('r10') or 0))} %",
+              help="현재 변위속도가 이어진다고 가정. 등급은 한 단계까지만 올린다.")
     c4.metric("교량 위 PS / 신뢰도", f"{r.get('nps')} / {r.get('conf') or '-'}")
     if r.get("nt"):
         st.caption(r["nt"])
