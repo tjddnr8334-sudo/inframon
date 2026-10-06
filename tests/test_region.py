@@ -138,3 +138,17 @@ def test_bridge_ifc_has_registry_and_insar_psets(tmp_path):
     assert reg["시설물종별"] == "2종" and reg["경간수_가정"] == 3
     p1 = next(e for e in f.by_type("IfcElement") if e.Name == "P1")
     assert "Pset_InSAR_Support" in U.get_psets(p1)
+
+
+def test_bridge_ifc_abutment_proxy_zones(tmp_path):
+    ifcopenshell = __import__("ifcopenshell")
+    import ifcopenshell.util.element as U
+
+    from inframon.region.ifc import bridge_ifc
+    row = {"id": "r2", "n": "B교", "len": 12.0, "w": 8.0, "geo": [[[128.0, 37.0], [128.0001, 37.0001]]],
+           "r": {"lv": 1, "rn": 0.35, "sp": 10, "zones": [{"end": "시점", "n": 3, "v": -0.8, "sig": True},
+                                                          {"end": "종점", "n": 1, "v": 0.1, "sig": False}]}}
+    bridge_ifc(row, tmp_path / "b.ifc")
+    f = ifcopenshell.open(str(tmp_path / "b.ifc"))
+    a1 = next(e for e in f.by_type("IfcElement") if e.Name == "A1")
+    assert U.get_psets(a1)["Pset_InSAR_Support"]["변위속도_mm_yr"] == -0.8
