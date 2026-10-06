@@ -98,6 +98,10 @@ def tab_region(data_root: str) -> None:
     _bridge_detail(root, cfg, row, full, data_root)
 
 
+def state_title(root) -> str:
+    return results.load_state(root).get("title", "")
+
+
 def inframon_proj_years() -> int:
     return 10
 
@@ -114,7 +118,8 @@ def _bridge_detail(root: Path, cfg, row: dict, full: dict, data_root: str) -> No
     inf = judge.ratios(r.get("dn"), r.get("bn"), d_proj_mm=r.get("d10"), beta_proj=r.get("b10"))
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("누적 수직변위 (지반 대비)", f"{r.get('dn')} mm", help=f"관측 {r.get('tob')}년")
-    c2.metric("허용변위 대비", f"{round(100 * (r.get('rn') or 0))} %",
+    rng = f" ({round(100 * r['rlo'])}–{round(100 * r['rhi'])} %)" if r.get("rlo") is not None else ""
+    c2.metric("허용변위 대비" + rng, f"{round(100 * (r.get('rn') or 0))} %",
               help=f"life.limits 기준: 침하 {inf['settlement_mm']:.0f} mm, 각변위 1/{1 / inf['angular_distortion']:.0f} "
                    f"(경간 {r.get('sp')} m 가정)")
     c3.metric(f"{inframon_proj_years()}년 예측", f"{round(100 * (r.get('r10') or 0))} %",
@@ -122,6 +127,17 @@ def _bridge_detail(root: Path, cfg, row: dict, full: dict, data_root: str) -> No
     c4.metric("교량 위 PS / 신뢰도", f"{r.get('nps')} / {r.get('conf') or '-'}")
     if r.get("nt"):
         st.caption(r["nt"])
+    g = r.get("gaps") or {}
+    unc = []
+    if r.get("unc"):
+        unc.append("오차 범위가 등급 경계를 넘음")
+    if g.get("flag"):
+        unc.append(f"자료 공백 — 사용 {g.get('n_used')}/{g.get('n_expected')}장, 최장 공백 {g.get('max_gap_days')}일, "
+                   f"마지막 영상 {g.get('last_date')} ({g.get('stale_days')}일 전)")
+    if r.get("tmm"):
+        unc.append(f"온도 보정 영향 {r['tmm']} mm (ERA5 0.25° 기온 — 상판 온도와 다를 수 있음)")
+    if unc:
+        st.warning("불확실성: " + " · ".join(unc) + ". 등급은 중앙값 기준이며, 범위가 경계를 넘으면 '확인 필요'로 분리합니다.")
     tr = full.get("tracks") or {}
     if tr:
         st.dataframe([dict(궤도=k, 판정=results.status(v.get("level")), 교량위PS=v.get("n_ps"), 교대부대체=v.get("proxy"),
@@ -147,6 +163,18 @@ def _bridge_detail(root: Path, cfg, row: dict, full: dict, data_root: str) -> No
     if len(hist) > 1:
         with st.expander(f"주기별 판정 이력 {len(hist)}회"):
             st.dataframe(hist, use_container_width=True, hide_index=True)
+    try:
+        import tempfile
+
+        from ..region.ifc import bridge_ifc
+        if st.button("🏗️ 이 교량 IFC 만들기 (대장 제원 프록시 + InSAR 판정 속성)", key="btn_region_ifc"):
+            p = Path(tempfile.gettempdir()) / f"{row['id']}.ifc"
+            info = bridge_ifc(full, p, title=state_title(root))
+            st.download_button("IFC 내려받기", p.read_bytes(), file_name=f"{row['name']}_{row['id']}.ifc",
+                               mime="application/x-step", key="btn_region_ifc_dl")
+            st.caption(f"부재 {info['elements']}개 · 경간 {info['spans']}개 가정 · 지오참조 {'EPSG:5179' if info['georef'] else '없음(pyproj 미설치)'}")
+    except ImportError:
+        st.caption("IFC 는 `pip install -e .[bim]` (ifcopenshell) 설치 시 만들 수 있습니다.")
     out = Path(data_root) / "region" / (cfg["title"] if cfg else "region") / row["id"]
     if st.button("▶ 이 교량을 project.h5 로 내보내기 (②PINN · ③FRAM · ④잔존수명)", key="btn_region_export"):
         from ..region.export import export_bridge

@@ -438,6 +438,8 @@ def main() -> None:
                    help="--region: 엔진 한 주기 실행(새 영상 다운로드 → 기준 격자 정합(보간) → 판정 → 알람)")
     p.add_argument("--region-report", action="store_true",
                    help="--region: 처리 없이 알람·처리오류·대시보드만 다시 생성")
+    p.add_argument("--region-ifc", metavar="DIR",
+                   help="--region: 판정된 교량마다 IFC(대장 제원 프록시 + InSAR 판정 속성)를 DIR/<시군>/ 에 생성")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
                    help="--region: 교량 하나를 project.h5 로 내보냄(--out 폴더, ②PINN·③FRAM·④잔존수명 입력)")
     p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
@@ -1677,6 +1679,14 @@ def main() -> None:
             print(f"  결과            : {res.get('project') or res.get('reason')}")
             if res.get("ok"):
                 print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
+            print("=" * 56)
+            return
+        if args.region_ifc:
+            from .region.ifc import region_ifc
+            res = region_ifc(root, args.region_ifc, title=rc.get("title", ""))
+            print("=" * 56)
+            print(f"  교량별 IFC      : {res['made']}개 생성 · 실패 {res['failed']}개")
+            print(f"  위치            : {res['out']} (index.json 포함)")
             print("=" * 56)
             return
         al, he, cnt = _rr.load_alerts(root), _rr.load_health(root), _rr.counts(rows)
