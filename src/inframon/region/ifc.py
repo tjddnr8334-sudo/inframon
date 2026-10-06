@@ -95,11 +95,16 @@ def bridge_ifc(row: dict, out_path, *, title: str = "") -> dict:
            "사용영상수": g.get("n_used"), "예상영상수": g.get("n_expected"), "최장공백_일": g.get("max_gap_days"),
            "마지막영상": g.get("last_date"), "마지막영상경과_일": g.get("stale_days"), "자료공백경고": g.get("flag"),
            "궤도": r.get("trk"), "기준면": "교량 주변 지반(30–300 m) 대비, 첫 촬영일 이후"}
-    zones = [z for z in (r.get("zones") or []) if z]
+    zones = [z for z in (r.get("zones") or []) if z and "s" in z]              # 교축 위치가 있는 지점부
+    ends = {z["end"]: z for z in (r.get("zones") or []) if z and "end" in z}   # 교대부 대체 판정(시점·종점)
     for e in f.by_type("IfcElement"):
         nm = e.Name or ""
         if nm == "S1":
             pset(e, "Pset_InSAR_Monitoring", mon)
+        elif ends and nm in ("A1", "A2") and ({"A1": "시점", "A2": "종점"}[nm] in ends):
+            z = ends[{"A1": "시점", "A2": "종점"}[nm]]
+            pset(e, "Pset_InSAR_Support", {"위치": f"교대부 {z['end']} 10~200 m 지반(대체 판정)", "변위속도_mm_yr": z.get("v"),
+                                           "유의": z.get("sig"), "측정점수": z.get("n")})
         elif zones and (nm.startswith("P") or nm.startswith("A")):
             # 부재 중심의 교축 위치(로컬 x) → 가장 가까운 지점부 결과
             el = next((x for x in els if x.name == nm), None)
