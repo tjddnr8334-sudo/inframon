@@ -43,7 +43,8 @@ def tab(monkeypatch):
     st = types.ModuleType("streamlit")
     st.session_state = {}
     for name in ("subheader", "caption", "selectbox", "text_input", "info", "markdown", "columns", "metric",
-                 "dataframe", "success", "warning", "error", "radio", "line_chart", "expander", "button"):
+                 "dataframe", "success", "warning", "error", "radio", "line_chart", "expander", "button",
+                 "download_button"):
         setattr(st, name, _st_func(name))
     monkeypatch.setitem(sys.modules, "streamlit", st)
     pytest.importorskip("pandas")

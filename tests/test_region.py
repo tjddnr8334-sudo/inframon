@@ -111,3 +111,30 @@ def test_export_bridge_to_project(tmp_path):
     with ProjectStore(res["project"], mode="r") as store:
         sym = store.validate("insar", store.read_meta("insar", InSAROutput))   # /insar 계약(형상·dtype) 통과
     assert sym["N"] == n and sym["M"] == m
+
+
+def test_bridge_ifc_has_registry_and_insar_psets(tmp_path):
+    ifcopenshell = __import__("ifcopenshell")
+    import ifcopenshell.util.element as U
+
+    from inframon.region.ifc import bridge_ifc
+    row = {"id": "r1", "n": "A교", "c": "강릉시", "cls": "2종", "t": "PSCI거더교", "len": 90.0, "w": 12.0, "h": 8.0,
+           "yr": 2001, "gr": "B", "lat": 37.75, "lon": 128.89,
+           "geo": [[[128.8878, 37.7467], [128.8873, 37.7481]]],
+           "r": {"lv": 2, "rn": 0.62, "rlo": 0.4, "rhi": 0.85, "r10": 1.3, "dn": 15.5, "bn": 0.0005, "sp": 30, "nps": 9,
+                 "rv": True, "unc": True, "tmm": 0.8, "gaps": {"n_used": 136, "n_expected": 239, "flag": True},
+                 "zones": [{"s": -45, "v": -1.2, "D": 9.0, "sig": True}, {"s": -15, "v": -2.0, "D": 15.5, "sig": True},
+                           {"s": 15, "v": -0.5, "D": 0.0, "sig": False}, {"s": 45, "v": -0.1, "D": 0.0, "sig": False}]}}
+    info = bridge_ifc(row, tmp_path / "a.ifc", title="강릉시")
+    assert info["spans"] == 3 and info["status"] == "주의"
+    f = ifcopenshell.open(str(tmp_path / "a.ifc"))
+    names = {e.Name for e in f.by_type("IfcElement")}
+    assert {"S1", "P1", "P2", "A1", "A2"} <= names
+    deck = next(e for e in f.by_type("IfcElement") if e.Name == "S1")
+    mon = U.get_psets(deck)["Pset_InSAR_Monitoring"]
+    assert mon["판정"] == "주의" and mon["허용총침하_mm"] == 25.0 and mon["허용변위대비_하한"] == 0.4
+    assert mon["자료공백경고"] is True and mon["확인필요"] is True
+    reg = U.get_psets(f.by_type("IfcSite")[0])["Pset_BridgeRegistry"]
+    assert reg["시설물종별"] == "2종" and reg["경간수_가정"] == 3
+    p1 = next(e for e in f.by_type("IfcElement") if e.Name == "P1")
+    assert "Pset_InSAR_Support" in U.get_psets(p1)
