@@ -19,8 +19,18 @@ from ..region import judge, results
 _COL = {"정상": "#2e8b57", "관심": "#b9a400", "주의": "#d18a00", "경고": "#c8372d", "판정 불가": "#8b97a3", "미처리": "#c9d1d9"}
 
 
+def _has_results(cfg_path: Path) -> bool:
+    import json
+    try:
+        d = json.loads(cfg_path.read_text(encoding="utf-8"))
+        return (Path(results.local_path(d.get("results_dir"))) / "state.json").exists()
+    except (OSError, ValueError):
+        return False
+
+
 def _region_configs(repo_root: Path) -> list[Path]:
-    return sorted((repo_root / "configs").glob("*/region.json"))
+    """결과가 있는 지역을 앞에 — 처음 열었을 때 '결과가 아직 없습니다'부터 보이지 않게."""
+    return sorted((repo_root / "configs").glob("*/region.json"), key=lambda p: (not _has_results(p), str(p)))
 
 
 def tab_region(data_root: str) -> None:
