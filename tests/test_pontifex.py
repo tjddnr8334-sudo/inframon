@@ -218,3 +218,105 @@ def test_mock_server_rejects_bad_token(tmp_path):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+# ── 플랫폼에 이미 있는 교량 찾기 · 교체 전송 ──────────────────────────────
+_KNOWN = [
+    {"id": 14606, "name": "내곡교", "lat": 37.7470, "lon": 128.8877, "addr1": "강원도",
+     "region": {"code": "32030", "name": "강릉시"}},
+    {"id": 6458, "name": "내곡교", "lat": 37.6000, "lon": 127.2000, "addr1": "경기도",
+     "region": {"code": "31130", "name": "남양주시"}},
+    {"id": 501, "name": "쌍둥이교", "lat": 37.7000, "lon": 128.9000, "addr1": "강원도",
+     "region": {"code": "32030", "name": "강릉시"}},
+    {"id": 502, "name": "쌍둥이교", "lat": 37.70005, "lon": 128.9000, "addr1": "강원도",
+     "region": {"code": "32030", "name": "강릉시"}},
+]
+
+
+@pytest.fixture()
+def platform(tmp_path):
+    from inframon.pontifex_mock import serve
+
+    srv = serve(0, state_path=tmp_path / "state.json", bridges=_KNOWN)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}", srv
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_find_bridge_picks_same_name_nearby_not_namesake_elsewhere(platform):
+    """'내곡교'는 전국에 여럿이다 — 이름만 보고 고르면 남양주 교량에 강릉 결과가 붙는다."""
+    from inframon.pontifex import find_bridge
+
+    hit, why = find_bridge("내곡교", 37.746953, 128.887733, base=platform[0])
+    assert hit["id"] == 14606 and why.endswith("m")
+
+
+def test_find_bridge_refuses_to_guess_between_twins(platform):
+    from inframon.pontifex import find_bridge
+
+    hit, why = find_bridge("쌍둥이교", 37.7000, 128.9000, base=platform[0])
+    assert hit is None and "겹침" in why
+
+
+def test_find_bridge_rejects_far_namesake(platform):
+    from inframon.pontifex import find_bridge
+
+    hit, _ = find_bridge("내곡교", 35.0, 127.0, base=platform[0])
+    assert hit is None
+
+
+def test_ensure_bridge_does_not_register_a_duplicate(platform):
+    from inframon.pontifex import ensure_bridge
+
+    base, srv = platform
+    got = ensure_bridge("내곡교", 37.746953, 128.887733, base=base)
+    assert got["how"] == "matched" and got["id"] == 14606
+    assert len(srv.state.bridges) == len(_KNOWN)          # 새 행이 생기지 않았다
+    new = ensure_bridge("처음보는교", 37.5, 128.5, base=base)
+    assert new["how"] == "registered" and new["id"] not in {b["id"] for b in _KNOWN}
+
+
+def test_push_warns_about_leftover_dates_and_replace_clears_them(tmp_path, platform):
+    """플랫폼 합성 실행분(오늘 기준 날짜)이 같은 소스로 남아 있으면 실측과 섞인다."""
+    from inframon.pontifex import _post
+
+    base, srv = platform
+    _post(f"{base}/api/ingest/sensing/", {"summary_records": [
+        {"bridge_id": 14606, "source": "inframon", "observed_at": "2026-10-05",
+         "warning_level": 2, "cri_global_max": 0.64}]}, None)
+    p = _project(tmp_path / "p.h5")
+    r = push(p, 14606, base=base, target=(37.0, 127.0))
+    assert any("--pontifex-replace" in w and "2026-10-05" in w for w in r.warnings)
+    assert len(srv.state.sensing[14606]["summary_records"]) == 4      # 섞여 있다
+    r2 = push(p, 14606, base=base, target=(37.0, 127.0), replace=True)
+    dates = sorted(x["observed_at"] for x in srv.state.sensing[14606]["summary_records"])
+    assert dates == ["2024-01-07", "2024-01-19", "2024-01-31"]
+    assert any("지우고" in w for w in r2.warnings)
+
+
+def test_records_carry_what_the_platform_script_would(tmp_path):
+    """플랫폼 4-B 스크립트와 같은 항목 — 어느 경로로 올리든 화면 내용이 같아야 한다."""
+    cri = np.array([[0.1, 0.2, 0.7], [0.1, 0.2, 0.2]])
+    p = _project(tmp_path / "p.h5", cri=cri, member=[1, 0])
+    with h5py.File(p, "a") as f:
+        f["fram"].attrs["meta"] = json.dumps({"warning": {
+            "level": "경고", "lead_time_days": 12.0, "basis": "cri",
+            "function_states": {"thermal": "정상"}, "critical_members": ["pier"]}})
+    recs = build_records(p, 7)
+    s = recs["summary_records"]
+    assert [r["critical_members"] for r in s] == [[], [], ["pier"]]
+    d = s[-1]["summary_json"]
+    assert d["date_basis"] == "absolute" and d["trend"] == "상승"
+    assert d["lead_time_days"] == 12.0 and d["function_states"] == {"thermal": "정상"}
+    assert all(m["source"] == "inframon" for m in recs["member_records"])
+
+
+def test_default_thresholds_are_the_engine_ones(tmp_path):
+    """기본 임계가 FRAM 엔진(0.3·0.6·0.85)과 다르면 같은 CRI 가 플랫폼에서 다른 등급이 된다."""
+    from inframon.config import PipelineConfig
+
+    cri = np.array([[0.82]] * 2)
+    p = _project(tmp_path / "p.h5", cri=cri, dates=(b"20240107",))
+    assert PipelineConfig().cri_thresholds[2] == 0.85
+    assert build_records(p, 1)["summary_records"][0]["warning_level"] == 2

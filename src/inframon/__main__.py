@@ -133,7 +133,11 @@ def main() -> None:
     p.add_argument("--pontifex-force", action="store_true",
                    help="감사 '보고 불가' 산출물도 올린다 — 사유를 알고 쓸 때만")
     p.add_argument("--pontifex-register", default=None, metavar="NAME,LAT,LON",
-                   help="교량을 먼저 등록하고 부여된 id 로 이어서 올린다")
+                   help="플랫폼에서 이 교량을 **먼저 찾고**(이름+좌표) 없을 때만 등록해, 그 id 로 "
+                        "이어서 올린다 — 이미 있는 교량을 또 만들지 않는다")
+    p.add_argument("--pontifex-replace", action="store_true",
+                   help="올리기 전에 이 교량의 inframon 소스 레코드를 지운다(재처리·플랫폼 합성 "
+                        "실행분이 섞여 있을 때). --bmap-sync 에도 적용")
     p.add_argument("--audit-artifacts", nargs="*", default=None, metavar="PROJECT_H5",
                    help="산출물(project.h5)이 보고에 쓸 수 있는 것인지 감사해 표로 출력 후 "
                         "종료. 경로를 생략하면 data/ 아래를 훑는다. --audit-out 으로 "
@@ -440,6 +444,11 @@ def main() -> None:
                    help="--region: 처리 없이 알람·처리오류·대시보드만 다시 생성")
     p.add_argument("--region-ifc", metavar="DIR",
                    help="--region: 판정된 교량마다 IFC(대장 제원 프록시 + InSAR 판정 속성)를 DIR/<시군>/ 에 생성")
+    p.add_argument("--region-push", action="store_true",
+                   help="--region: 판정을 Pontifex 에 올린다(소스 inframon_region). 플랫폼의 기존 교량과 "
+                        "이름·좌표로 맞추고, 확인 필요·판정 불가는 제외. --pontifex-base/-token/-dry-run 을 같이 쓴다")
+    p.add_argument("--region-push-review", action="store_true",
+                   help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
                    help="--region: 교량 하나를 project.h5 로 내보냄(--out 폴더, ②PINN·③FRAM·④잔존수명 입력)")
     p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
@@ -1293,25 +1302,31 @@ def main() -> None:
         items = sync(targets, base=args.pontifex_base, token=args.pontifex_token,
                      dry_run=args.bmap_dry_run,
                      allow_conditional=not args.bmap_strict,
-                     register=args.bmap_register)
+                     register=args.bmap_register, replace=args.pontifex_replace)
         print(format_report(items, dry_run=args.bmap_dry_run))
         _sys.exit(0 if not any(i.action == "failed" for i in items) else 1)
 
     if args.pontifex_push or args.pontifex_register:
         import sys as _sys
 
-        from .pontifex import PontifexError, push, register_bridge
+        from .pontifex import PontifexError, ensure_bridge, find_bridge, push
 
         try:
             bid = args.pontifex_bridge_id
             if args.pontifex_register:
                 _n, _la, _lo = args.pontifex_register.split(",")
-                got = register_bridge(_n.strip(), float(_la), float(_lo),
-                                      base=args.pontifex_base, token=args.pontifex_token)
-                bid = got.get("id", bid)
-                print(f"  등록: {got.get('name')} → id={bid} "
-                      f"· {(got.get('region') or {}).get('name', '-')} "
-                      f"· {args.pontifex_base}{got.get('detail_url', '')}")
+                if args.pontifex_dry_run:       # 예행은 찾기만 한다 — 등록은 되돌릴 수 없다
+                    _hit, _why = find_bridge(_n.strip(), float(_la), float(_lo),
+                                             base=args.pontifex_base, token=args.pontifex_token)
+                    print(f"  기존 교량 id={_hit['id']} 사용 예정({_why})" if _hit
+                          else f"  새로 등록 예정 — {_why}")
+                    bid = _hit["id"] if _hit else bid
+                else:
+                    got = ensure_bridge(_n.strip(), float(_la), float(_lo),
+                                        base=args.pontifex_base, token=args.pontifex_token)
+                    bid = got.get("id", bid)
+                    print(f"  {got.get('note')}: {got.get('name')} → id={bid} "
+                          f"· {args.pontifex_base}{got.get('detail_url', '')}")
             if not args.pontifex_push:
                 return
             if bid is None:
@@ -1320,7 +1335,7 @@ def main() -> None:
                 _sys.exit(2)
             res = push(args.pontifex_push, int(bid), base=args.pontifex_base,
                        token=args.pontifex_token, dry_run=args.pontifex_dry_run,
-                       allow_unreportable=args.pontifex_force)
+                       allow_unreportable=args.pontifex_force, replace=args.pontifex_replace)
             print("=" * 56)
             print("  ⑭ Pontifex 연동")
             print("=" * 56)
@@ -1681,6 +1696,23 @@ def main() -> None:
                 print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
             print("=" * 56)
             return
+        if args.region_push:
+            import sys as _sys
+
+            from .pontifex import PontifexError
+            from .region import pontifex_push as _rp
+            try:
+                res = _rp.push_region(
+                    root, base=args.pontifex_base, token=args.pontifex_token,
+                    dry_run=args.pontifex_dry_run, include_review=args.region_push_review,
+                    levels=tuple(rc.get("pontifex_levels") or _rp.LEVEL_MAP),
+                    report_path=Path(rc.get("projects_dir") or f"data/region/{root.name}")
+                    / "pontifex_push.json")
+            except PontifexError as e:
+                print(f"  ⛔ {e}")
+                _sys.exit(1)
+            print(_rp.format_report(res))
+            _sys.exit(1 if res["errors"] else 0)
         if args.region_ifc:
             from .region.ifc import region_ifc
             res = region_ifc(root, args.region_ifc, title=rc.get("title", ""))
