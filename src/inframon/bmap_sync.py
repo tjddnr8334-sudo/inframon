@@ -91,17 +91,23 @@ def register_missing(item: SyncItem, target: dict, *, base: str, token: str | No
     id 는 사람이 정하는 값이라 지어낼 수 없지만, 플랫폼이 부여해 주는 값은 받아서 쓰면
     된다. 받은 뒤 bridge_target.json 에 적어두지 않으면 매번 새 교량이 만들어진다.
     """
-    from .pontifex import PontifexError, register_bridge
+    from .pontifex import PontifexError, ensure_bridge, find_bridge
 
     name = target.get("name")
     lat, lon = target.get("lat"), target.get("lon")
     if not name or lat is None or lon is None:
         return None
     if dry_run:
-        item.reasons.append(f"등록 예정: {name}({lat},{lon})")
+        try:
+            hit, why = find_bridge(str(name), float(lat), float(lon), base=base, token=token)
+        except PontifexError:
+            hit, why = None, "플랫폼 조회 불가"
+        item.reasons.append(f"기존 교량 id={hit['id']} 사용 예정({why})" if hit
+                            else f"등록 예정: {name}({lat},{lon}) — {why}")
         return None
     try:
-        got = register_bridge(str(name), float(lat), float(lon), base=base, token=token)
+        # 플랫폼에 이미 있는 교량이면 그 id 를 쓴다 — 찾지 않고 등록하면 같은 교량이 둘 생긴다.
+        got = ensure_bridge(str(name), float(lat), float(lon), base=base, token=token)
     except PontifexError as e:
         item.error = f"등록 실패: {str(e)[:200]}"
         return None
@@ -116,7 +122,7 @@ def register_missing(item: SyncItem, target: dict, *, base: str, token: str | No
         side.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
     except (OSError, ValueError):
         pass                        # 기록 실패가 전송을 막지는 않는다
-    item.reasons.append(f"플랫폼 등록: id={bid}"
+    item.reasons.append(f"플랫폼 id={bid} · {got.get('note', '')}"
                         + (f" · {(got.get('region') or {}).get('name')}"
                            if got.get("region") else ""))
     return int(bid)
@@ -125,7 +131,7 @@ def register_missing(item: SyncItem, target: dict, *, base: str, token: str | No
 def sync(targets: list[dict], *, base: str, token: str | None = None,
          state_path: str | Path = "data/" + STATE_NAME, dry_run: bool = False,
          allow_conditional: bool = True, force: bool = False,
-         register: bool = False) -> list[SyncItem]:
+         register: bool = False, replace: bool = False) -> list[SyncItem]:
     """대상들을 감사한 뒤 통과한 것만 올린다.
 
     targets: [{"project_h5": ..., "bridge_id": 40001, "name": "청양교",
@@ -172,8 +178,9 @@ def sync(targets: list[dict], *, base: str, token: str | None = None,
             continue
         try:
             res = push(h5, int(it.bridge_id), base=base, token=token, dry_run=dry_run,
-                       allow_unreportable=force, target=tgt)
+                       allow_unreportable=force, target=tgt, replace=replace)
             it.summary_n, it.member_n = res.summary_n, res.member_n
+            it.reasons += [w for w in res.warnings if w not in it.reasons]
             it.action = "dry-run" if dry_run else "pushed"
         except PontifexError as e:
             it.action, it.error = "failed", str(e)[:300]

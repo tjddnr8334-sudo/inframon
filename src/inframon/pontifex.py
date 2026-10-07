@@ -72,38 +72,68 @@ def build_records(project_h5: str | Path, bridge_id: int, *,
         thresholds = _thresholds(f)
         member = (np.asarray(f["insar/member"][()]).ravel()
                   if "insar/member" in f else None)
+        warning = _fram_meta(f).get("warning") or {}
+        cal_max = (round(float(np.nanmax(f["fram/calibrated_risk"][()])), 4)
+                   if "fram/calibrated_risk" in f else None)
+    if member is not None and member.size != cri.shape[0]:
+        member = None
 
     per_date = np.nanmax(cri, axis=0)                              # [M] 시점별 최대 CRI
+    first, last = float(per_date[0]), float(per_date[-1])
+    # 플랫폼 4-B 스크립트(scripts/ingest_inframon.py)와 같은 항목을 채운다 — 어느 경로로
+    # 올리든 화면에 같은 내용이 나오게.
+    detail = {
+        "n_points": int(cri.shape[0]), "n_dates": int(cri.shape[1]),
+        "date_range": [dates[0], dates[-1]],
+        "date_basis": "absolute",
+        "cri_first": round(first, 4), "cri_last": round(last, 4),
+        "trend": "상승" if last > first * 1.2 else ("하락" if last < first * 0.8 else "안정"),
+        "lead_time_days": warning.get("lead_time_days"),
+        "basis": warning.get("basis"),
+        "function_states": warning.get("function_states") or {},
+        "produced_by": "inframon",
+    }
     summary = []
     for i, d in enumerate(dates):
+        crit = []
+        if member is not None:
+            hot = np.where(cri[:, i] >= thresholds[1])[0]          # 경고 이상인 점의 부재
+            crit = sorted({MEMBER_TYPES[int(member[j])] for j in hot
+                           if 0 <= int(member[j]) < len(MEMBER_TYPES)})
         summary.append({
             "bridge_id": bridge_id,
             "source": source,
             "observed_at": d,
             "warning_level": _level(float(per_date[i]), thresholds),
             "cri_global_max": round(float(per_date[i]), 4),
-            "critical_members": [],
-            "summary_json": {
-                "n_points": int(cri.shape[0]), "n_dates": int(cri.shape[1]),
-                "date_range": [dates[0], dates[-1]],
-                "cri_first": round(float(per_date[0]), 4),
-                "cri_last": round(float(per_date[-1]), 4),
-                "produced_by": "inframon",
-            },
+            "calibrated_risk": cal_max,
+            "critical_members": crit,
+            "summary_json": dict(detail),
         })
 
     members = []
-    if member is not None and member.size == cri.shape[0]:
-        last = cri[:, -1]
+    if member is not None:
+        last_col = cri[:, -1]
         for idx, name in enumerate(MEMBER_TYPES):
             sel = member == idx
             if not sel.any():
                 continue
-            v = float(np.nanmax(last[sel]))
-            members.append({"bridge_id": bridge_id, "member_type": name,
+            v = float(np.nanmax(last_col[sel]))
+            members.append({"bridge_id": bridge_id, "source": source, "member_type": name,
                             "warning_level": _level(v, thresholds),
                             "cri_value": round(v, 4)})
     return {"summary_records": summary, "member_records": members}
+
+
+def _fram_meta(f) -> dict:
+    meta = f["fram"].attrs.get("meta") if "fram" in f else None
+    if meta is None:
+        return {}
+    try:
+        d = json.loads(meta.decode() if isinstance(meta, bytes) else str(meta))
+    except (ValueError, TypeError):
+        return {}
+    return d if isinstance(d, dict) else {}
 
 
 def _iso_dates(f, n_dates: int) -> list[str]:
@@ -126,16 +156,15 @@ def _iso_dates(f, n_dates: int) -> list[str]:
 
 def _thresholds(f) -> list[float]:
     """FRAM 경보 임계 — 산출물이 적어뒀으면 그것을, 없으면 기본값."""
-    meta = f["fram"].attrs.get("meta") if "fram" in f else None
-    if meta is not None:
+    th = _fram_meta(f).get("cri_thresholds")
+    if isinstance(th, (list, tuple)) and len(th) == 3:
         try:
-            d = json.loads(meta.decode() if isinstance(meta, bytes) else str(meta))
-            th = d.get("cri_thresholds")
-            if isinstance(th, (list, tuple)) and len(th) == 3:
-                return [float(x) for x in th]
+            return [float(x) for x in th]
         except (ValueError, TypeError):
             pass
-    return [0.3, 0.6, 0.8]
+    # 기본값은 FRAM 엔진과 플랫폼 4-B 스크립트가 쓰는 것과 같아야 한다(한 곳에서 가져온다).
+    from .config import PipelineConfig
+    return [float(x) for x in PipelineConfig().cri_thresholds]
 
 
 def _level(cri: float, thresholds: list[float]) -> int:
@@ -150,11 +179,16 @@ def _level(cri: float, thresholds: list[float]) -> int:
 
 
 # ── HTTP ────────────────────────────────────────────────────────────────
-def _post(url: str, payload: dict, token: str | None, *, method: str = "POST",
-          timeout: float = 30.0) -> dict:
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+def _get(url: str, token: str | None = None, *, timeout: float = 60.0):
+    return _post(url, None, token, method="GET", timeout=timeout)
+
+
+def _post(url: str, payload: dict | None, token: str | None, *, method: str = "POST",
+          timeout: float = 30.0):
+    data = (json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            if payload is not None else None)
     req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": "application/json"} if data else {})
     if token:
         req.add_header(TOKEN_HEADER, token)
     try:
@@ -189,11 +223,137 @@ def register_bridge(name: str, lat: float, lon: float, *, base: str = DEFAULT_BA
     return _post(f"{base.rstrip('/')}/api/ingest/bridge/", payload, token)
 
 
+# ── 플랫폼에 이미 있는 교량 찾기 ──────────────────────────────────────────
+# 플랫폼은 전국 교량 33,120개를 이미 갖고 있다. 그런데 등록 API 는 같은 교량이 있는지 보지
+# 않고 새 행을 만든다 — 찾지 않고 등록하면 지도에 같은 교량이 둘 생기고, 우리 결과는 대장
+# 제원·BIM 이 없는 새 행에 붙는다. 그래서 **먼저 찾고, 없을 때만 등록한다.**
+MATCH_MAX_M = 300.0     # 이름이 같을 때 받아들이는 거리(대장마다 기준점이 시점·중앙으로 다르다)
+MATCH_TIE_M = 20.0      # 같은 이름이 이 차이 안에 둘이면 어느 쪽인지 알 수 없다(상·하행 분리교)
+
+
+def norm_name(s) -> str:
+    """교량명 비교용 — 공백·가운뎃점·전각 괄호만 정리한다((상)/(하) 구분은 남긴다)."""
+    out = str(s or "").replace("（", "(").replace("）", ")")
+    for ch in " \t·.-_":
+        out = out.replace(ch, "")
+    return out
+
+
+def _dist_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    import math
+    k = math.cos(math.radians(lat1))
+    return math.hypot(lat1 - lat2, (lon1 - lon2) * k) * 111_320.0
+
+
+def match_bridge(name: str, lat: float, lon: float, candidates: list[dict], *,
+                 max_m: float = MATCH_MAX_M) -> tuple[dict | None, str]:
+    """후보 [{id,name,lat,lon}] 에서 **이름이 같고 가까운** 하나 → (후보|None, 사유).
+
+    이름이 다르면 가까워도 받지 않는다 — 대장이 달라 30 m 안에 다른 교량(윗샘밭교/세월교)이
+    흔하다. 같은 이름이 같은 자리에 둘이면(상·하행) 고르지 않고 '모호'로 돌려준다.
+    """
+    want = norm_name(name)
+    near = sorted(((_dist_m(lat, lon, c["lat"], c["lon"]), c) for c in candidates
+                   if norm_name(c.get("name")) == want), key=lambda x: x[0])
+    near = [(d, c) for d, c in near if d <= max_m]
+    if not near:
+        return None, "이름이 같은 교량이 가까이 없음"
+    if len(near) > 1 and near[1][0] - near[0][0] < MATCH_TIE_M:
+        return None, f"같은 이름이 {len(near)}개 겹침(상·하행 분리교 등) — 사람이 골라야 함"
+    return near[0][1], f"{near[0][0]:.0f} m"
+
+
+def region_codes(name: str, *, base: str = DEFAULT_BASE, token: str | None = None) -> list[str]:
+    """시·군·구 이름 → 플랫폼 지역 코드(같은 이름이 여러 도에 있으면 여럿: 고성군·중구)."""
+    from urllib.parse import quote
+    rows = _get(f"{base.rstrip('/')}/api/regions/search?q={quote(name)}&limit=20", token)
+    return [r["code"] for r in rows or [] if r.get("level") == 2 and r.get("name") == name]
+
+
+def region_bridges(code: str, *, base: str = DEFAULT_BASE,
+                   token: str | None = None) -> list[dict]:
+    """지역 코드의 교량 [{id,name,lat,lon}].
+
+    좌표로 직접 찾는 `bbox` 조회는 플랫폼 1.0 에서 500(PointField 'bbox' 미지원)이라 쓰지
+    못한다 — 시·군·구 단위로 받아 여기서 거리를 잰다.
+    """
+    g = _get(f"{base.rstrip('/')}/api/bridges.geojson?region={code}&limit=10000", token)
+    out = []
+    for ft in (g or {}).get("features") or []:
+        pr, xy = ft.get("properties") or {}, (ft.get("geometry") or {}).get("coordinates") or []
+        if pr.get("id") is not None and len(xy) >= 2:
+            out.append({"id": int(pr["id"]), "name": pr.get("name"),
+                        "lat": float(xy[1]), "lon": float(xy[0]), "region": code})
+    return out
+
+
+def find_bridge(name: str, lat: float, lon: float, *, base: str = DEFAULT_BASE,
+                token: str | None = None) -> tuple[dict | None, str]:
+    """이름·좌표로 플랫폼의 기존 교량을 찾는다 → ({id,name,lat,lon}|None, 사유)."""
+    from urllib.parse import quote
+    hits = _get(f"{base.rstrip('/')}/api/bridges/search?q={quote(name)}&limit=50", token) or []
+    hits = [h for h in hits if norm_name(h.get("name")) == norm_name(name)]
+    if not hits:
+        return None, "플랫폼에 같은 이름의 교량이 없음"
+    ids = {int(h["id"]) for h in hits}
+    # 검색 결과에는 좌표가 없다 — 후보가 속한 시·군·구의 교량 목록에서 좌표를 얻는다.
+    sigungu = {" ".join(str(h.get("region_name") or "").split()[1:]) for h in hits} - {""}
+    cands: list[dict] = []
+    for sg in sorted(sigungu):
+        for code in region_codes(sg, base=base, token=token):
+            cands += [c for c in region_bridges(code, base=base, token=token) if c["id"] in ids]
+    return match_bridge(name, lat, lon, cands)
+
+
+def ensure_bridge(name: str, lat: float, lon: float, *, base: str = DEFAULT_BASE,
+                  token: str | None = None, **reg_kw) -> dict:
+    """찾으면 그 id, 없으면 등록 → {id, how: 'matched'|'registered', note, ...}."""
+    got, why = find_bridge(name, lat, lon, base=base, token=token)
+    if got is not None:
+        return {"id": got["id"], "name": got.get("name"), "how": "matched",
+                "note": f"기존 교량과 일치({why})", "detail_url": f"/bridge/{got['id']}/"}
+    new = register_bridge(name, lat, lon, base=base, token=token, **reg_kw)
+    return {**new, "how": "registered", "note": f"새로 등록({why})"}
+
+
+# ── 이미 올라가 있는 것 ──────────────────────────────────────────────────
+def platform_dates(bridge_id: int, *, source: str = SOURCE, base: str = DEFAULT_BASE,
+                   token: str | None = None) -> list[str]:
+    """플랫폼에 있는 이 교량·소스의 관측일(YYYY-MM-DD, 플랫폼 표시 기준 KST)."""
+    from datetime import datetime, timedelta, timezone
+    kst = timezone(timedelta(hours=9))
+    rows = _get(f"{base.rstrip('/')}/api/bridge/{int(bridge_id)}/timeseries", token) or []
+    out = []
+    for r in rows:
+        if r.get("source") != source:
+            continue
+        s = str(r.get("observed_at") or "")
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            out.append((dt.astimezone(kst) if dt.tzinfo else dt).strftime("%Y-%m-%d"))
+        except ValueError:
+            out.append(s[:10])
+    return out
+
+
+def delete_sensing(bridge_id: int, *, source: str = SOURCE, base: str = DEFAULT_BASE,
+                   token: str | None = None) -> dict:
+    """이 교량·소스의 센싱 레코드를 플랫폼에서 지운다(다른 소스·다른 교량은 건드리지 않는다)."""
+    from urllib.parse import quote
+    return _post(f"{base.rstrip('/')}/api/ingest/sensing/?bridge_id={int(bridge_id)}"
+                 f"&source={quote(source)}", None, token, method="DELETE")
+
+
 def push(project_h5: str | Path, bridge_id: int, *, base: str = DEFAULT_BASE,
          token: str | None = None, dry_run: bool = False,
-         allow_unreportable: bool = False, target: tuple[float, float] | None = None
-         ) -> PushResult:
-    """감사 → 레코드 생성 → 전송. '보고 불가' 산출물은 기본적으로 막는다."""
+         allow_unreportable: bool = False, target: tuple[float, float] | None = None,
+         replace: bool = False) -> PushResult:
+    """감사 → 레코드 생성 → 전송. '보고 불가' 산출물은 기본적으로 막는다.
+
+    replace: 올리기 전에 이 교량의 `inframon` 소스 레코드를 지운다. 플랫폼은 관측일별로
+    덮어쓰기만 하므로, 재처리로 시점이 바뀌었거나 플랫폼의 'inframon 연동 실행'(합성 데모)
+    결과가 같은 소스로 남아 있으면 옛 값이 섞인 채 최고 등급으로 표시된다.
+    """
     from .audit import NO, audit_artifact
 
     a = audit_artifact(project_h5, target=target)
@@ -212,6 +372,22 @@ def push(project_h5: str | Path, bridge_id: int, *, base: str = DEFAULT_BASE,
         res.summary_n = len(recs["summary_records"])
         res.member_n = len(recs["member_records"])
         return res
+    if replace:
+        gone = delete_sensing(bridge_id, base=base, token=token)
+        if gone.get("summary_n"):
+            res.warnings.append(f"기존 inframon 레코드 {gone['summary_n']}건을 지우고 올렸습니다")
+    else:
+        try:
+            ours = {r["observed_at"] for r in recs["summary_records"]}
+            stale = [d for d in platform_dates(bridge_id, base=base, token=token)
+                     if d not in ours]
+        except (PontifexError, AttributeError, TypeError, KeyError):
+            stale = []                  # 조회를 못 해도 전송은 한다
+        if stale:
+            res.warnings.append(
+                f"플랫폼에 이 산출물에 없는 관측일 {len(stale)}건이 같은 소스로 남아 있습니다"
+                f"({min(stale)} ~ {max(stale)}) — 옛 처리 결과나 플랫폼 합성 실행분일 수 "
+                "있습니다. 지우고 올리려면 --pontifex-replace")
     got = _post(f"{base.rstrip('/')}/api/ingest/sensing/", recs, token)
     res.summary_n = int(got.get("summary_n", 0))
     res.member_n = int(got.get("member_n", 0))

@@ -92,6 +92,20 @@ def series(root, bridge_id: str) -> dict:
         con.close()
 
 
+def last_dates(root) -> dict:
+    """가장 최근 주기의 {(교량 ID, 궤도): 마지막 영상일 YYYYMMDD} — 판정이 어느 날짜 기준인지."""
+    db = Path(root) / "history.sqlite"
+    if not db.exists():
+        return {}
+    con = sqlite3.connect(str(db))
+    try:
+        q = ("select bridge, track, last_date from judgements "
+             "where cycle = (select max(id) from cycles) and last_date is not null")
+        return {(b, t): str(d) for b, t, d in con.execute(q)}
+    finally:
+        con.close()
+
+
 def judgement_history(root, bridge_id: str) -> list[dict]:
     """주기별 판정 이력(등급 변화 추적)."""
     db = Path(root) / "history.sqlite"
