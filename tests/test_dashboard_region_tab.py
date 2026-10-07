@@ -68,3 +68,15 @@ def test_tab_renders_with_results(tab, tmp_path, monkeypatch):
     monkeypatch.setattr(tab, "_region_configs", lambda repo: [])
     monkeypatch.setattr(tab.st, "text_input", lambda *a, **k: str(root))
     tab.tab_region(str(tmp_path))
+
+
+def test_app_has_no_relative_imports():
+    """`streamlit run app.py` 는 app.py 를 패키지 밖 스크립트로 돌린다 — 상대 import 는 그 탭에서 ImportError."""
+    import ast
+    from pathlib import Path
+
+    import inframon.dashboard as pkg
+
+    tree = ast.parse((Path(pkg.__file__).parent / "app.py").read_text(encoding="utf-8"))
+    rel = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level > 0]
+    assert not rel, f"app.py 상대 import: {rel}행"

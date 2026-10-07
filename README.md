@@ -50,14 +50,14 @@ python start.py --full --tools --dashboard                  # 4. 전부 설치 �
 | ② | 교량 선택 | **교량명** 입력 → **🔎 찾기** (또는 **위도·경도** 칸에 직접 입력) |
 | ③ | 전 과정 실행 | 먼저 **📋 계획 보기** (10~30초, SLC 몇 장인지 확인) → 그다음 **▶ 전체 실행** (1~3시간) |
 | 또는 | 탭 **① InSAR → ② PINN → ③ FRAM → ④ 잔존수명** | 한 단계씩 보며 가려면 각 탭 맨 위 **▶ 이 단계 실행** (앞 단계가 없으면 눌리지 않고 무엇을 먼저 할지 알려 줌). 탭 줄 아래 진행 띠에 ✅/⬜ |
+| 시·군 전체 | 탭 **⑥ 광역 모니터링** | 교량 하나가 아니라 **지자체의 모든 교량**. 지역 설정을 고르면 교량 알람·처리 오류 알람·지도·교량별 시계열이 나오고, 알람 난 교량은 버튼으로 ②PINN·③FRAM 에 넘김 |
 
 진행 상황에 `②④ SLC·트랙·프레임 — ASC path127 · 41장` 처럼 ✅ 가 찍히면 그 교량은 돌릴 수 있는 것입니다.
 왼쪽 사이드바 **🔎 교량명 검색** → 지도 마커 클릭 → **💾 타깃 저장** → **🚀 끝까지 돌리기** 로 해도 같습니다.
 화면별 스크린샷은 [혼자 돌리기 (pdf)](docs/inframon_혼자_돌리기.pdf) 4장에 있습니다.
 
-교량 하나가 아니라 **시·군(도) 전체 교량**을 새 위성 영상마다 판정하려면 **⑥ 광역 모니터링** 탭 또는
-`python -m inframon --region configs/gangwon_region/region.json` — 판정을 교량 모니터링 플랫폼(Pontifex)에
-올리는 것까지 [docs/광역_모니터링.md](docs/광역_모니터링.md) 에 있습니다.
+**⑥ 광역 모니터링**은 강원특별자치도 18개 시·군 4,255개 교량으로 돌려 본 것입니다(2026-10) — 설정·판정 기준·한계는
+[docs/광역_모니터링.md](docs/광역_모니터링.md).
 
 | 그다음 (inframon 폴더 안에서) | 명령 |
 |---|---|
@@ -65,6 +65,8 @@ python start.py --full --tools --dashboard                  # 4. 전부 설치 �
 | 실 교량·트윈용 패키지까지 | `python start.py --full` |
 | 새 교량 명령 한 줄 | `.venv\Scripts\python scripts\bridge_run.py --name 마포대교 --lat 37.5337 --lon 126.9366` |
 | SNAP·snaphu·Earthdata 토큰·SLC 폴더 (한 번) | `python start.py --tools` — SNAP 은 내려받아 무인 설치, snaphu 는 WSL 에, 토큰은 페이지 열어 주면 붙여넣기, SLC 폴더는 드라이브 고르기 (토큰만: `.venv\Scripts\python -m inframon --earthdata-save <토큰>`) |
+| 시·군 전체 교량 현황 (광역 감시) | `.venv\Scripts\python -m inframon --region configs\gangwon_region\region.json` — 새 영상 처리는 `--region-update` |
+| 결과를 교량 모니터링 플랫폼(Pontifex)에 | 교량 하나: `.venv\Scripts\python -m inframon --bmap-sync --bmap-register` · 광역 판정: `... --region <region.json> --region-push` (먼저 `--pontifex-dry-run`) — [docs/BMAP_탑재.md](docs/BMAP_탑재.md) |
 | 이 PC 에 뭐가 없나 | `.venv\Scripts\python -m inframon --doctor` |
 | 다른 사람에게 넘길 때 | 주소 한 줄 + `.venv\Scripts\python scripts\pack_handoff.py` 가 만든 zip (파트너 CSV·처리 결과 h5, ~25 MB). 받는 쪽 `--unpack` |
 | SLC 를 어느 드라이브에 쌓을지 | 대시보드 🔧 패널 **SLC 보관 폴더** (드라이브 고르면 폴더를 만들어 줌) 또는 `.venv\Scripts\python -m inframon --slc-dir E:\SLC` |
@@ -94,6 +96,7 @@ flowchart TB
   end
 
   RSL["⏳ 잔존수명 RSL<br/>사용성·강성 채널<br/>(LOS→연직 투영)"]
+  REG["🗺️ ⑥ 광역 감시<br/>시·군 전체 교량<br/>허용변위 판정·알람"]
 
   subgraph VAL[" 독립 검증 · Validation "]
     GNSS["📡 GNSS 대조<br/>NGL 상시관측"]
@@ -105,6 +108,7 @@ flowchart TB
     DASH["📊 대시보드<br/>Streamlit"]
     BIM["🏗️ BIM·IFC<br/>디지털트윈"]
     REP["📄 리포트·VLM"]
+    PX["🌐 Pontifex<br/>교량 모니터링 플랫폼"]
   end
 
   S1 --> INS
@@ -119,11 +123,17 @@ flowchart TB
   RSL --> DASH
   PINN --> BIM
   FRAM --> REP
+  S1 --> REG
+  REG -. 알람 교량 내보내기 .-> PINN
+  REG --> DASH
+  REG --> PX
+  FRAM -- 감사 통과분 --> PX
 ```
 
 **한 줄 요약**: 데이터(🛰️⛰️🌡️🗺️) → `project.h5` 파이프라인(①②③④) → 잔존수명, 그리고
 GNSS·수준측량·OpenSees 로 **각 단계를 독립 검증**한다. 실행은 `python -m inframon --demo`
-(오프라인 데모) 또는 `streamlit run` 대시보드로 시작한다(§ 아래).
+(오프라인 데모) 또는 `streamlit run` 대시보드로 시작한다(§ 아래). 교량 하나를 깊게 보는 이 줄기 옆에,
+**지자체 전체 교량을 새 영상마다 훑는 ⑥ 광역 감시**가 있고, 두 결과 모두 교량 모니터링 플랫폼(Pontifex)으로 보낸다.
 
 **Concept — points ON a bridge deck (synthetic demo) / 개념 — 교량 데크 위 점 (합성 데모):**
 
@@ -246,7 +256,14 @@ python -m inframon --doctor     # environment / readiness check
 python -m inframon --demo       # full pipeline (stubs) → data/project.h5 + CRI
 pytest -q                       # tests
 pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   # dashboard
+python -m inframon --region configs/gangwon_region/region.json                 # region-wide monitoring: status of every bridge in a province
+python -m inframon --region configs/gangwon_region/region.json --region-push --pontifex-dry-run   # what would go to the Pontifex platform
 ```
+
+> **Region-wide monitoring** judges every registry bridge of a municipality on each new Sentinel-1
+> acquisition (dashboard tab ⑥, `--region`), and both that and single-bridge results can be sent to the
+> partner bridge-monitoring platform (Pontifex) — see [`docs/광역_모니터링.md`](docs/광역_모니터링.md)
+> and [`docs/BMAP_탑재.md`](docs/BMAP_탑재.md).
 
 > **Trying it out?** A step-by-step, copy-paste testing guide (run order, dashboard, CLI, your own
 > IFC/SAR data) is in [`docs/테스트_가이드.md`](docs/테스트_가이드.md).
@@ -536,6 +553,8 @@ python -m inframon --doctor     # 환경·준비도 진단
 python -m inframon --demo       # 전체 파이프라인(stub) → data/project.h5 + CRI
 pytest -q                       # 테스트
 pip install -e ".[dashboard]" && streamlit run src/inframon/dashboard/app.py   # 대시보드
+python -m inframon --region configs/gangwon_region/region.json                 # 광역 감시: 도 전체 교량 현황
+python -m inframon --region configs/gangwon_region/region.json --region-push --pontifex-dry-run   # Pontifex 에 무엇이 올라갈지
 ```
 
 > **직접 돌려 보려면** — 실행 순서부터 대시보드·CLI·내 IFC/SAR 데이터까지 복붙 가능한

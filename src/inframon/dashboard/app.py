@@ -2879,7 +2879,9 @@ def main() -> None:
     elif active == _SECTIONS[5]:
         tab_psi(start)
     elif active == _SECTIONS[6]:
-        from .region_tab import tab_region   # 지자체 전체 교량 감시(엔진 결과 판독) — 지연 import
+        # 지자체 전체 교량 감시(엔진 결과 판독) — 지연 import. `streamlit run app.py` 는 이 파일을
+        # 패키지 밖 스크립트로 돌리므로 상대 import(.region_tab)는 ImportError 다.
+        from inframon.dashboard.region_tab import tab_region
         tab_region(data_root())
 
 
