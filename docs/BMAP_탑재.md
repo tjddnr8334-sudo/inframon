@@ -28,7 +28,8 @@ python -m inframon --bmap-sync --bmap-register --pontifex-token "$TOKEN"
 |---|---|
 | `--bmap-dry-run` | 무엇을 올릴지만 보여준다(전송·기록 없음) |
 | `--bmap-strict` | ✅ 보고 가능만 올린다(🟡 조건부도 제외) |
-| `--bmap-register` | 플랫폼 교량 id 가 없으면 등록하고 받은 id 를 기록 |
+| `--bmap-register` | 플랫폼 교량 id 가 없으면 **플랫폼에서 먼저 찾고**(이름 같고 300 m 이내) 없을 때만 등록 — 받은 id 를 기록 |
+| `--pontifex-replace` | 올리기 전에 그 교량의 `inframon` 소스 레코드를 지운다(재처리로 시점이 바뀌었거나 옛 값이 섞였을 때) |
 | `--bmap-root DIR` | 대상 폴더(기본 `data`) |
 | `--pontifex-base URL` | 플랫폼 주소(기본 `http://localhost:38000`) |
 
@@ -36,10 +37,15 @@ python -m inframon --bmap-sync --bmap-register --pontifex-token "$TOKEN"
 
 플랫폼의 `bridge.id` 는 **사람이 정하는 값**이라 지어내지 않는다. 두 가지 방법:
 
-1. `--bmap-register` — 이름·좌표로 플랫폼에 등록하고 받은 id 를 산출물 곁
+1. `--bmap-register` — 플랫폼은 전국 교량 33,120개를 이미 갖고 있으므로 **먼저 찾는다**(같은
+   이름, 300 m 이내). 찾으면 그 id 를, 없을 때만 새로 등록해 받은 id 를 산출물 곁
    `bridge_target.json` 의 `pontifex_id` 에 적는다. 다음 실행부터 그 id 를 재사용한다.
-   (적어두지 않으면 실행할 때마다 새 교량이 만들어진다.)
-2. 이미 플랫폼에 있는 교량이면 `bridge_target.json` 에 `"pontifex_id": 40001` 을 직접 적는다.
+   같은 이름이 같은 자리에 둘이면(상·하행 분리교) 고르지 않고 알려준다 — 2번으로 정한다.
+2. id 를 알고 있으면 `bridge_target.json` 에 `"pontifex_id": 14606` 처럼 직접 적는다.
+
+플랫폼은 관측일별로 덮어쓰기만 하고 등급은 **전 기간 최고값**으로 보여준다. 그래서 옛 처리
+결과가 남아 있으면 새 결과를 올려도 등급이 내려가지 않는다 — 전송 때 "이 산출물에 없는
+관측일 N건이 남아 있다"고 경고하면 `--pontifex-replace` 로 지우고 올린다.
 
 ## 계속 갱신하기
 
@@ -53,6 +59,18 @@ python -m inframon --bmap-sync --pontifex-token "$TOKEN"  # ③ 통과분만 반
 
 ②는 생략해도 된다 — ③이 같은 감사를 다시 돌린다. 산출물 내용이 그대로면 ③은
 `변경없음` 으로 건너뛰므로 매일 돌려도 안전하다(cron·작업 스케줄러에 그대로 넣을 수 있다).
+
+## 광역 감시 판정 올리기
+
+시·군(도) 전체 교량의 허용변위 판정은 CRI 가 아니라서 따로 올린다(소스 `inframon_region`):
+
+```bash
+python -m inframon --region configs/gangwon_region/region.json --region-push --pontifex-dry-run
+python -m inframon --region configs/gangwon_region/region.json --region-push
+```
+
+플랫폼의 기존 교량에만 붙이고(새로 등록하지 않음), 확인 필요·판정 불가는 제외한다.
+자세한 것은 `docs/광역_모니터링.md`. 2026-10-07 강원: 확정 판정 580개 중 506개 전송.
 
 ## 지금 상태 (2026-09-02)
 
@@ -74,4 +92,5 @@ asc+desc 융합으로 **연직 변위**를 얻으면 형상 기반 식별(`_ei_f
    Pontifex 스택이 떠 있는지 확인하세요(cd backend && docker compose ps).
 ```
 
-Docker 가 없는 PC 에서는 `--bmap-dry-run` 으로 무엇이 올라갈지까지 확인할 수 있다.
+Docker 가 없는 PC 에서는 `--bmap-dry-run` 으로 무엇이 올라갈지까지 확인할 수 있다
+(교량을 플랫폼에서 찾는 단계는 '플랫폼 조회 불가'로 표시된다). 전송 경로까지 보려면 `--pontifex-mock` 모의 서버.

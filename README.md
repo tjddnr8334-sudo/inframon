@@ -55,6 +55,10 @@ python start.py --full --tools --dashboard                  # 4. 전부 설치 �
 왼쪽 사이드바 **🔎 교량명 검색** → 지도 마커 클릭 → **💾 타깃 저장** → **🚀 끝까지 돌리기** 로 해도 같습니다.
 화면별 스크린샷은 [혼자 돌리기 (pdf)](docs/inframon_혼자_돌리기.pdf) 4장에 있습니다.
 
+교량 하나가 아니라 **시·군(도) 전체 교량**을 새 위성 영상마다 판정하려면 **⑥ 광역 모니터링** 탭 또는
+`python -m inframon --region configs/gangwon_region/region.json` — 판정을 교량 모니터링 플랫폼(Pontifex)에
+올리는 것까지 [docs/광역_모니터링.md](docs/광역_모니터링.md) 에 있습니다.
+
 | 그다음 (inframon 폴더 안에서) | 명령 |
 |---|---|
 | 실 교량 시연 44초 (명령줄) | `.venv\Scripts\python scripts\demo_4pm.py` |
@@ -217,10 +221,11 @@ inframon/
 │   ├── fram/              # FRAM engine: pointwise resonance · function net (N-K) · CRI (engine + real_engine, network)
 │   ├── orchestrator/      # pipeline wiring · hot-swap engine registry · incremental resume
 │   ├── api/               # FastAPI service (--serve) + engine registry / transform
-│   ├── dashboard/         # Streamlit app (FRAM / PINN / InSAR tabs)
+│   ├── dashboard/         # Streamlit app (prep → InSAR → PINN → FRAM → remaining life · region monitoring tab)
+│   ├── region/            # Region-wide monitoring: engine results, per-bridge project.h5/IFC, Pontifex hand-off
 │   ├── __main__.py        # CLI entry — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 80 test files (723 tests) — golden regression, contract validation, per-engine *_real
+├── tests/                 # 112 test files (1,133 tests) — golden regression, contract validation, per-engine *_real
 ├── configs/               # 공유·수정 가능한 교량 입력 (레시피·BIM 부재표·좌표정합·한계값) — git 추적
 ├── docs/                  # design & context docs (KR) + GitHub Pages landing (index.html)
 ├── scripts/               # SLC download, WSL2 SARvey runners, dashboard / media capture
@@ -506,10 +511,11 @@ inframon/
 │   ├── fram/              # FRAM 엔진: 점별 공명 · 함수망(N-K) · CRI          (engine + real_engine, network)
 │   ├── orchestrator/      # 파이프라인 배선 · 핫스왑 엔진 레지스트리 · 증분 재개
 │   ├── api/               # FastAPI 서비스(--serve) + 엔진 레지스트리/변환
-│   ├── dashboard/         # Streamlit 앱 (FRAM / PINN / InSAR 탭)
+│   ├── dashboard/         # Streamlit 앱 (⓪ 준비 → ① InSAR → ② PINN → ③ FRAM → ④ 잔존수명 · ⑥ 광역 모니터링)
+│   ├── region/            # 광역 감시: 엔진 결과 판독 · 교량별 project.h5/IFC · Pontifex 전송
 │   ├── __main__.py        # CLI 진입점 — --demo / --doctor / --check-track / --engine X=real
 │   └── config.py · doctor.py · export.py · geotransform.py · schedule.py · weather.py · traffic.py …
-├── tests/                 # 테스트 파일 80개 (테스트 723개) — 골든 회귀, 계약 검증, 엔진별 *_real
+├── tests/                 # 테스트 파일 112개 (테스트 1,133개) — 골든 회귀, 계약 검증, 엔진별 *_real
 ├── configs/               # 공유·수정 가능한 교량 입력 — 협업자가 여기를 고친다 (configs/README.md)
 ├── docs/                  # 설계·맥락 문서(한글) + GitHub Pages 랜딩(index.html)
 ├── scripts/               # SLC 다운로드, WSL2 SARvey 러너, 대시보드/미디어 캡처

@@ -19,7 +19,9 @@
 트랙이 없으면 `--track` 을 빼고 좌표만 준다 — ⓪ SLC 검색·다운로드 → SNAP → 언래핑(실패 시
 자동 재시도)부터 만든다. 필요한 외부 자격·도구(Earthdata 토큰·SNAP·snaphu)는
 `python -m inframon --doctor` 가 알려주고, 토큰은 `--earthdata-save <토큰>` 한 번이면 된다.
-⑭ BMAP 전송은 `--pontifex-mock` 모의 서버로 Docker 없이 HTTP 왕복을 확인했다.
+⑭ BMAP 전송은 `--pontifex-mock` 모의 서버로 Docker 없이 HTTP 왕복을 확인했다. 실 플랫폼에는
+`--pontifex-register "이름,위도,경도"` 가 기존 교량을 먼저 찾아 그 id 로 올린다(내곡교 → 14606,
+정자교 → 16618 확인). 아래 표의 CRI 는 아직 플랫폼에 올리지 않았다.
 
 각 폴더: `결과.md` · `brief.png`(건기연 형식 4단) · `twin.viewer.html`(더블클릭 3D) ·
 `twin_cri.viewer.html` · `*_proxy.ifc` · `project.h5`
