@@ -125,3 +125,31 @@ def test_second_cycle_does_not_duplicate(root, platform):
     rp.push_region(root, base=base)
     rp.push_region(root, base=base)
     assert len(srv.state.sensing[14606]["summary_records"]) == 1
+
+
+def test_records_carry_a_conclusion_and_its_evidence(root, platform):
+    """플랫폼 교량 화면은 결론(한 문장·할 일)을 먼저 보이고 근거(변위 시계열)를 펼친다 —
+    둘 다 우리가 보낸다. 시계열 표가 없는 이력 DB 에서는 판정만 간다(막히지 않는다)."""
+    recs = {r["bridge_id"]: r["summary_json"] for r in rp.plan(root, base=platform[0])["records"]}
+    assert recs[14606]["headline"].startswith("허용변위의 20%") and "10년 뒤 30%" in recs[14606]["headline"]
+    assert recs[14606]["action"].startswith("다음 정기점검") and recs[14700]["action"].startswith("현장 확인")
+    assert recs[14606]["series"] is None
+
+    con = sqlite3.connect(str(root / "history.sqlite"))
+    con.execute("create table series(bridge text, track text, kind text, date text, disp_mm real)")
+    con.executemany("insert into series values ('r1','a54',?,?,?)",
+                    [("los", "20260328", -1.0), ("vert_tc", "20260328", -1.24), ("vert_tc", "20260409", -2.0)])
+    con.commit()
+    con.close()
+    s = rp.plan(root, base=platform[0])["records"][0]["summary_json"]["series"]
+    assert s["kind"] == "vert_tc" and s["dates"] == ["2026-03-28", "2026-04-09"] and s["mm"] == [-1.2, -2.0]
+    assert "headline" not in rp.plan(root, base=platform[0], evidence=False)["records"][0]["summary_json"]
+
+
+def test_conclusion_wording_does_not_overstate():
+    """정상은 조치 없음, 측정점이 적으면 그 사실을 문장에 넣고, 확인 필요는 조치 대신 확인을 말한다."""
+    ok = {"rn": 0.1, "r10": 0.1, "conf": "낮음", "nps": 2, "wh": ["교축 +7~+22 m 구간"]}
+    assert "허용 범위 안" in rp.headline(ok, "정상") and "2개뿐" in rp.headline(ok, "정상")
+    assert rp.action(ok, "정상").startswith("별도 조치 없음") and "교축" not in rp.action(ok, "정상")
+    assert "교축 +7~+22 m 구간" in rp.action(ok, "주의")
+    assert rp.action({"rv": True, "nt": "교대부 대체"}, "경고").startswith("판정을 확정하기 전에")

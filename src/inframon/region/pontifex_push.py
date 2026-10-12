@@ -35,6 +35,54 @@ def _iso(yyyymmdd: str) -> str | None:
     return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 else None
 
 
+def _pct(x) -> str:
+    return f"{round(100 * float(x or 0))}%"
+
+
+def headline(r: dict, status: str) -> str:
+    """판정 이유 한 문장 — 플랫폼 교량 화면의 '결론' 칸에 그대로 쓴다(숫자는 엔진 값 그대로)."""
+    now, proj = r.get("rn"), r.get("r10")
+    if now is None:
+        return f"위성 판정: {status}"
+    s = f"허용변위의 {_pct(now)}"
+    if status == "정상":
+        s += " — 허용 범위 안입니다."
+    elif proj is not None and proj > (now or 0):
+        s += f" — 같은 속도가 이어지면 10년 뒤 {_pct(proj)}로 예측됩니다."
+    else:
+        s += f" — 판정 {status}."
+    if r.get("conf") == "낮음":
+        s += f" 교량 위 측정점이 {r.get('nps') or 0}개뿐이라 신뢰도는 낮습니다."
+    return s
+
+
+def action(r: dict, status: str) -> str:
+    """관리자가 할 일 한 줄. 법정 점검을 대신하지 않는다 — 어디부터 볼지만 말한다."""
+    where = next((w for w in (r.get("wh") or [])[:3] if w), "")
+    spot = f" 변위가 큰 곳: {where}." if where and status != "정상" else ""
+    if r.get("rv"):
+        return "판정을 확정하기 전에 자료 확인이 필요합니다." + (f" ({r['nt']})" if r.get("nt") else "")
+    return {"정상": "별도 조치 없음 — 정기점검 일정대로 진행합니다.",
+            "관심": "다음 정기점검 때 먼저 확인합니다.",
+            "주의": "가까운 시일 안에 현장 확인을 권합니다.",
+            "경고": "현장 확인이 필요합니다."}.get(status, "") + spot
+
+
+def evidence_series(root, bridge_id: str, track) -> dict | None:
+    """근거 그래프용 변위 시계열(주변 지반 대비). 열 신축 보정 수직 > 수직 > LOS 순으로 하나."""
+    import sqlite3
+    try:
+        by_kind = (rr.series(root, bridge_id) or {}).get(track) or {}
+    except sqlite3.Error:               # 시계열 표가 없는 이력 DB — 근거 그래프 없이 판정만 보낸다
+        return None
+    for kind in ("vert_tc", "vert", "los"):
+        pts = [(_iso(d), v) for d, v in by_kind.get(kind) or [] if v is not None and _iso(d)]
+        if pts:
+            return {"kind": kind, "label": rr.KINDS[kind], "unit": "mm",
+                    "dates": [d for d, _ in pts], "mm": [round(float(v), 1) for _, v in pts]}
+    return None
+
+
 def platform_candidates(cities: dict, *, base: str, token: str | None = None) -> dict:
     """시·군 이름 → 플랫폼 교량 [{id,name,lat,lon}].
 
@@ -57,10 +105,13 @@ def platform_candidates(cities: dict, *, base: str, token: str | None = None) ->
 
 
 def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
-         include_review: bool = False, levels=LEVEL_MAP, candidates: dict | None = None) -> dict:
+         include_review: bool = False, levels=LEVEL_MAP, candidates: dict | None = None,
+         evidence: bool = True) -> dict:
     """무엇을 올릴지 정한다(전송 없음) → {records, matched, skipped{사유: n}, unmatched[...]}.
 
     ``candidates`` 를 주면 플랫폼을 조회하지 않는다(테스트·재사용).
+    ``evidence`` 면 레코드에 결론 문장(headline·action)과 근거(변위 시계열)를 같이 싣는다 —
+    플랫폼이 등급만이 아니라 '왜'를 같은 화면에서 펼쳐 보일 수 있게.
     """
     state = rr.load_state(root)
     dates = rr.last_dates(root)
@@ -104,6 +155,13 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             continue
         taken[hit["id"]] = b["id"]
         lv = int(r["lv"])
+        st_name = rr.status(lv)
+        extra = {}
+        if evidence:
+            extra = {"headline": headline(r, st_name), "action": action(r, st_name),
+                     "where": next((w for w in (r.get("wh") or [])[:3] if w), ""),
+                     "obs_years": r.get("tob"), "d_10y_mm": r.get("d10"),
+                     "series": evidence_series(root, b["id"], r.get("trk"))}
         matched.append({"id": b["id"], "name": b["n"], "city": b.get("c"),
                         "pontifex_id": hit["id"], "match": why, "status": rr.status(lv)})
         records.append({
@@ -125,6 +183,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                 "note": r.get("nt"),
                 "engine_bridge_id": b["id"],
                 "produced_by": "inframon.region",
+                **extra,
             },
         })
     for u in unmatched:
