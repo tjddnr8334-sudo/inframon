@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- 변위 **5단계 등급**(우수·양호·정상·주의·위험): 형식(연속/단순)·경간·종별에 따라 다른 허용값으로 판정한다 (`region.grade5`, `--region-grade5`). 등급 단계는 시설물안전법 시행령 별표 8, 정성 기준은 세부지침 교량 [표 1.20]·[표 1.21], 수치는 AASHTO LRFD C10.5.2.2 와 inframon 기본 가정 — 출처를 값마다 붙여 돌려준다. Pontifex 로는 `summary_json.grade5` 로 함께 간다.
 - 광역 판정을 Pontifex 로 보낼 때 **결론(한 문장 `headline` · 할 일 `action`)과 근거(변위 시계열 `series`)** 를 `summary_json` 에 함께 싣는다 — 플랫폼 교량 화면의 결론/근거 2단 구성용 (`region.pontifex_push`).
 - Region verdicts can be sent to Pontifex (`--region <region.json> --region-push`, with `--pontifex-dry-run` / `--region-push-review`). Each judged bridge is matched to a bridge the platform already has (same 시·군, same name, within 300 m) and never registered anew; unprocessed, unjudgeable and 확인 필요 verdicts are left out and counted. Records use a separate source `inframon_region` with no CRI value (the allowable-displacement ratio is not a CRI) and keep grade names (관심/주의→1, 경고→2). Checked against the real stack: 506 of the 580 firm 강원 verdicts landed on existing bridges. · 광역 판정을 Pontifex 기존 교량에 붙여 올리는 `--region-push` 추가.
 

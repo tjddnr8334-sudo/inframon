@@ -447,6 +447,9 @@ def main() -> None:
     p.add_argument("--region-push", action="store_true",
                    help="--region: 판정을 Pontifex 에 올린다(소스 inframon_region). 플랫폼의 기존 교량과 "
                         "이름·좌표로 맞추고, 확인 필요·판정 불가는 제외. --pontifex-base/-token/-dry-run 을 같이 쓴다")
+    p.add_argument("--region-grade5", action="store_true",
+                   help="--region: 변위 5단계 등급(우수·양호·정상·주의·위험)을 형식·경간·종별 허용값으로 도출해 "
+                        "분포를 출력하고 data/region/<이름>/grade5.csv 로 저장")
     p.add_argument("--region-push-review", action="store_true",
                    help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
@@ -1696,6 +1699,29 @@ def main() -> None:
                 print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
             print("=" * 56)
             return
+        if args.region_grade5:
+            import csv
+
+            from .region import grade5 as _g5
+            s = _g5.summarize(_rr.load_state(root), overrides=rc.get("grade5"))
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "grade5.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with out.open("w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
+                w.writeheader()
+                w.writerows(s["rows"])
+            print("=" * 60)
+            print(f"  변위 5단계 등급 — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print("=" * 60)
+            for g, letter in zip(_g5.GRADES, _g5.LETTERS):
+                n, rv = s["counts"][g], s["review"][g]
+                print(f"  {letter} {g}   : {n:>6,}개" + (f"  (그중 확인 필요 {rv:,})" if rv else ""))
+            print("  근거:")
+            for k in ("grades", "qualitative", "struct_beta", "mgmt_beta", "mgmt_settlement", "class_cuts"):
+                print(f"   · {_g5.SOURCES[k]}")
+            print(f"  저장            : {out}")
+            print("=" * 60)
+            return
         if args.region_push:
             import sys as _sys
 
@@ -1706,6 +1732,7 @@ def main() -> None:
                     root, base=args.pontifex_base, token=args.pontifex_token,
                     dry_run=args.pontifex_dry_run, include_review=args.region_push_review,
                     levels=tuple(rc.get("pontifex_levels") or _rp.LEVEL_MAP),
+                    grade5_overrides=rc.get("grade5"),
                     report_path=Path(rc.get("projects_dir") or f"data/region/{root.name}")
                     / "pontifex_push.json")
             except PontifexError as e:

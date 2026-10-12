@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import pontifex as px
+from . import grade5 as g5
 from . import results as rr
 
 SOURCE = "inframon_region"
@@ -106,7 +107,7 @@ def platform_candidates(cities: dict, *, base: str, token: str | None = None) ->
 
 def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
          include_review: bool = False, levels=LEVEL_MAP, candidates: dict | None = None,
-         evidence: bool = True) -> dict:
+         evidence: bool = True, grade5_overrides: dict | None = None) -> dict:
     """무엇을 올릴지 정한다(전송 없음) → {records, matched, skipped{사유: n}, unmatched[...]}.
 
     ``candidates`` 를 주면 플랫폼을 조회하지 않는다(테스트·재사용).
@@ -162,6 +163,19 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                      "where": next((w for w in (r.get("wh") or [])[:3] if w), ""),
                      "obs_years": r.get("tob"), "d_10y_mm": r.get("d10"),
                      "series": evidence_series(root, b["id"], r.get("trk"))}
+            g = g5.grade_bridge(b, overrides=grade5_overrides)
+            if g and g["idx"] >= 0:                 # 5단계 변위 등급 — 형식·경간·종별 허용값과 출처를 같이
+                a = g["allow"]
+                extra["grade5"] = {
+                    "grade": g["grade"], "letter": g["letter"], "ratio_mgmt": g["ratio_mgmt"],
+                    "ratio_struct": g["ratio_struct"], "basis": g["basis"],
+                    "structure": "연속" if a["structure"] == "continuous" else "단순",
+                    "type": a["type"], "class": a["class"], "span_m": a["span_m"],
+                    "struct_diff_mm": a["struct_diff_mm"], "mgmt_diff_mm": a["mgmt_diff_mm"],
+                    "mgmt_settlement_mm": a["mgmt_settlement_mm"],
+                    "sources": [a["sources"][k] for k in ("grades", "qualitative", "struct_beta",
+                                                           "mgmt_beta", "mgmt_settlement", "class_cuts")],
+                }
         matched.append({"id": b["id"], "name": b["n"], "city": b.get("c"),
                         "pontifex_id": hit["id"], "match": why, "status": rr.status(lv)})
         records.append({
@@ -195,12 +209,13 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
 
 def push_region(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                 dry_run: bool = False, include_review: bool = False, levels=LEVEL_MAP,
-                report_path=None, candidates: dict | None = None) -> dict:
+                report_path=None, candidates: dict | None = None,
+                grade5_overrides: dict | None = None) -> dict:
     """판정을 플랫폼에 올린다 → {sent, errors, levels{등급: n}, skipped, unmatched, ...}."""
     import json
 
     p = plan(root, base=base, token=token, include_review=include_review, levels=levels,
-             candidates=candidates)
+             candidates=candidates, grade5_overrides=grade5_overrides)
     recs = p["records"]
     by_level: dict[int, int] = {}
     for r in recs:
