@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **보수 CRI**: 교량 제원(형식·종별·경간·재료)으로 CRI 의 기준 스케일을 정한다 (`fram.conservative`, `region.cri`, `--region-cri`). 허용 각변위는 구조 한계(AASHTO)·관리 기준·재료 한계 중 가장 작은 값, 속도는 95 % 상한, 모르는 제원은 불리한 쪽. 가정인 값은 출처에 '가정'으로 적어 돌려준다.
+- **법규 기반 CRI**: 세부지침의 환산 결함도 점수([표 1.29]·[표 1.31])에 위성 변위를 하부구조 a~e 로 넣는다 (`region.guideline_cri`, `--region-cri`). 수치는 Moulton 외(1985)·Bozozuk(1978)을 구조물기초설계기준 4.3.6 에 따라 준용. d 이하는 '중대한 결함 해당 가능'으로 표시한다.
 - 변위 **5단계 등급**(우수·양호·정상·주의·위험): 형식(연속/단순)·경간·종별에 따라 다른 허용값으로 판정한다 (`region.grade5`, `--region-grade5`). 등급 단계는 시설물안전법 시행령 별표 8, 정성 기준은 세부지침 교량 [표 1.20]·[표 1.21], 수치는 AASHTO LRFD C10.5.2.2 와 inframon 기본 가정 — 출처를 값마다 붙여 돌려준다. Pontifex 로는 `summary_json.grade5` 로 함께 간다.
 - 광역 판정을 Pontifex 로 보낼 때 **결론(한 문장 `headline` · 할 일 `action`)과 근거(변위 시계열 `series`)** 를 `summary_json` 에 함께 싣는다 — 플랫폼 교량 화면의 결론/근거 2단 구성용 (`region.pontifex_push`).
 - Region verdicts can be sent to Pontifex (`--region <region.json> --region-push`, with `--pontifex-dry-run` / `--region-push-review`). Each judged bridge is matched to a bridge the platform already has (same 시·군, same name, within 300 m) and never registered anew; unprocessed, unjudgeable and 확인 필요 verdicts are left out and counted. Records use a separate source `inframon_region` with no CRI value (the allowable-displacement ratio is not a CRI) and keep grade names (관심/주의→1, 경고→2). Checked against the real stack: 506 of the 580 firm 강원 verdicts landed on existing bridges. · 광역 판정을 Pontifex 기존 교량에 붙여 올리는 `--region-push` 추가.

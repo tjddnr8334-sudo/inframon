@@ -451,8 +451,8 @@ def main() -> None:
                    help="--region: 변위 5단계 등급(우수·양호·정상·주의·위험)을 형식·경간·종별 허용값으로 도출해 "
                         "분포를 출력하고 data/region/<이름>/grade5.csv 로 저장")
     p.add_argument("--region-cri", action="store_true",
-                   help="--region: 보수 CRI — 교량 제원(형식·종별·경간·재료)으로 정한 스케일로 교량 단위 CRI 를 "
-                        "계산해 분포를 출력하고 data/region/<이름>/cri_conservative.csv 로 저장")
+                   help="--region: 법규 기반 CRI — 세부지침의 환산 결함도 점수에 위성 변위(하부구조 a~e)를 넣어 "
+                        "계산하고 data/region/<이름>/cri_guideline.csv 로 저장")
     p.add_argument("--region-push-review", action="store_true",
                    help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
@@ -1728,24 +1728,25 @@ def main() -> None:
         if args.region_cri:
             import csv
 
-            from .fram import conservative as _cc
-            from .region import cri as _rcri
-            s = _rcri.summarize(_rr.load_state(root), root, opts=rc.get("cri_conservative"))
-            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "cri_conservative.csv"
+            from .region import guideline_cri as _gc
+            s = _gc.summarize(_rr.load_state(root), root)
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "cri_guideline.csv"
             out.parent.mkdir(parents=True, exist_ok=True)
             with out.open("w", newline="", encoding="utf-8-sig") as fh:
                 w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
                 w.writeheader()
                 w.writerows(s["rows"])
             print("=" * 60)
-            print(f"  보수 CRI — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print(f"  법규 기반 CRI(환산 결함도) — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
             print("=" * 60)
-            print("  등급      보수(제원별 스케일)   기본 스케일(비교)")
-            for lv in _cc.LEVELS:
-                print(f"  {lv}   : {s['counts'][lv]:>8,}개        {s['base_counts'][lv]:>8,}개")
+            print("  하부구조 위성 평가 : " + " · ".join(f"{k} {v:,}" for k, v in s["letters"].items()))
+            print("  상태등급(위성 반영): " + " · ".join(f"{k} {v:,}" for k, v in s["grades"].items()))
+            print("  기존 점검등급      : " + " · ".join(f"{k} {v:,}" for k, v in s["base_grades"].items()))
+            n_major = sum(1 for r in s["rows"] if r["중대한결함_해당가능"])
+            print(f"  중대한 결함 해당 가능(하부구조 d 이하): {n_major:,}개 — 현장 확인 대상")
             print("  근거:")
-            for k in _cc.SOURCES:
-                print(f"   · {_cc.SOURCES[k]}")
+            for line in _gc.SOURCES:
+                print(f"   · {line}")
             print(f"  저장            : {out}")
             print("=" * 60)
             return
