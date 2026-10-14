@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .. import pontifex as px
 from . import grade5 as g5
+from . import guideline_cri as gc
 from . import results as rr
 
 SOURCE = "inframon_region"
@@ -28,7 +29,9 @@ SOURCE = "inframon_region"
 # '관심'은 플랫폼에 없어 가장 낮은 비정상 등급(주의)으로 보낸다. region.json 의
 # ``pontifex_levels`` 로 바꿀 수 있다.
 LEVEL_MAP = (0, 1, 1, 2)
+CRI_LEVEL = 2          # 법규 기반 CRI ≥ 1.0(허용 한계 도달 = 세부지침 '중대한 결함 해당 가능') → 최소 '경고'
 BATCH = 500
+MAX_BYTES = 2_000_000
 
 
 def _iso(yyyymmdd: str) -> str | None:
@@ -67,6 +70,26 @@ def action(r: dict, status: str) -> str:
             "관심": "다음 정기점검 때 먼저 확인합니다.",
             "주의": "가까운 시일 안에 현장 확인을 권합니다.",
             "경고": "현장 확인이 필요합니다."}.get(status, "") + spot
+
+
+def cri_headline(c: dict, r: dict, status: str) -> tuple[str, str]:
+    """법규 기반 CRI 가 있으면 결론 문장을 CRI 로 쓴다(엔진의 관리 기준 비율과 섞지 않는다).
+
+    할 일은 CRI ≥ 1.0 이면 현장 확인, 아니면 엔진 판정의 할 일(지도 색과 어긋나지 않게).
+    """
+    pct = f"{round(100 * c['cri'])}%"
+    gov = c["governing"].split("(")[0].strip()
+    if c["cri"] >= 1.0:
+        s = f"위성 변위가 허용 한계의 {pct}입니다({gov}). 세부지침상 '중대한 결함'에 해당할 수 있습니다."
+        a = "현장 확인이 필요합니다 — 교대·교각 기울음과 기초 부등침하를 확인합니다."
+    else:
+        s = f"위성 변위는 허용 한계의 {pct}입니다({gov})."
+        a = action(r, status)
+    if r.get("conf") == "낮음":
+        s += f" 교량 위 측정점이 {r.get('nps') or 0}개뿐이라 신뢰도는 낮습니다."
+    if r.get("rv") and c["cri"] >= 1.0:
+        a = "판정을 확정하기 전에 자료 확인이 필요합니다." + (f" ({r['nt']})" if r.get("nt") else "")
+    return s, a
 
 
 def evidence_series(root, bridge_id: str, track) -> dict | None:
@@ -143,6 +166,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                   for c, ps in cen.items() if c}
         candidates = platform_candidates(cities, base=base, token=token)
 
+    series = gc.load_series(root) if evidence else {}
     records, matched, unmatched, taken = [], [], [], {}
     for b in todo:
         r = b["r"]
@@ -157,6 +181,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
         taken[hit["id"]] = b["id"]
         lv = int(r["lv"])
         st_name = rr.status(lv)
+        level = int(levels[lv])
         extra = {}
         if evidence:
             extra = {"headline": headline(r, st_name), "action": action(r, st_name),
@@ -176,13 +201,26 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                     "sources": [a["sources"][k] for k in ("grades", "qualitative", "struct_beta",
                                                            "mgmt_beta", "mgmt_settlement", "class_cuts")],
                 }
+            a = gc.assess(b, series.get(b["id"]))
+            if a is not None:                       # 법규 기반 CRI — 위성 변위 ÷ 허용 한계, 보조 지표 포함
+                extra["cri_guideline"] = {
+                    "cri": a["cri"], "governing": a["governing"], "over_limit": a["cri"] >= 1.0,
+                    "settle_up_mm": a["settle_up_mm"], "beta": a["beta"], "beta_limit": a["beta_limit"],
+                    "span_m": a["span_m"] and round(a["span_m"], 1), "structure": "연속" if a["continuous"] else "단순",
+                    "letter": a["letter"], "major_defect": a["major_defect"], "why": a["why"],
+                    "defect_score": a["score"], "grade": a["grade"], "base_grade": (b.get("gr") or None),
+                    "sources": list(gc.SOURCES),
+                }
+                extra["headline"], extra["action"] = cri_headline(extra["cri_guideline"], r, st_name)
+                if a["cri"] >= 1.0:
+                    level = max(level, CRI_LEVEL)
         matched.append({"id": b["id"], "name": b["n"], "city": b.get("c"),
                         "pontifex_id": hit["id"], "match": why, "status": rr.status(lv)})
         records.append({
             "bridge_id": hit["id"],
             "source": SOURCE,
             "observed_at": _iso(dates[(b["id"], r.get("trk"))]),
-            "warning_level": int(levels[lv]),
+            "warning_level": level,
             "critical_members": [],
             "summary_json": {
                 "kind": "insar_allowable_displacement",
@@ -207,6 +245,22 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             "skipped": skipped, "unmatched": unmatched}
 
 
+def _batches(recs: list, max_bytes: int = MAX_BYTES):
+    """레코드를 BATCH 개 · max_bytes 이하로 나눈다(플랫폼 요청 본문 한도 — Django 기본 2.5 MB)."""
+    import json
+
+    chunk, size = [], 0
+    for r in recs:
+        n = len(json.dumps(r, ensure_ascii=False).encode("utf-8")) + 1
+        if chunk and (len(chunk) >= BATCH or size + n > max_bytes):
+            yield chunk
+            chunk, size = [], 0
+        chunk.append(r)
+        size += n
+    if chunk:
+        yield chunk
+
+
 def push_region(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                 dry_run: bool = False, include_review: bool = False, levels=LEVEL_MAP,
                 report_path=None, candidates: dict | None = None,
@@ -225,9 +279,9 @@ def push_region(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
            "skipped": p["skipped"], "unmatched": p["unmatched"], "matched": p["matched"]}
     if dry_run:
         return out
-    for i in range(0, len(recs), BATCH):
+    for chunk in _batches(recs):
         got = px._post(f"{base.rstrip('/')}/api/ingest/sensing/",
-                       {"summary_records": recs[i:i + BATCH], "member_records": []}, token,
+                       {"summary_records": chunk, "member_records": []}, token,
                        timeout=120.0)
         out["sent"] += int(got.get("summary_n", 0))
         out["errors"] += [str(e) for e in got.get("errors") or []]

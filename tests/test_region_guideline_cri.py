@@ -37,6 +37,12 @@ def test_cri_is_the_ratio_to_the_allowable_limit():
         assert (f(mm, span, cont, sub["beta"])["cri"] >= 1.0) == (sub["letter"] in "de"), (mm, span, cont)
 
 
+def test_unknown_span_is_not_invented():
+    sub = gc.substructure_letter(30, None, continuous=True, significant=True)
+    assert sub["beta"] == 0.0 and sub["letter"] == "b"                    # 경간을 모르면 각변위 기준은 쓰지 않는다
+    assert gc.limit_ratio(30, None, continuous=True, beta=0.0)["cri"] == 0.6   # 침하 30 / 50 mm 만
+
+
 def test_defect_score_follows_the_guideline_weights():
     s = gc.defect_score("B", "d", "라멘교")
     assert s["sub_weight"] == 41 and s["score"] == round(0.2 * 0.59 + 0.7 * 0.41, 3) and s["grade"] == "C"

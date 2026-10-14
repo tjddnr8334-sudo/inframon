@@ -119,10 +119,16 @@ def fit_series(t_years, mm, *, z: float = 1.96) -> dict | None:
             "years": float(t.max() - t.min()), "n": int(t.size)}
 
 
-def substructure_letter(settle_up_mm: float, span_m: float, *, continuous: bool, significant: bool,
+def substructure_letter(settle_up_mm: float, span_m: float | None, *, continuous: bool, significant: bool,
                         beta_measured: float = 0.0) -> dict:
-    """위성 변위 → 하부구조(교대·교각·기초) 변위 항목의 a~e 와 그 이유."""
-    beta = max(float(settle_up_mm) / (float(span_m) * 1000.0), abs(float(beta_measured or 0.0)))
+    """위성 변위 → 하부구조(교대·교각·기초) 변위 항목의 a~e 와 그 이유.
+
+    경간을 모르면(``span_m`` None) 침하 ÷ 경간은 계산하지 않고 엔진이 잰 각변위만 쓴다 —
+    없는 경간을 지어내지 않는다. 그런 교량은 침하량 기준(Bozozuk)만 남는다.
+    """
+    beta = abs(float(beta_measured or 0.0))
+    if span_m:
+        beta = max(beta, float(settle_up_mm) / (float(span_m) * 1000.0))
     kind = "연속" if continuous else "단순"
     limit = BETA_LIMIT["continuous" if continuous else "simple"]
     why = []
@@ -144,19 +150,19 @@ def substructure_letter(settle_up_mm: float, span_m: float, *, continuous: bool,
     elif settle_up_mm >= SETTLE_HARMFUL_MM:
         k = max(k, 3)
         why.append(f"침하 {settle_up_mm:.0f} mm ≥ 50 mm — 유해(Bozozuk 1978)")
-    if continuous and span_m <= SHORT_CONT_SPAN_M and settle_up_mm >= SHORT_CONT_SETTLE_MM:
+    if continuous and span_m and span_m <= SHORT_CONT_SPAN_M and settle_up_mm >= SHORT_CONT_SETTLE_MM:
         k = max(k, 3)
         why.append(f"연속교 · 경간 {span_m:.0f} m ≤ 18.3 m 에서 부등침하 {settle_up_mm:.0f} mm ≥ 25.4 mm(Moulton 1985)")
     return {"letter": LETTERS[k], "beta": round(beta, 5), "beta_limit": limit, "why": why}
 
 
-def limit_ratio(settle_up_mm: float, span_m: float, *, continuous: bool, beta: float) -> dict:
+def limit_ratio(settle_up_mm: float, span_m: float | None, *, continuous: bool, beta: float) -> dict:
     """CRI — 허용 한계 대비 비율. 기준마다 비율을 내고 가장 큰 것을 쓴다(1.0 = 허용 한계)."""
     limit = BETA_LIMIT["continuous" if continuous else "simple"]
     kind = "연속" if continuous else "단순"
     parts = [(beta / limit, f"각변위 {beta:.4f} / 허용 {limit}({kind}교, Moulton 1985)"),
              (settle_up_mm / SETTLE_HARMFUL_MM, f"침하 {settle_up_mm:.1f} mm / 50 mm(Bozozuk 1978)")]
-    if continuous and span_m <= SHORT_CONT_SPAN_M:
+    if continuous and span_m and span_m <= SHORT_CONT_SPAN_M:
         parts.append((settle_up_mm / SHORT_CONT_SETTLE_MM,
                       f"침하 {settle_up_mm:.1f} mm / 25.4 mm(연속교·경간 ≤ 18.3 m, Moulton 1985)"))
     x, why = max(parts, key=lambda p: p[0])
@@ -221,8 +227,8 @@ def assess(b: dict, groups: dict | None = None) -> dict | None:
     typ = r.get("typ") or b.get("t")
     continuous = (typ in CONTINUOUS_TYPES) or not weight_class(typ)[1]
     length = float(r.get("len") or b.get("len") or 0)
-    span = float(r.get("sp") or length or 1.0)
-    if length:
+    span = float(r.get("sp") or length or 0) or None   # 모르면 None — 지어내지 않는다
+    if span and length:
         span = min(span, length)                       # 경간이 연장보다 길 수는 없다(짧을수록 불리)
     t, mm = _pick(groups or {}, r.get("trk"))
     fit = fit_series(t, mm) if t else None
@@ -263,7 +269,7 @@ def summarize(state: dict, root) -> dict:
         rows.append({
             "id": b["id"], "교량": b.get("n"), "시군": b.get("c"), "형식": a["typ"],
             "종별": r.get("cls") or b.get("cls"), "연장_m": r.get("len") or b.get("len"),
-            "경간_m": round(a["span_m"], 1), "구조": "연속" if a["continuous"] else "단순",
+            "경간_m": a["span_m"] and round(a["span_m"], 1), "구조": "연속" if a["continuous"] else "단순",
             "CRI_허용한계비": a["cri"], "지배기준": a["governing"],
             "기존점검등급": g0 or None, "침하_mm": a["settle_mm"], "침하상한_mm": a["settle_up_mm"],
             "속도_mm_yr": a["rate"], "속도상한_mm_yr": a["rate_upper"], "각변위상한": a["beta"],

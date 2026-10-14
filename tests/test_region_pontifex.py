@@ -131,7 +131,9 @@ def test_records_carry_a_conclusion_and_its_evidence(root, platform):
     """플랫폼 교량 화면은 결론(한 문장·할 일)을 먼저 보이고 근거(변위 시계열)를 펼친다 —
     둘 다 우리가 보낸다. 시계열 표가 없는 이력 DB 에서는 판정만 간다(막히지 않는다)."""
     recs = {r["bridge_id"]: r["summary_json"] for r in rp.plan(root, base=platform[0])["records"]}
-    assert recs[14606]["headline"].startswith("허용변위의 20%") and "10년 뒤 30%" in recs[14606]["headline"]
+    # 결론 문장은 법규 기반 CRI(침하 5 mm ÷ 50 mm — 경간을 모르면 침하량 기준만), 할 일은 엔진 판정
+    assert recs[14606]["headline"].startswith("위성 변위는 허용 한계의 10%")
+    assert recs[14606]["cri_guideline"]["cri"] == 0.1 and recs[14606]["cri_guideline"]["span_m"] is None
     assert recs[14606]["action"].startswith("다음 정기점검") and recs[14700]["action"].startswith("현장 확인")
     assert recs[14606]["series"] is None
 
