@@ -451,8 +451,8 @@ def main() -> None:
                    help="--region: 변위 5단계 등급(우수·양호·정상·주의·위험)을 형식·경간·종별 허용값으로 도출해 "
                         "분포를 출력하고 data/region/<이름>/grade5.csv 로 저장")
     p.add_argument("--region-cri", action="store_true",
-                   help="--region: 법규 기반 CRI — 세부지침의 환산 결함도 점수에 위성 변위(하부구조 a~e)를 넣어 "
-                        "계산하고 data/region/<이름>/cri_guideline.csv 로 저장")
+                   help="--region: 법규 기반 CRI — 위성 변위 ÷ 허용 한계(1.0 = 한계). 보조로 세부지침 "
+                        "환산 결함도·상태등급을 함께 계산하고 data/region/<이름>/cri_guideline.csv 로 저장")
     p.add_argument("--region-push-review", action="store_true",
                    help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
@@ -1737,8 +1737,16 @@ def main() -> None:
                 w.writeheader()
                 w.writerows(s["rows"])
             print("=" * 60)
-            print(f"  법규 기반 CRI(환산 결함도) — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print(f"  법규 기반 CRI(허용 한계 대비) — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
             print("=" * 60)
+            cr = [r["CRI_허용한계비"] for r in s["rows"]]
+            bands = ((0.25, "<0.25"), (0.5, "0.25~0.5"), (0.75, "0.5~0.75"), (1.0, "0.75~1.0"))
+            cnt = {name: 0 for _, name in bands} | {"≥1.0": 0}
+            for x in cr:
+                cnt[next((name for cut, name in bands if x < cut), "≥1.0")] += 1
+            print("  CRI(허용 한계 대비) : " + " · ".join(f"{k} {v:,}" for k, v in cnt.items())
+                  + "   (1.0 = 허용 한계)")
+            print("  -- 보조 지표 --")
             print("  하부구조 위성 평가 : " + " · ".join(f"{k} {v:,}" for k, v in s["letters"].items()))
             print("  상태등급(위성 반영): " + " · ".join(f"{k} {v:,}" for k, v in s["grades"].items()))
             print("  기존 점검등급      : " + " · ".join(f"{k} {v:,}" for k, v in s["base_grades"].items()))

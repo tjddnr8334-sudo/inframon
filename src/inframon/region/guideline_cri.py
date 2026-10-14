@@ -1,6 +1,16 @@
-"""법규 기반 CRI — 세부지침의 환산 결함도 점수에 위성(InSAR) 변위를 넣는다.
+"""법규 기반 CRI — 위성(InSAR) 변위를 허용 한계로 나눈 비율. 1.0 = 허용 한계 도달.
 
+    CRI = max( 각변위 상한 / 허용 각변위,  침하 상한 / 50 mm,  [연속교·경간 ≤ 18.3 m] 침하 상한 / 25.4 mm )
+
+CRI ≥ 1.0 은 하부구조 위성 평가 d(세부지침 "중대한 결함 해당 가능")와 같은 조건이다.
+세부지침의 환산 결함도 점수·상태등급은 보조 지표로 함께 낸다.
 근거는 법령·지침·보고서·논문만 쓴다. 이 모듈이 스스로 정한 가중치·임계는 없다.
+
+  허용 한계에 국내 수치가 없는 이유
+    도로교설계기준(2005) 5.5.3 (5): "기초의 수평 및 수직 허용 변위량은 구조물의 기능과 형태, 예상 사용수명,
+    과대 변위 발생시 구조물에 미치는 영향 등을 고려하여 결정되어야 한다." — 수치를 정하지 않는다.
+    그래서 구조물기초설계기준(2008) 4.3.6 에 따라 국제 기준을 준용하고, 그중 더 엄격한 값을 쓴다
+    (단순교: AASHTO LRFD 0.008 대신 Moulton 0.005).
 
   틀(법령·지침)
     「시설물의 안전 및 유지관리 실시 세부지침(안전점검·진단 편)」(2021.12) 교량 편
@@ -68,6 +78,7 @@ SOURCES = (
     "세부지침(안전점검·진단 편, 2021.12) 교량 [표 1.19]·[표 1.20]·[표 1.21] — 부등침하의 d·e 기준(정성)",
     "세부지침 교량 1.1.4 — 교각 부등침하가 d 이하이면 중대한 결함",
     "세부지침 교량 [표 1.29]·[표 1.30] 구조형식별 부재 가중치, [표 1.31] 결함도 지수와 범위",
+    "도로교설계기준(2005) 5.5.3 (5) — 기초의 허용 변위량은 구조물마다 정한다(국내 수치 없음)",
     "구조물기초설계기준(2008) 4.3.6 — 별도 기준이 없으면 국제적으로 통용되는 기준 준용",
     "Moulton, GangaRao, Halvorsen (1985) FHWA/RD-85/107 — 각변위 0.001 · 0.004(연속)/0.005(단순) · 0.01, 단경간 연속교 25.4 mm",
     "Bozozuk (1978) Transportation Research Record 678 — 연직 변위 50 mm · 100 mm",
@@ -137,6 +148,19 @@ def substructure_letter(settle_up_mm: float, span_m: float, *, continuous: bool,
         k = max(k, 3)
         why.append(f"연속교 · 경간 {span_m:.0f} m ≤ 18.3 m 에서 부등침하 {settle_up_mm:.0f} mm ≥ 25.4 mm(Moulton 1985)")
     return {"letter": LETTERS[k], "beta": round(beta, 5), "beta_limit": limit, "why": why}
+
+
+def limit_ratio(settle_up_mm: float, span_m: float, *, continuous: bool, beta: float) -> dict:
+    """CRI — 허용 한계 대비 비율. 기준마다 비율을 내고 가장 큰 것을 쓴다(1.0 = 허용 한계)."""
+    limit = BETA_LIMIT["continuous" if continuous else "simple"]
+    kind = "연속" if continuous else "단순"
+    parts = [(beta / limit, f"각변위 {beta:.4f} / 허용 {limit}({kind}교, Moulton 1985)"),
+             (settle_up_mm / SETTLE_HARMFUL_MM, f"침하 {settle_up_mm:.1f} mm / 50 mm(Bozozuk 1978)")]
+    if continuous and span_m <= SHORT_CONT_SPAN_M:
+        parts.append((settle_up_mm / SHORT_CONT_SETTLE_MM,
+                      f"침하 {settle_up_mm:.1f} mm / 25.4 mm(연속교·경간 ≤ 18.3 m, Moulton 1985)"))
+    x, why = max(parts, key=lambda p: p[0])
+    return {"cri": round(x, 3), "governing": why}
 
 
 def defect_score(inspect_grade: str | None, sub_letter: str, typ: str | None) -> dict:
@@ -211,14 +235,15 @@ def assess(b: dict, groups: dict | None = None) -> dict | None:
     sub = substructure_letter(settle_up, span, continuous=continuous, significant=significant,
                               beta_measured=r.get("bn") or 0.0)
     sc = defect_score(b.get("gr"), sub["letter"], typ)
-    return {"typ": typ, "continuous": continuous, "span_m": span, "settle_mm": round(dn, 1),
+    lr = limit_ratio(settle_up, span, continuous=continuous, beta=sub["beta"])
+    return {**lr, "typ": typ, "continuous": continuous, "span_m": span, "settle_mm": round(dn, 1),
             "settle_up_mm": round(settle_up, 1), "rate": None if fit is None else round(fit["rate"], 3),
             "rate_upper": None if fit is None else round(fit["rate_upper"], 3), "significant": significant,
             "major_defect": sub["letter"] in "de", **sub, **sc}
 
 
 def summarize(state: dict, root) -> dict:
-    """판정된 교량 전체. 반환: {letters, grades, base_grades, rows}."""
+    """판정된 교량 전체. 반환: {letters, grades, base_grades, over_limit, rows}."""
     series = load_series(root)
     rows = []
     letters = {k: 0 for k in LETTERS}
@@ -239,13 +264,15 @@ def summarize(state: dict, root) -> dict:
             "id": b["id"], "교량": b.get("n"), "시군": b.get("c"), "형식": a["typ"],
             "종별": r.get("cls") or b.get("cls"), "연장_m": r.get("len") or b.get("len"),
             "경간_m": round(a["span_m"], 1), "구조": "연속" if a["continuous"] else "단순",
+            "CRI_허용한계비": a["cri"], "지배기준": a["governing"],
             "기존점검등급": g0 or None, "침하_mm": a["settle_mm"], "침하상한_mm": a["settle_up_mm"],
             "속도_mm_yr": a["rate"], "속도상한_mm_yr": a["rate_upper"], "각변위상한": a["beta"],
             "허용한계": a["beta_limit"], "하부구조_위성평가": a["letter"],
             "중대한결함_해당가능": a["major_defect"], "가중치열": a["weight_class"],
             "하부구조가중치": a["sub_weight"], "기존결함도": a["base_score"],
-            "CRI_환산결함도": a["score"], "상태등급": a["grade"], "이유": " / ".join(a["why"]),
+            "환산결함도_보조": a["score"], "상태등급_보조": a["grade"], "이유": " / ".join(a["why"]),
             "산란체수": r.get("nps"), "확인필요": bool(r.get("rv")),
         })
-    rows.sort(key=lambda x: (-(x["CRI_환산결함도"] or 0), -x["각변위상한"]))
-    return {"letters": letters, "grades": grades, "base_grades": base, "rows": rows}
+    rows.sort(key=lambda x: (-x["CRI_허용한계비"], -(x["환산결함도_보조"] or 0)))
+    over = sum(1 for x in rows if x["CRI_허용한계비"] >= 1.0)
+    return {"letters": letters, "grades": grades, "base_grades": base, "over_limit": over, "rows": rows}
