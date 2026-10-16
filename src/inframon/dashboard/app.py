@@ -2903,7 +2903,8 @@ def main() -> None:
     # 섹션 선택 — st.tabs 는 rerun 시 첫 탭으로 리셋되므로, session_state 에 유지되는
     # 라디오(key='active_tab')로 대체. 위젯 조작으로 rerun 돼도 현재 섹션이 유지된다.
     # ⓪ 시작을 맨 앞에 둔다 — 처음 켠 사용자가 "뭘 해야 하지"로 막히지 않게.
-    _SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론"]
+    _SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론",
+                 "⑥ 법정 근거", "⑦ SLC 보관소", "⑧ 교량 상세 내역"]
     active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
                       label_visibility="collapsed")
     _step_strip(path)
@@ -2925,6 +2926,15 @@ def main() -> None:
             st.info(_NO_PROJECT)
     elif active == _SECTIONS[5]:
         tab_psi(start)
+    elif active == _SECTIONS[6]:
+        from inframon.dashboard.tabs_ops import tab_legal
+        tab_legal(path)
+    elif active == _SECTIONS[7]:
+        from inframon.dashboard.tabs_ops import tab_slc
+        tab_slc()
+    elif active == _SECTIONS[8]:
+        from inframon.dashboard.tabs_ops import tab_dossier
+        tab_dossier(path)
 
 
 if __name__ == "__main__":

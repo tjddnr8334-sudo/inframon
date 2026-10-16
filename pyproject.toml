@@ -23,6 +23,7 @@ dependencies = [
     "numpy>=1.26",
     "h5py>=3.10",
     "pydantic>=2.6",
+    "pyyaml>=6.0",       # 법정 근거 규칙(legal/facility_safety_law.yaml)
 ]
 
 [project.urls]
@@ -80,6 +81,7 @@ where = ["src"]
 # 웹 트윈 뷰어가 오프라인에서도 열리도록 three.js(MIT)를 동봉한다 — 발표장에 인터넷이
 # 없거나 CDN 이 막히면 빈 화면이 된다. 없으면 CDN 으로 폴백한다(gltf_export 참조).
 "inframon.insar" = ["_vendor/*.js", "_vendor/THREE_LICENSE"]
+"inframon.legal" = ["*.yaml"]
 
 [tool.ruff]
 line-length = 100
