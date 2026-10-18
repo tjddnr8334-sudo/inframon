@@ -515,7 +515,7 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
     gxv = xv_t[:, None].expand(n_vsens, M)
     gtv = tt[None, :].expand(n_vsens, M)
     # 점별 침하율 s(x)[N] → 가상 격자로 보간(관측 x 정렬 기준). 그 외 장은 신경망이 임의 x 평가.
-    order = np.argsort(xn)
+    order = np.argsort(xn, kind="stable")
     s_vsens = np.interp(xv, xn[order], s_rate.detach().numpy()[order])
     with torch.no_grad():
         wv = w_net(feat(gxv, gtv)).reshape(n_vsens, M)
@@ -574,7 +574,7 @@ def run_pinn_real(store: ProjectStore, insar: InSAROutput, cfg: PipelineConfig) 
         G = s_node.size
         deck_xy = c_xy[None, :] + s_node[:, None] * u1[None, :] + w_node[:, None] * u2[None, :]  # [G,2]
         # 각 격자점의 고정단거리 l: 종축 투영 s → 관측 l(l_fixed) 보간(정렬). 정규화 xn.
-        so = np.argsort(s_i)
+        so = np.argsort(s_i, kind="stable")
         l_node = np.interp(s_node, s_i[so], l_fixed[so])
         xn_node = np.clip((l_node - l_fixed.min()) / (np.ptp(l_fixed) + 1e-9), 0.0, 1.0)
         xn_pt = np.clip(xn, 0.0, 1.0)

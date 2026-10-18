@@ -65,7 +65,7 @@ def run_insar(store: ProjectStore, cv: CVOutput, cfg: PipelineConfig) -> InSAROu
 
     # 저장
     g = "/insar"
-    store.write_array(f"{g}/point_id", np.arange(N))
+    store.write_array(f"{g}/point_id", np.arange(N, dtype=np.int64))
     store.write_array(f"{g}/xyz", xyz)
     store.write_array(f"{g}/member", member_idx)
     store.write_array(f"{g}/coherence", coherence)

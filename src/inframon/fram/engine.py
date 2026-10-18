@@ -19,14 +19,19 @@ def _windowed_corr(series: np.ndarray, win: int = 6) -> np.ndarray:
     """[n_func, M] → [n_func, n_func, M] 윈도우 시간상관 (공명1)."""
     n, M = series.shape
     R = np.zeros((n, n, M))
+    # 반올림 잡음 수준(전체 크기의 1e-9 이하)의 변동은 분산 0 으로 본다. 그냥 corrcoef 에 넣으면
+    # 상수 시계열의 잡음(1e-16)끼리 상관이 ±1 근처로 나와 공명처럼 잡히고, BLAS·OS 마다 값이 달라진다.
+    tol = 1e-9 * float(np.nanmax(np.abs(series), initial=0.0))
     for k in range(M):
         a = max(0, k - win + 1)
         seg = series[:, a : k + 1]
         if seg.shape[1] < 2:
             R[:, :, k] = np.eye(n)
             continue
-        with np.errstate(invalid="ignore", divide="ignore"):
-            c = np.corrcoef(seg)   # 분산 0 구간은 nan → 아래에서 0 처리
+        live = seg.std(axis=1) > tol             # nan 이 섞인 행도 False → 0
+        c = np.zeros((n, n))
+        if live.any():
+            c[np.ix_(live, live)] = np.atleast_2d(np.corrcoef(seg[live]))
         R[:, :, k] = np.nan_to_num(c)
     return R
 
@@ -69,7 +74,7 @@ def run_fram(
     sumR_pt = np.broadcast_to(sumR[None, :], (N, M))
 
     # [공명3] 공간 전파 R_spatial = ∇·V  (x 정렬 후 변동 공간기울기)
-    order = np.argsort(xyz[:, 0])
+    order = np.argsort(xyz[:, 0], kind="stable")   # 같은 x 가 있으면 정렬이 OS 마다 달라져 기울기가 바뀐다
     spatial = np.zeros_like(V_total)
     spatial[order] = np.abs(np.gradient(V_total[order], axis=0))
     R_spatial = spatial / (spatial.max() + 1e-9)

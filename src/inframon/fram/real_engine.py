@@ -30,6 +30,7 @@ from ..contracts.schema import (
     InSAROutput,
     PINNOutput,
 )
+from .engine import _windowed_corr  # 기능 시계열 윈도우 상관(공명 행렬) — 데모 엔진과 같은 정의
 
 
 def grade_alert_factor(grade) -> float:
@@ -76,21 +77,6 @@ def age_alert_factor(build_year, as_of_year: int | None = None) -> float:
 def _sat(x: np.ndarray, scale: float) -> np.ndarray:
     """포화 절대 매핑: x/(x+scale) ∈ [0,1). x=scale 에서 0.5."""
     return x / (np.abs(x) + scale + 1e-12)
-
-
-def _windowed_corr(series: np.ndarray, win: int = 6) -> np.ndarray:
-    """[n_func,M] → [n_func,n_func,M] 윈도우 시간상관 (시스템 수준 공명 행렬)."""
-    n, M = series.shape
-    R = np.zeros((n, n, M))
-    for k in range(M):
-        a = max(0, k - win + 1)
-        seg = series[:, a : k + 1]
-        if seg.shape[1] < 2:
-            R[:, :, k] = np.eye(n)
-            continue
-        with np.errstate(invalid="ignore", divide="ignore"):
-            R[:, :, k] = np.nan_to_num(np.corrcoef(seg))
-    return R
 
 
 def _network_resonance(R_ij: np.ndarray) -> np.ndarray:
@@ -279,7 +265,7 @@ def run_fram_real(
     else:
         from ..insar.deck_geometry import principal_curve_station
         station = principal_curve_station(xyz[:, :2])
-    order = np.argsort(station)                                 # 데크를 따라가는 순서
+    order = np.argsort(station, kind="stable")                  # 데크를 따라가는 순서(같은 거리면 입력 순)
 
     # 절대 보정 스케일 (조정 가능, mm/yr 등)
     vel_scale = float(getattr(cfg, "fram_vel_scale", 10.0))      # 변위속도 [mm/yr]
