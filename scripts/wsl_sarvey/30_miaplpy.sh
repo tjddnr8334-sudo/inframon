@@ -51,4 +51,26 @@ with h5py.File(sys.argv[1]) as f:
     print(f"slcStack: {n} epochs x {ny} x {nx}")
 assert n >= 2, "slcStack 에포크 부족"
 PY
-echo "완료: $MIAPLPY_DIR/inputs/{slcStack.h5,geometryRadar.h5}"
+echo "load_data 완료: $MIAPLPY_DIR/inputs/{slcStack.h5,geometryRadar.h5}"
+
+# ── 위상연결(phase linking) + 패치 결합 → inverted/phase_series.h5, maskPS.h5 ──
+# SARvey 가 DS 점을 받으려면 이 두 산출물이 필요하다(sarvey_config.phase_linking).
+# 창 크기는 교량용: 거리 15 × 방위 5 화소(내곡교 119장 스택에서 쓴 값). 방위창을 크게 잡으면 데크 폭(≈1 화소)이 주변과 섞인다.
+cat >> "$TEMPLATE" <<EOT
+miaplpy.inversion.patchSize                = 200
+miaplpy.inversion.ministackSize            = 15
+miaplpy.inversion.rangeWindow              = 15
+miaplpy.inversion.azimuthWindow            = 5
+miaplpy.inversion.shpTest                  = auto
+miaplpy.inversion.phaseLinkingMethod       = auto
+miaplpy.inversion.PsNumShp                 = auto
+EOT
+if [ ! -s "$MIAPLPY_DIR/inverted/phase_series.h5" ]; then
+  echo ">> MiaplPy phase_linking (miaplpyApp --dostep phase_linking → concatenate_patches)"
+  miaplpyApp "$TEMPLATE" --dir "$MIAPLPY_DIR" --dostep phase_linking      2>&1 | tail -20
+  miaplpyApp "$TEMPLATE" --dir "$MIAPLPY_DIR" --dostep concatenate_patches 2>&1 | tail -20
+fi
+for f in "$MIAPLPY_DIR/inverted/phase_series.h5" "$MIAPLPY_DIR/maskPS.h5"; do
+  [ -s "$f" ] || { echo "경고: $f 미생성 — SARvey 는 위상연결 없이(PS만) 돈다" >&2; }
+done
+echo "완료: $MIAPLPY_DIR/{inputs,inverted/phase_series.h5,maskPS.h5}"

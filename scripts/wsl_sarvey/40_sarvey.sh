@@ -24,6 +24,23 @@ for extra in ("_README", "temporal_model", "bridge_profile"):
     c.pop(extra, None)
 c.setdefault("general", {})["input_path"]  = f"{work}/inputs/"
 c["general"]["output_path"] = f"{work}/outputs/"
+# 위상연결(DS) 결과 — 경로를 절대경로로, 파일이 없으면 끈다(SARvey 는 없는 경로에서 죽는다)
+import os
+pl = c.get("phase_linking", {})
+if pl.get("use_phase_linking_results"):
+    mia = os.path.abspath(os.path.join(work, "..", "miaplpy"))
+    inv, mps = os.path.join(mia, "inverted"), os.path.join(mia, "maskPS.h5")
+    if os.path.exists(os.path.join(inv, "phase_series.h5")):
+        pl["inverted_path"] = inv + "/"
+        if pl.get("use_ps"):
+            if os.path.exists(mps):
+                pl["mask_ps_file"] = mps
+            else:
+                pl["use_ps"] = False; print("경고: maskPS.h5 없음 → use_ps=False")
+        print(f"phase_linking ON: {inv}")
+    else:
+        c["phase_linking"] = {"use_phase_linking_results": False}
+        print(f"경고: {inv}/phase_series.h5 없음 → 위상연결 OFF (30_miaplpy.sh 의 phase_linking 단계 확인)")
 json.dump(c, open(dst, "w"), indent=2)
 print("config:", dst)
 PY

@@ -165,9 +165,15 @@ def build_sarvey_config(b: RecipeBundle) -> dict:
             "spatial_unwrapping_method": "puma",
             "logging_level": "INFO",
         },
-        # SARvey(1.3) 필수 섹션 — 기본값 사용(phase linking 은 MiaplPy 쪽에서 안 씀)
+        # MiaplPy 위상연결(DS) 결과를 SARvey 점 선별에 넣는다 — 내곡교에서 PS 25 대 DS 184 의 차이가 이 스위치.
+        # 30_miaplpy.sh 가 inverted/phase_series.h5 와 maskPS.h5 를 만든다. 없으면 40_sarvey.sh 가 False 로 내린다.
         "phase_linking": {
-            "use_phase_linking_results": False,
+            "use_phase_linking_results": True,
+            "inverted_path": "../miaplpy/inverted/",   # 40_sarvey.sh 가 절대경로로 바꿔 쓴다
+            "num_siblings": 20,                         # 형제 화소 수 ≤ 이 값이면 PS 로 취급(SARvey 기본)
+            "mask_phase_linking_file": "",
+            "use_ps": True,                             # 위상연결이 PS 로 본 화소(maskPS.h5)도 함께
+            "mask_ps_file": "../miaplpy/maskPS.h5",
         },
         "preparation": {
             "start_date": _ymd_to_iso(trk.first_date),
