@@ -14,6 +14,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"
 
 if [ "${1:-}" = "--one" ]; then
+  # 구역 × 프로세스를 동시에 돌리므로 계산 라이브러리 스레드를 1개로 묶는다. 안 묶으면 프로세스마다
+  # 코어 수만큼 스레드를 띄워 부하가 140 을 넘고 위상연결이 수십 배 느려진다(강릉 2026-10-16 실측).
+  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1
   TID="$2"; D="$OUT/$TID"; mkdir -p "$D"; rm -f "$D/FAILED"
   exec >> "$D/run.log" 2>&1
   echo "=== $TID 시작 $(date '+%F %T')"

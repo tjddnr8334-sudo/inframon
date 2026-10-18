@@ -101,8 +101,10 @@ def report(a) -> int:
                 layers[os.path.basename(f).replace("_ts.h5", "")] = (lon[xy[:, 0], xy[:, 1]], lat[xy[:, 0], xy[:, 1]])
             tiles_done += state == "done"
         for b in t["bridges"]:
+            # 공공데이터에 시점=종점(한 점)인 교량이 많다 — 그러면 데크가 반경 11 m 원뿐이라 점 수가 과소다
             row = {"tile": t["id"], "state": state, "name": b["name"], "length_m": b["length_m"],
-                   "facility_class": b["facility_class"], "lat": b["lat"], "lon": b["lon"]}
+                   "facility_class": b["facility_class"], "lat": b["lat"], "lon": b["lon"],
+                   "axis_known": b["geometry"][0] != b["geometry"][-1]}
             if layers:
                 geom, to_m = _deck(b, a.buffer_m)
                 pg = prep(geom)
