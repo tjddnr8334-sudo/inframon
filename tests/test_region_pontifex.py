@@ -134,6 +134,9 @@ def test_records_carry_a_conclusion_and_its_evidence(root, platform):
     # 결론 문장은 법규 기반 CRI(침하 5 mm ÷ 50 mm — 경간을 모르면 침하량 기준만), 할 일은 엔진 판정
     assert recs[14606]["headline"].startswith("위성 변위는 허용 한계의 10%")
     assert recs[14606]["cri_guideline"]["cri"] == 0.1 and recs[14606]["cri_guideline"]["span_m"] is None
+    # 받는 쪽이 A~E 를 법정 안전등급으로 읽지 않도록 척도 이름을 함께 보낸다
+    assert recs[14606]["cri_guideline"]["legal_grade"] is False
+    assert "법정 안전등급 아님" in recs[14606]["cri_guideline"]["scale"]
     assert recs[14606]["action"].startswith("다음 정기점검") and recs[14700]["action"].startswith("현장 확인")
     assert recs[14606]["series"] is None
 

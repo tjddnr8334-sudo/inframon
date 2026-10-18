@@ -23,6 +23,11 @@ from . import grade5 as g5
 from . import guideline_cri as gc
 from . import results as rr
 
+# 받는 쪽(Pontifex·B-Maps)이 이 글자(A~E)를 법정 안전등급으로 읽지 않도록 척도 이름을 데이터에 같이 싣는다.
+# 법정 안전등급(시행령 별표 8)은 책임기술자가 점검·진단으로 정하며, 위성 값은 참고·선별용이다.
+SCALE_GRADE5 = "위성 변위 참고등급(5단계) — 법정 안전등급(시행령 별표 8) 아님"
+SCALE_CRI = "위성 변위 ÷ 허용 한계(CRI)와 세부지침 환산 결함도(보조) — 법정 안전등급 아님"
+
 SOURCE = "inframon_region"
 # 광역 판정(정상·관심·주의·경고) → 플랫폼 등급(0 정상 · 1 주의 · 2 경고 · 3 위험).
 # **말이 같은 등급끼리** 맞춘다 — 순서대로 0~3 을 주면 우리 '경고'가 플랫폼에 '위험'으로 뜬다.
@@ -192,6 +197,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             if g and g["idx"] >= 0:                 # 5단계 변위 등급 — 형식·경간·종별 허용값과 출처를 같이
                 a = g["allow"]
                 extra["grade5"] = {
+                    "scale": SCALE_GRADE5, "legal_grade": False,
                     "grade": g["grade"], "letter": g["letter"], "ratio_mgmt": g["ratio_mgmt"],
                     "ratio_struct": g["ratio_struct"], "basis": g["basis"],
                     "structure": "연속" if a["structure"] == "continuous" else "단순",
@@ -204,6 +210,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             a = gc.assess(b, series.get(b["id"]))
             if a is not None:                       # 법규 기반 CRI — 위성 변위 ÷ 허용 한계, 보조 지표 포함
                 extra["cri_guideline"] = {
+                    "scale": SCALE_CRI, "legal_grade": False,
                     "cri": a["cri"], "governing": a["governing"], "over_limit": a["cri"] >= 1.0,
                     "settle_up_mm": a["settle_up_mm"], "beta": a["beta"], "beta_limit": a["beta_limit"],
                     "span_m": a["span_m"] and round(a["span_m"], 1), "structure": "연속" if a["continuous"] else "단순",
