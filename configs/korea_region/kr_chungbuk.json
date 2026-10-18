@@ -1,0 +1,8 @@
+{
+  "title": "충청북도 (전체)",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/kr_chungbuk.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/kr_chungbuk",
+  "update_days": 12
+}

@@ -180,6 +180,7 @@ def test_register_saves_platform_id_for_next_run(tmp_path, sent, monkeypatch):
                 "detail_url": "/bridge/40001/"}
 
     monkeypatch.setattr("inframon.pontifex.register_bridge", _reg)
+    monkeypatch.setattr("inframon.pontifex.find_bridge", lambda *a, **k: (None, "없음"))
     d = tmp_path / "b"
     d.mkdir()
     _project(d / "project.h5")
@@ -196,6 +197,25 @@ def test_register_saves_platform_id_for_next_run(tmp_path, sent, monkeypatch):
     _project(d / "project.h5", cri=0.7)              # 내용 변경 → 재전송 대상
     items2 = sync(discover(tmp_path), base="http://x", state_path=st, register=True)
     assert items2[0].action == "pushed" and calls == ["청양교"]
+
+
+def test_register_reuses_bridge_the_platform_already_has(tmp_path, sent, monkeypatch):
+    """플랫폼은 전국 교량을 이미 갖고 있다 — 있는 교량을 또 등록하면 지도에 둘이 생긴다."""
+    monkeypatch.setattr("inframon.pontifex.register_bridge",
+                        lambda *a, **k: pytest.fail("이미 있는 교량을 새로 등록했다"))
+    monkeypatch.setattr("inframon.pontifex.find_bridge",
+                        lambda *a, **k: ({"id": 14606, "name": "내곡교"}, "12 m"))
+    d = tmp_path / "b"
+    d.mkdir()
+    _project(d / "project.h5")
+    (d / "bridge_target.json").write_text(
+        json.dumps({"name": "내곡교", "selected_lat": 37.0, "selected_lon": 127.0}),
+        encoding="utf-8")
+    items = sync(discover(tmp_path), base="http://x", state_path=tmp_path / "s.json",
+                 register=True)
+    assert items[0].action == "pushed" and sent[0]["bridge_id"] == 14606
+    saved = json.loads((d / "bridge_target.json").read_text(encoding="utf-8"))
+    assert saved["pontifex_id"] == 14606
 
 
 def test_register_needs_name_and_coords(tmp_path, sent, monkeypatch):

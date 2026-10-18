@@ -115,6 +115,24 @@ python -m inframon --pontifex-register "청양교,36.4547,126.8013" \
 - `warning_level` 은 FRAM 등급 0~3 을 그대로 쓴다(플랫폼 문서와 동일).
 - 플랫폼이 안 떠 있으면 `docker compose ps` 를 확인하라고 안내한다.
 
+### C-2. 실서버에서 확인하고 고친 것 (2026-10-07, WSL Docker 스택)
+
+| 실서버에서 본 것 | 원인 | inframon 쪽 조치 |
+|---|---|---|
+| 등록하면 같은 교량이 둘 생긴다(코드로 확인 — 실 DB 에는 아직 중복 없음) | 등록 API 는 기존 33,120개와 대조하지 않고 새 행을 만든다. 우리는 찾지 않고 등록했다 | `--pontifex-register`·`--bmap-register` 가 **먼저 찾는다**(이름 같고 300 m 이내) — 없을 때만 등록 |
+| 내곡교가 '경고 CRI 0.637'(관측일이 오늘 기준) | 플랫폼 설정의 "inframon 연동 실행"은 번들 스냅샷으로 **합성 데모**(seed=교량 id)를 돌려 소스 `inframon` 으로 적재한다. DB 108건 전부 `synthetic_anchored_today` | 올릴 때 우리 산출물에 없는 관측일이 같은 소스에 있으면 경고. `--pontifex-replace` 로 그 교량의 `inframon` 레코드를 지우고 올린다 |
+| 같은 CRI 가 경로에 따라 등급이 다르다 | 우리 기본 임계 0.8, 플랫폼 스크립트·FRAM 엔진은 0.85 | `PipelineConfig.cri_thresholds` 한 곳에서 가져온다 |
+| API 로 올리면 위험 부재·추세·기능 상태가 비어 있다 | 레코드 생성이 두 벌(`pontifex.build_records` / 플랫폼 `scripts/ingest_inframon.py`)이고 우리 쪽이 덜 채웠다 | 같은 항목을 채운다(시점별 `critical_members`, `trend`, `lead_time_days`, `function_states`, `date_basis`) |
+| 좌표로 교량을 못 찾는다 | `GET /api/bridges.geojson?bbox[..]` 가 500(PointField 에 `bbox` 조회 없음) | 시·군·구 단위(`?region=`)로 받아 거리를 잰다 |
+| 광역 감시(강원 4,255개) 결과가 플랫폼에 안 보인다 | 올리는 경로가 없었다 | `--region --region-push`(소스 `inframon_region`) — `docs/광역_모니터링.md` |
+
+플랫폼 로컬 복사본(`E:\스인 소프트웨어\pontifex-1.0`)을 직접 고친 것 — 전달본 tar 에는 없으므로 스인 측에 알려야 한다:
+- `scripts/ingest_inframon.py` — A-1 의 `str(x).decode()` (1.0 전달본 09-17 에도 그대로였다)
+- `backend/pontifex/api_views.py` — `bbox` 500 → bbox 폴리곤 포함 조회(강릉 일대 92개 반환 확인)
+- `backend/pontifex/inframon_runner.py` — 합성 실행 결과의 소스를 `inframon_demo` 로 분리(실측 `inframon` 과 섞이지 않게)
+
+고치지 않은 것: 등급이 **전 기간 최고값**이라 재처리로 낮아져도 내려가지 않는다(플랫폼 설계 §18.6 — 지우고 올려야 한다).
+
 ## D. 아직 확인하지 못한 것
 
 **웹 UI 는 아직 못 봤다.** 이 개발 PC 에 Docker 가 설치돼 있지 않아(Windows·WSL 모두)

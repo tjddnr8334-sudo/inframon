@@ -10,7 +10,7 @@
 
 ```
  Sentinel-1 SLC ─► inframon ──────────────────────────────► Pontifex 창고 ───────► KICT B-Maps
-   (⑦ 보관소)      ① InSAR  ③ CRI  ⑥ 법정 근거  ⑧ 상세      IFC 보관·GUID 결합        교량관리번호로
+   (⑧ 보관소)      ① InSAR  ③ CRI  ⑦ 법정 근거  ⑨ 상세      IFC 보관·GUID 결합        교량관리번호로
                     └─ --pontifex-push (감사 게이트) ──────►  /warehouse/bridge/<id>  ─► 탭(iframe/SDK)
 ```
 
@@ -18,7 +18,7 @@
 
 **inframon**
 - `inframon_app.bat` (데스크톱 창) 또는 `python start.py --dashboard` → http://localhost:8501
-- 새 섹션: **⑥ 법정 근거** · **⑦ SLC 보관소** · **⑧ 교량 상세 내역**(산출물·h5 구조·Pontifex 전송)
+- 새 섹션: **⑦ 법정 근거** · **⑧ SLC 보관소** · **⑨ 교량 상세 내역**(산출물·h5 구조·Pontifex 전송)
 - CLI
   - `python -m inframon --slc-inventory E:\SLC [--slc-inventory-csv slc.csv]`
   - `python -m inframon --legal-table docs\bridges\정자교\bridge.json`

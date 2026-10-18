@@ -1,0 +1,8 @@
+{
+  "title": "강원특별자치도 강릉시",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/gangneung.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/gangneung",
+  "update_days": 12
+}

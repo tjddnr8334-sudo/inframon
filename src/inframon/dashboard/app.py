@@ -2880,7 +2880,8 @@ def main() -> None:
 
     with st.sidebar.expander("🏙️ 교량 포트폴리오", expanded=False):
         picked = portfolio_section()
-    path = st.sidebar.text_input("project.h5 경로", picked or default_project_path())
+    # ⑥ 광역 모니터링에서 내보낸 교량이 있으면 그 project.h5 를 기본값으로(②~④ 탭으로 이어서 해석)
+    path = st.sidebar.text_input("project.h5 경로", picked or st.session_state.get("region_project") or default_project_path())
     with st.sidebar.expander("⚙️ 데모 데이터 생성", expanded=not Path(path).exists()):
         n_points = st.number_input("측정점 수 N", 2, 2000, 200, 10)
         n_dates = st.number_input("취득 시점 수 M", 2, 240, 36, 1)
@@ -2904,7 +2905,7 @@ def main() -> None:
     # 라디오(key='active_tab')로 대체. 위젯 조작으로 rerun 돼도 현재 섹션이 유지된다.
     # ⓪ 시작을 맨 앞에 둔다 — 처음 켠 사용자가 "뭘 해야 하지"로 막히지 않게.
     _SECTIONS = ["⓪ 시작", "① InSAR", "② PINN", "③ FRAM", "④ 잔존수명", "⑤ PSI 방법론",
-                 "⑥ 법정 근거", "⑦ SLC 보관소", "⑧ 교량 상세 내역"]
+                 "⑥ 광역 모니터링", "⑦ 법정 근거", "⑧ SLC 보관소", "⑨ 교량 상세 내역"]
     active = st.radio("섹션", _SECTIONS, key="active_tab", horizontal=True,
                       label_visibility="collapsed")
     _step_strip(path)
@@ -2927,12 +2928,17 @@ def main() -> None:
     elif active == _SECTIONS[5]:
         tab_psi(start)
     elif active == _SECTIONS[6]:
+        # 지자체 전체 교량 감시(엔진 결과 판독) — 지연 import. `streamlit run app.py` 는 이 파일을
+        # 패키지 밖 스크립트로 돌리므로 상대 import(.region_tab)는 ImportError 다.
+        from inframon.dashboard.region_tab import tab_region
+        tab_region(data_root())
+    elif active == _SECTIONS[7]:
         from inframon.dashboard.tabs_ops import tab_legal
         tab_legal(path)
-    elif active == _SECTIONS[7]:
+    elif active == _SECTIONS[8]:
         from inframon.dashboard.tabs_ops import tab_slc
         tab_slc()
-    elif active == _SECTIONS[8]:
+    elif active == _SECTIONS[9]:
         from inframon.dashboard.tabs_ops import tab_dossier
         tab_dossier(path)
 

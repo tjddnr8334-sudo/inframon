@@ -1,0 +1,8 @@
+{
+  "title": "경상북도 (전체)",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/kr_gyeongbuk.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/kr_gyeongbuk",
+  "update_days": 12
+}

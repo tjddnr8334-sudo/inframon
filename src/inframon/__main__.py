@@ -133,7 +133,11 @@ def main() -> None:
     p.add_argument("--pontifex-force", action="store_true",
                    help="감사 '보고 불가' 산출물도 올린다 — 사유를 알고 쓸 때만")
     p.add_argument("--pontifex-register", default=None, metavar="NAME,LAT,LON",
-                   help="교량을 먼저 등록하고 부여된 id 로 이어서 올린다")
+                   help="플랫폼에서 이 교량을 **먼저 찾고**(이름+좌표) 없을 때만 등록해, 그 id 로 "
+                        "이어서 올린다 — 이미 있는 교량을 또 만들지 않는다")
+    p.add_argument("--pontifex-replace", action="store_true",
+                   help="올리기 전에 이 교량의 inframon 소스 레코드를 지운다(재처리·플랫폼 합성 "
+                        "실행분이 섞여 있을 때). --bmap-sync 에도 적용")
     p.add_argument("--pontifex-bmaps-id", default=None, metavar="교량관리번호",
                    help="창고에 KICT B-Maps 교량관리번호를 연결 — 이 번호로 B-Maps 탭이 열린다")
     p.add_argument("--pontifex-legal", default=None, metavar="JSON",
@@ -470,6 +474,28 @@ def main() -> None:
                    help="--serve-api 좌표계: wgs84(기본, 재투영) | 5179(Bmaps 가 5179 타일일 때 재투영 생략)")
     p.add_argument("--cors-origin", action="append", default=[], metavar="URL",
                    help="--serve-api CORS 허용 출처(반복 가능). 미지정 시 전체 허용(*)")
+    # ── ⑥ 광역(지자체) 교량 감시 — 엔진 bridge-insar-monitor 를 CLI 로 구동하고 결과를 읽는다 ──
+    p.add_argument("--region", metavar="REGION_JSON",
+                   help="광역 감시 설정(configs/<지역>/region.json). 단독이면 현황 요약 출력")
+    p.add_argument("--region-update", action="store_true",
+                   help="--region: 엔진 한 주기 실행(새 영상 다운로드 → 기준 격자 정합(보간) → 판정 → 알람)")
+    p.add_argument("--region-report", action="store_true",
+                   help="--region: 처리 없이 알람·처리오류·대시보드만 다시 생성")
+    p.add_argument("--region-ifc", metavar="DIR",
+                   help="--region: 판정된 교량마다 IFC(대장 제원 프록시 + InSAR 판정 속성)를 DIR/<시군>/ 에 생성")
+    p.add_argument("--region-push", action="store_true",
+                   help="--region: 판정을 Pontifex 에 올린다(소스 inframon_region). 플랫폼의 기존 교량과 "
+                        "이름·좌표로 맞추고, 확인 필요·판정 불가는 제외. --pontifex-base/-token/-dry-run 을 같이 쓴다")
+    p.add_argument("--region-grade5", action="store_true",
+                   help="--region: 변위 5단계 등급(우수·양호·정상·주의·위험)을 형식·경간·종별 허용값으로 도출해 "
+                        "분포를 출력하고 data/region/<이름>/grade5.csv 로 저장")
+    p.add_argument("--region-cri", action="store_true",
+                   help="--region: 법규 기반 CRI — 위성 변위 ÷ 허용 한계(1.0 = 한계). 보조로 세부지침 "
+                        "환산 결함도·상태등급을 함께 계산하고 data/region/<이름>/cri_guideline.csv 로 저장")
+    p.add_argument("--region-push-review", action="store_true",
+                   help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
+    p.add_argument("--region-export", metavar="BRIDGE_ID",
+                   help="--region: 교량 하나를 project.h5 로 내보냄(--out 폴더, ②PINN·③FRAM·④잔존수명 입력)")
     p.add_argument("--schedule", type=int, default=None, metavar="SECONDS",
                    help="--out 모니터링(PINN+FRAM 재계산·경보)을 SECONDS 간격 Prefect 스케줄 실행")
     p.add_argument(
@@ -1327,25 +1353,31 @@ def main() -> None:
         items = sync(targets, base=args.pontifex_base, token=args.pontifex_token,
                      dry_run=args.bmap_dry_run,
                      allow_conditional=not args.bmap_strict,
-                     register=args.bmap_register)
+                     register=args.bmap_register, replace=args.pontifex_replace)
         print(format_report(items, dry_run=args.bmap_dry_run))
         _sys.exit(0 if not any(i.action == "failed" for i in items) else 1)
 
     if args.pontifex_push or args.pontifex_register:
         import sys as _sys
 
-        from .pontifex import PontifexError, push_bundle, register_bridge
+        from .pontifex import PontifexError, ensure_bridge, find_bridge, push_bundle
 
         try:
             bid = args.pontifex_bridge_id
             if args.pontifex_register:
                 _n, _la, _lo = args.pontifex_register.split(",")
-                got = register_bridge(_n.strip(), float(_la), float(_lo),
-                                      base=args.pontifex_base, token=args.pontifex_token)
-                bid = got.get("id", bid)
-                print(f"  등록: {got.get('name')} → id={bid} "
-                      f"· {(got.get('region') or {}).get('name', '-')} "
-                      f"· {args.pontifex_base}{got.get('detail_url', '')}")
+                if args.pontifex_dry_run:       # 예행은 찾기만 한다 — 등록은 되돌릴 수 없다
+                    _hit, _why = find_bridge(_n.strip(), float(_la), float(_lo),
+                                             base=args.pontifex_base, token=args.pontifex_token)
+                    print(f"  기존 교량 id={_hit['id']} 사용 예정({_why})" if _hit
+                          else f"  새로 등록 예정 — {_why}")
+                    bid = _hit["id"] if _hit else bid
+                else:
+                    got = ensure_bridge(_n.strip(), float(_la), float(_lo),
+                                        base=args.pontifex_base, token=args.pontifex_token)
+                    bid = got.get("id", bid)
+                    print(f"  {got.get('note')}: {got.get('name')} → id={bid} "
+                          f"· {args.pontifex_base}{got.get('detail_url', '')}")
             if not args.pontifex_push:
                 return
             if bid is None:
@@ -1360,7 +1392,8 @@ def main() -> None:
                                      token=args.pontifex_token, dry_run=args.pontifex_dry_run,
                                      allow_unreportable=args.pontifex_force,
                                      bmaps_id=args.pontifex_bmaps_id, legal_meta=legal_meta,
-                                     send_ifc=not args.pontifex_no_ifc)
+                                     send_ifc=not args.pontifex_no_ifc,
+                                     replace=args.pontifex_replace)
             print("=" * 56)
             print("  ⑭ Pontifex 창고 연동")
             print("=" * 56)
@@ -1821,6 +1854,123 @@ def main() -> None:
         print(f"  점당 평균 트랙  : {rep['mean_tracks_per_point']:.2f}")
         print("=" * 56)
         print(f"  다음: python -m inframon --import-track-h5 {args.out} --out data/project.h5")
+        return
+
+    if args.region:
+        from .region import cycle as _rc
+        from .region import results as _rr
+        rc = _rc.load_region(args.region)
+        if args.region_update or args.region_report:
+            code = _rc.run_engine(rc, "update" if args.region_update else "report")
+            if code:
+                p.error(f"엔진 실행 실패(종료코드 {code}) — {rc['engine_dir']} 의 로그를 확인하세요")
+        root = Path(_rr.local_path(rc["results_dir"]))
+        rows = _rr.bridge_rows(_rr.load_state(root))
+        if args.region_export:
+            from .region.export import export_bridge
+            full = next((b for b in _rr.load_state(root)["bridges"] if b["id"] == args.region_export), None)
+            if full is None:
+                p.error(f"교량 ID 를 결과에서 찾지 못했습니다: {args.region_export}")
+            npz = _rr.local_path((full.get("r") or {}).get("npz"))
+            if not npz or not Path(npz).exists():
+                p.error("엔진 StaMPS 점 파일(npz)이 없습니다 — --region-report 로 결과를 다시 만드세요")
+            res = export_bridge(full, npz, Path(args.out).parent if str(args.out).endswith(".h5") else args.out)
+            print("=" * 56)
+            print(f"  광역 감시 교량 → project.h5 : {full['n']}")
+            print(f"  결과            : {res.get('project') or res.get('reason')}")
+            if res.get("ok"):
+                print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
+            print("=" * 56)
+            return
+        if args.region_grade5:
+            import csv
+
+            from .region import grade5 as _g5
+            s = _g5.summarize(_rr.load_state(root), overrides=rc.get("grade5"))
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "grade5.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with out.open("w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
+                w.writeheader()
+                w.writerows(s["rows"])
+            print("=" * 60)
+            print(f"  변위 5단계 등급 — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print("=" * 60)
+            for g, letter in zip(_g5.GRADES, _g5.LETTERS):
+                n, rv = s["counts"][g], s["review"][g]
+                print(f"  {letter} {g}   : {n:>6,}개" + (f"  (그중 확인 필요 {rv:,})" if rv else ""))
+            print("  근거:")
+            for k in ("grades", "qualitative", "struct_beta", "mgmt_beta", "mgmt_settlement", "class_cuts"):
+                print(f"   · {_g5.SOURCES[k]}")
+            print(f"  저장            : {out}")
+            print("=" * 60)
+            return
+        if args.region_cri:
+            import csv
+
+            from .region import guideline_cri as _gc
+            s = _gc.summarize(_rr.load_state(root), root)
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "cri_guideline.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with out.open("w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
+                w.writeheader()
+                w.writerows(s["rows"])
+            print("=" * 60)
+            print(f"  법규 기반 CRI(허용 한계 대비) — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print("=" * 60)
+            cr = [r["CRI_허용한계비"] for r in s["rows"]]
+            bands = ((0.25, "<0.25"), (0.5, "0.25~0.5"), (0.75, "0.5~0.75"), (1.0, "0.75~1.0"))
+            cnt = {name: 0 for _, name in bands} | {"≥1.0": 0}
+            for x in cr:
+                cnt[next((name for cut, name in bands if x < cut), "≥1.0")] += 1
+            print("  CRI(허용 한계 대비) : " + " · ".join(f"{k} {v:,}" for k, v in cnt.items())
+                  + "   (1.0 = 허용 한계)")
+            print("  -- 보조 지표 --")
+            print("  하부구조 위성 평가 : " + " · ".join(f"{k} {v:,}" for k, v in s["letters"].items()))
+            print("  상태등급(위성 반영): " + " · ".join(f"{k} {v:,}" for k, v in s["grades"].items()))
+            print("  기존 점검등급      : " + " · ".join(f"{k} {v:,}" for k, v in s["base_grades"].items()))
+            n_major = sum(1 for r in s["rows"] if r["중대한결함_해당가능"])
+            print(f"  중대한 결함 해당 가능(하부구조 d 이하): {n_major:,}개 — 현장 확인 대상")
+            print("  근거:")
+            for line in _gc.SOURCES:
+                print(f"   · {line}")
+            print(f"  저장            : {out}")
+            print("=" * 60)
+            return
+        if args.region_push:
+            import sys as _sys
+
+            from .pontifex import PontifexError
+            from .region import pontifex_push as _rp
+            try:
+                res = _rp.push_region(
+                    root, base=args.pontifex_base, token=args.pontifex_token,
+                    dry_run=args.pontifex_dry_run, include_review=args.region_push_review,
+                    levels=tuple(rc.get("pontifex_levels") or _rp.LEVEL_MAP),
+                    grade5_overrides=rc.get("grade5"),
+                    report_path=Path(rc.get("projects_dir") or f"data/region/{root.name}")
+                    / "pontifex_push.json")
+            except PontifexError as e:
+                print(f"  ⛔ {e}")
+                _sys.exit(1)
+            print(_rp.format_report(res))
+            _sys.exit(1 if res["errors"] else 0)
+        if args.region_ifc:
+            from .region.ifc import region_ifc
+            res = region_ifc(root, args.region_ifc, title=rc.get("title", ""))
+            print("=" * 56)
+            print(f"  교량별 IFC      : {res['made']}개 생성 · 실패 {res['failed']}개")
+            print(f"  위치            : {res['out']} (index.json 포함)")
+            print("=" * 56)
+            return
+        al, he, cnt = _rr.load_alerts(root), _rr.load_health(root), _rr.counts(rows)
+        print("=" * 56)
+        print(f"  광역 교량 감시  : {rc.get('title', '')}")
+        print(f"  교량            : {len(rows):,}개 · " + " · ".join(f"{k} {v:,}" for k, v in sorted(cnt.items())))
+        print(f"  교량 알람       : {len(al.get('alerts', []))}건 · 처리 오류 알람 {len(he.get('events', []))}건")
+        print(f"  결과 폴더       : {root}")
+        print("=" * 56)
         return
 
     if args.import_track_h5:

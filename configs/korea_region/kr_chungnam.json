@@ -1,0 +1,8 @@
+{
+  "title": "충청남도 (전체)",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/kr_chungnam.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/kr_chungnam",
+  "update_days": 12
+}

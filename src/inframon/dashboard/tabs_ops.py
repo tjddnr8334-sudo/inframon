@@ -1,4 +1,4 @@
-"""대시보드 운영 섹션 — ⑥ 법정 근거 · ⑦ SLC 보관소 · ⑧ 교량 상세 내역.
+"""대시보드 운영 섹션 — ⑦ 법정 근거 · ⑧ SLC 보관소 · ⑨ 교량 상세 내역.
 
 inframon 의 역할(2026-10-16 재정의): InSAR 산출 · 위험도(CRI) · 법정 근거 · SLC 보관을
 한 곳에서 보고, 결과를 Pontifex 창고(IFC 결합·B-Maps Add-in)로 넘긴다.
@@ -41,7 +41,7 @@ def _obs(path: str) -> dict:
     return observation_summary(path, recs)
 
 
-# ── ⑥ 법정 근거 ────────────────────────────────────────────────────────
+# ── ⑦ 법정 근거 ────────────────────────────────────────────────────────
 def tab_legal(path: str) -> None:
     from inframon.legal import build_legal_table
 
@@ -128,7 +128,7 @@ def tab_legal(path: str) -> None:
                        file_name="legal_table.json", mime="application/json")
 
 
-# ── ⑦ SLC 보관소 ───────────────────────────────────────────────────────
+# ── ⑧ SLC 보관소 ───────────────────────────────────────────────────────
 def tab_slc() -> None:
     from inframon.insar.slc_store import get_slc_dir, inventory
 
@@ -184,7 +184,7 @@ def tab_slc() -> None:
                            file_name="slc_inventory.csv", mime="text/csv")
 
 
-# ── ⑧ 교량 상세 내역 ───────────────────────────────────────────────────
+# ── ⑨ 교량 상세 내역 ───────────────────────────────────────────────────
 def _h5_tree(path: str) -> list[dict]:
     rows = []
     with h5py.File(path, "r") as f:
