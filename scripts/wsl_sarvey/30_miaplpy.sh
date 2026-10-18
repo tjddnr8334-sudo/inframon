@@ -3,6 +3,10 @@
 # 전제: conda activate miaplpy (MiaplPy + MintPy)
 # 사용:  ./30_miaplpy.sh <recipe_dir> <work_dir>
 set -euo pipefail
+# 병렬은 프로세스(MiaplPy numProcessor·SARvey num_cores)로 한다 — 계산 라이브러리 스레드는 프로세스당 1개.
+# 안 묶으면 프로세스마다 코어 수만큼 스레드를 띄워 부하가 140 을 넘고 수십 배 느려진다(강릉 2026-10-16 실측).
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}" OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}" \
+       MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}" NUMBA_NUM_THREADS="${NUMBA_NUM_THREADS:-1}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RECIPE_DIR="${1:?recipe_dir}"; WORK="${2:?work_dir}"
 source "$HERE/_manifest.sh" "$RECIPE_DIR"
