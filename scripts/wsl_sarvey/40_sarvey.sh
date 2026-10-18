@@ -3,6 +3,10 @@
 # 전제: conda activate sarvey (SARvey 설치)
 # 사용:  ./40_sarvey.sh <recipe_dir> <work_dir>
 set -euo pipefail
+# 병렬은 프로세스(MiaplPy numProcessor·SARvey num_cores)로 한다 — 계산 라이브러리 스레드는 프로세스당 1개.
+# 안 묶으면 프로세스마다 코어 수만큼 스레드를 띄워 부하가 140 을 넘고 수십 배 느려진다(강릉 2026-10-16 실측).
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}" OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}" \
+       MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}" NUMBA_NUM_THREADS="${NUMBA_NUM_THREADS:-1}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RECIPE_DIR="${1:?recipe_dir}"; WORK="${2:?work_dir}"
 
@@ -24,6 +28,23 @@ for extra in ("_README", "temporal_model", "bridge_profile"):
     c.pop(extra, None)
 c.setdefault("general", {})["input_path"]  = f"{work}/inputs/"
 c["general"]["output_path"] = f"{work}/outputs/"
+# 위상연결(DS) 결과 — 경로를 절대경로로, 파일이 없으면 끈다(SARvey 는 없는 경로에서 죽는다)
+import os
+pl = c.get("phase_linking", {})
+if pl.get("use_phase_linking_results"):
+    mia = os.path.abspath(os.path.join(work, "..", "miaplpy"))
+    inv, mps = os.path.join(mia, "inverted"), os.path.join(mia, "maskPS.h5")
+    if os.path.exists(os.path.join(inv, "phase_series.h5")):
+        pl["inverted_path"] = inv + "/"
+        if pl.get("use_ps"):
+            if os.path.exists(mps):
+                pl["mask_ps_file"] = mps
+            else:
+                pl["use_ps"] = False; print("경고: maskPS.h5 없음 → use_ps=False")
+        print(f"phase_linking ON: {inv}")
+    else:
+        c["phase_linking"] = {"use_phase_linking_results": False}
+        print(f"경고: {inv}/phase_series.h5 없음 → 위상연결 OFF (30_miaplpy.sh 의 phase_linking 단계 확인)")
 json.dump(c, open(dst, "w"), indent=2)
 print("config:", dst)
 PY

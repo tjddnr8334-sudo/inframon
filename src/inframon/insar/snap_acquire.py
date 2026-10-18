@@ -124,6 +124,7 @@ class AcquireResult:
     burst: object          # BurstLoc
     considered: list[str]  # 검증한 프레임 라벨(순위순)
     from_store: list[str] = field(default_factory=list)  # SLC 보관 폴더에서 재사용한 장면
+    damaged: list[str] = field(default_factory=list)     # 다시 받아도 zip 이 깨진 장면(제외됨)
 
 
 def acquire(
@@ -151,7 +152,7 @@ def acquire(
         picked = cand.scenes[:count]
         # 사용자 SLC 보관 폴더(--slc-dir/INFRAMON_SLC_DIR)에 이미 있는 장면은
         # 하드링크/복사로 끌어와 다운로드를 건너뛴다(장당 수 GB 재다운로드 방지).
-        from .slc_store import download_target
+        from .slc_store import discard_incomplete, download_target, zip_complete
         from .slc_store import provide as _store_provide
         names = [s["name"] for s in picked]
         from_store = _store_provide(names, slc_dir)
@@ -167,21 +168,34 @@ def acquire(
         ref = picked[0]
         # 기준영상만 먼저 받아 burst 포함 검증
         ref_zip = slc_dir / f"{ref['name']}.zip"
-        if not (ref_zip.exists() and ref_zip.stat().st_size > 0):
+        if not zip_complete(ref_zip):
+            discard_incomplete(ref_zip, target / f"{ref['name']}.zip")
             _fetch([ref["url"]])
         burst = find_bridge_burst(str(ref_zip), lat, lon)
         if verify and not burst.contained:
             # 이 프레임은 커버리지 밖 → 다음 후보(기준영상은 남겨둠)
             continue
-        # 채택: 나머지 장면 다운로드
-        rest = [s["url"] for s in picked[1:]
-                if not (slc_dir / f"{s['name']}.zip").exists()]
+        # 채택: 나머지 장면 다운로드. **있는지**가 아니라 **끝까지 받았는지**로 판정하고,
+        # 조각은 지운 뒤 다시 받는다 — 남겨두면 asf_search 가 "이미 있다"며 건너뛰어
+        # 손상 zip 이 그대로 SNAP 까지 간다(실제로 겪었다).
+        rest = []
+        for s in picked[1:]:
+            z = slc_dir / f"{s['name']}.zip"
+            if zip_complete(z):
+                continue
+            discard_incomplete(z, target / f"{s['name']}.zip")
+            rest.append(s["url"])
         if rest:
             _fetch(rest)
-        got = [str(slc_dir / f"{s['name']}.zip") for s in picked
-               if (slc_dir / f"{s['name']}.zip").exists()]
+        got, damaged = [], []
+        for s in picked:
+            z = slc_dir / f"{s['name']}.zip"
+            if zip_complete(z):
+                got.append(str(z))
+            elif z.exists():                     # 다시 받았는데도 깨졌다 → 빼고 간다
+                damaged.append(s["name"])
         return AcquireResult(cand, str(slc_dir), got, burst.contained, burst, considered,
-                             from_store=from_store)
+                             from_store=from_store, damaged=damaged)
 
     raise AcquireError("모든 후보 프레임이 burst 커버리지 밖입니다("
                        "다른 궤도/기간을 넓혀 재조회하세요). 검토: " + "; ".join(considered))

@@ -1,0 +1,110 @@
+{
+ "schema": "inframon.gltf.meta/1.0",
+ "glb": "twin_cri.glb",
+ "n_points": 10,
+ "value_channel": "cri",
+ "legend": {
+  "kind": "cri",
+  "vmin": 0.0,
+  "vmax": 1.0,
+  "units": "CRI(무차원)"
+ },
+ "georef": {
+  "origin_lon": 126.96117415240462,
+  "origin_lat": 37.52153538046961,
+  "origin_height_m": 0.0,
+  "projection": "EPSG:5186",
+  "frame": "ENU_meters",
+  "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
+  "z_source": "ifc_element_top",
+  "z_detail": "ifc_element_top · 지면 12m · z 22~26m (IFC 부재 상단 + 원점 표고 12m)",
+  "ground_m": 12.0,
+  "deck_z_median_m": 22.0
+ },
+ "binding": {
+  "key": "element_globalid",
+  "note": "IFC 4.3 부재 GlobalId 외래키. --bim-align 이 채우면 시계열↔부재 영구결합"
+ },
+ "features": [
+  {
+   "index": 0,
+   "point_id": 0,
+   "element_globalid": null,
+   "value": 0.8265492194439609,
+   "lon": 126.96136279861429,
+   "lat": 37.52178690874916
+  },
+  {
+   "index": 1,
+   "point_id": 1,
+   "element_globalid": null,
+   "value": 0.641821154080184,
+   "lon": 126.96136279861429,
+   "lat": 37.52166114460938
+  },
+  {
+   "index": 2,
+   "point_id": 2,
+   "element_globalid": null,
+   "value": 0.4979027951445676,
+   "lon": 126.96123703447451,
+   "lat": 37.52178690874916
+  },
+  {
+   "index": 3,
+   "point_id": 3,
+   "element_globalid": "0YM3I759A5W_GV68T553U9",
+   "value": 0.7425867173655781,
+   "lon": 126.95922480823808,
+   "lat": 37.51839127697519
+  },
+  {
+   "index": 4,
+   "point_id": 4,
+   "element_globalid": null,
+   "value": 0.5696691418195425,
+   "lon": 126.96123703447451,
+   "lat": 37.52166114460938
+  },
+  {
+   "index": 5,
+   "point_id": 5,
+   "element_globalid": "2MCTG_DWCT0T0BG7XTSE79",
+   "value": 0.5658884458447832,
+   "lon": 126.95658376130277,
+   "lat": 37.51424106036256
+  },
+  {
+   "index": 6,
+   "point_id": 6,
+   "element_globalid": "2OGEJD$YK0WUNM9_ZSXE62",
+   "value": 0.5669512119678382,
+   "lon": 126.96111127033473,
+   "lat": 37.52153538046961
+  },
+  {
+   "index": 7,
+   "point_id": 7,
+   "element_globalid": null,
+   "value": 0.4670950987309781,
+   "lon": 126.96123703447451,
+   "lat": 37.52153538046961
+  },
+  {
+   "index": 8,
+   "point_id": 8,
+   "element_globalid": "0YM3I759A5W_GV68T553U9",
+   "value": 0.7851458604431765,
+   "lon": 126.95922480823808,
+   "lat": 37.51851704111496
+  },
+  {
+   "index": 9,
+   "point_id": 9,
+   "element_globalid": "2OGEJD$YK0WUNM9_ZSXE62",
+   "value": 0.47063430765234904,
+   "lon": 126.96111127033473,
+   "lat": 37.52128385219005
+  }
+ ]
+}

@@ -230,7 +230,7 @@ def unwrap_pair(gpt: str, ref: str, sec: str, burst, dem: str, out_tif: str | Pa
     `target=(lat, lon)` 을 주면 교량 주변 ±`half_km` 만 잘라 언래핑한다 — 전 버스트를
     풀면 화소가 3700만이라 수십 분~시간이 걸리고, 교량 밖은 어차피 ⑨에서 버린다.
     """
-    from .snap_backend import ifg_band_names, scene_date
+    from .snap_backend import gpt_input, ifg_band_names, scene_date
 
     out_tif = Path(out_tif)
     work = Path(work_dir) if work_dir else out_tif.parent / f"snaphu_{out_tif.stem}"
@@ -243,7 +243,8 @@ def unwrap_pair(gpt: str, ref: str, sec: str, burst, dem: str, out_tif: str | Pa
     # ① 내보내기 (+ coherence 별도 ENVI)
     coh_folder = work / "coh_envi"
     rc = _gpt(gpt, str(gdir / GRAPH_EXPORT), [
-        f"-PrefFile={ref}", f"-PsecFile={sec}", f"-Psubswath={burst.subswath}",
+        f"-PrefFile={gpt_input(ref)}", f"-PsecFile={gpt_input(sec)}",
+        f"-Psubswath={burst.subswath}",
         f"-PfirstBurst={burst.burst_index}", f"-PlastBurst={burst.burst_index}",
         f"-PdemName={dem}", f"-PtargetFolder={work}", f"-PcohBand={cohband}",
         f"-PcohFolder={coh_folder}",

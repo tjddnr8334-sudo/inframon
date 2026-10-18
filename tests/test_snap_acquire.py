@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import zipfile
+from pathlib import Path
+
 import pytest
 
 from inframon.insar import snap_acquire as sa
@@ -13,6 +16,25 @@ from inframon.insar.snap_acquire import (
 from inframon.insar.snap_backend import BurstLoc
 
 BLAT, BLON = 37.3219, 127.1083
+
+
+def _zip(path: Path) -> Path:
+    """온전한 zip — 취득이 '끝까지 받았는지'로 판정하므로 더미도 진짜 zip 이어야 한다."""
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("measurement.dat", b"slc")
+    return path
+
+
+@pytest.fixture(autouse=True)
+def _isolate_store(tmp_path, monkeypatch):
+    """보관 폴더 설정을 테스트마다 끊는다.
+
+    안 하면 `~/.inframon/config.json` 의 `slc_dir`(사용자가 고른 실제 폴더)로
+    다운로드가 떨어진다 — 실제로 E:/SLC 에 테스트 zip 이 쌓여 있었다.
+    """
+    from inframon.insar import slc_store
+    monkeypatch.setattr(slc_store, "_CONFIG_FILE", tmp_path / "없는config.json")
+    monkeypatch.delenv("INFRAMON_SLC_DIR", raising=False)
 
 
 def _poly_around(clat, clon, half=0.3):
@@ -56,10 +78,9 @@ def test_acquire_skips_uncontained_frame(monkeypatch, tmp_path):
     downloaded = []
 
     def fake_dl(urls, out_dir, session):
-        from pathlib import Path
         for u in urls:
             name = u.rsplit("/", 1)[-1]
-            (Path(out_dir) / name).write_text("x")
+            _zip(Path(out_dir) / name)
             downloaded.append(name)
 
     def fake_burst(zip_path, lat, lon):
@@ -78,6 +99,61 @@ def test_acquire_skips_uncontained_frame(monkeypatch, tmp_path):
     assert len(res.considered) == 2                          # B 건너뜀 + A 채택
 
 
+def _one_frame_scenes(dates=("2024-01-07", "2024-01-19", "2024-01-31")):
+    return [_scene(f"A_{d}", d, 127, 120, _poly_around(BLAT, BLON, 0.4)) for d in dates]
+
+
+def test_acquire_redownloads_truncated_existing(monkeypatch, tmp_path):
+    """끊긴 조각을 '이미 받음'으로 건너뛰던 회귀 — 실제로 SNAP 이 BadZipFile 로 죽었다."""
+    scenes = _one_frame_scenes()
+    slc = tmp_path / "SLC"
+    slc.mkdir(parents=True)
+    _zip(slc / "A_2024-01-07.zip")                       # 기준영상은 온전
+    (slc / "A_2024-01-19.zip").write_bytes(b"PK" + b"0" * 40)   # 조각
+
+    downloaded = []
+
+    def fake_dl(urls, out_dir, session):
+        for u in urls:
+            name = u.rsplit("/", 1)[-1]
+            _zip(Path(out_dir) / name)
+            downloaded.append(name)
+
+    monkeypatch.setattr(sa, "find_bridge_burst",
+                        lambda z, la, lo: BurstLoc("IW2", 1, 5.0, la, lo, contained=True))
+    res = sa.acquire(BLAT, BLON, tmp_path, count=3, start="2024-01-01", end="2024-02-01",
+                     min_scenes=3, search_fn=lambda *a: scenes, download_fn=fake_dl,
+                     session=object())
+
+    assert "A_2024-01-19.zip" in downloaded, "조각은 지우고 다시 받아야 한다"
+    assert "A_2024-01-07.zip" not in downloaded, "온전한 것은 다시 받지 않는다"
+    assert len(res.downloaded) == 3 and res.damaged == []
+
+
+def test_acquire_drops_scene_that_stays_damaged(monkeypatch, tmp_path):
+    """다시 받아도 깨졌으면 조용히 넘기지 말고 빼고 보고한다 — 처리로 흘려보내지 않는다."""
+    scenes = _one_frame_scenes()
+
+    def fake_dl(urls, out_dir, session):
+        for u in urls:
+            name = u.rsplit("/", 1)[-1]
+            p = Path(out_dir) / name
+            if "01-31" in name:
+                p.write_bytes(b"PK" + b"0" * 40)   # 계속 조각
+            else:
+                _zip(p)
+
+    monkeypatch.setattr(sa, "find_bridge_burst",
+                        lambda z, la, lo: BurstLoc("IW2", 1, 5.0, la, lo, contained=True))
+    res = sa.acquire(BLAT, BLON, tmp_path, count=3, start="2024-01-01", end="2024-02-01",
+                     min_scenes=3, search_fn=lambda *a: scenes, download_fn=fake_dl,
+                     session=object())
+
+    assert res.damaged == ["A_2024-01-31"]
+    assert len(res.downloaded) == 2
+    assert all("01-31" not in p for p in res.downloaded)
+
+
 def test_acquire_no_frames(monkeypatch, tmp_path):
     with pytest.raises(AcquireError):
         sa.acquire(BLAT, BLON, tmp_path, count=4, start="2024-01-01", end="2024-02-01",
@@ -93,5 +169,5 @@ def test_acquire_all_uncontained_raises(monkeypatch, tmp_path):
     with pytest.raises(AcquireError):
         sa.acquire(BLAT, BLON, tmp_path, count=2, start="2024-01-01", end="2024-02-01",
                    min_scenes=2, search_fn=lambda *a: scenes,
-                   download_fn=lambda u, o, s: [__import__("pathlib").Path(o, x.rsplit("/", 1)[-1]).write_text("x") for x in u],
+                   download_fn=lambda u, o, s: [_zip(Path(o, x.rsplit("/", 1)[-1])) for x in u],
                    session=object())

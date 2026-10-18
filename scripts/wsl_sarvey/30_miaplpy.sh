@@ -3,6 +3,10 @@
 # 전제: conda activate miaplpy (MiaplPy + MintPy)
 # 사용:  ./30_miaplpy.sh <recipe_dir> <work_dir>
 set -euo pipefail
+# 병렬은 프로세스(MiaplPy numProcessor·SARvey num_cores)로 한다 — 계산 라이브러리 스레드는 프로세스당 1개.
+# 안 묶으면 프로세스마다 코어 수만큼 스레드를 띄워 부하가 140 을 넘고 수십 배 느려진다(강릉 2026-10-16 실측).
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}" OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}" \
+       MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}" NUMBA_NUM_THREADS="${NUMBA_NUM_THREADS:-1}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RECIPE_DIR="${1:?recipe_dir}"; WORK="${2:?work_dir}"
 source "$HERE/_manifest.sh" "$RECIPE_DIR"
@@ -51,4 +55,26 @@ with h5py.File(sys.argv[1]) as f:
     print(f"slcStack: {n} epochs x {ny} x {nx}")
 assert n >= 2, "slcStack 에포크 부족"
 PY
-echo "완료: $MIAPLPY_DIR/inputs/{slcStack.h5,geometryRadar.h5}"
+echo "load_data 완료: $MIAPLPY_DIR/inputs/{slcStack.h5,geometryRadar.h5}"
+
+# ── 위상연결(phase linking) + 패치 결합 → inverted/phase_series.h5, maskPS.h5 ──
+# SARvey 가 DS 점을 받으려면 이 두 산출물이 필요하다(sarvey_config.phase_linking).
+# 창 크기는 교량용: 거리 15 × 방위 5 화소(내곡교 119장 스택에서 쓴 값). 방위창을 크게 잡으면 데크 폭(≈1 화소)이 주변과 섞인다.
+cat >> "$TEMPLATE" <<EOT
+miaplpy.inversion.patchSize                = 200
+miaplpy.inversion.ministackSize            = 15
+miaplpy.inversion.rangeWindow              = 15
+miaplpy.inversion.azimuthWindow            = 5
+miaplpy.inversion.shpTest                  = auto
+miaplpy.inversion.phaseLinkingMethod       = auto
+miaplpy.inversion.PsNumShp                 = auto
+EOT
+if [ ! -s "$MIAPLPY_DIR/inverted/phase_series.h5" ]; then
+  echo ">> MiaplPy phase_linking (miaplpyApp --dostep phase_linking → concatenate_patches)"
+  miaplpyApp "$TEMPLATE" --dir "$MIAPLPY_DIR" --dostep phase_linking      2>&1 | tail -20
+  miaplpyApp "$TEMPLATE" --dir "$MIAPLPY_DIR" --dostep concatenate_patches 2>&1 | tail -20
+fi
+for f in "$MIAPLPY_DIR/inverted/phase_series.h5" "$MIAPLPY_DIR/maskPS.h5"; do
+  [ -s "$f" ] || { echo "경고: $f 미생성 — SARvey 는 위상연결 없이(PS만) 돈다" >&2; }
+done
+echo "완료: $MIAPLPY_DIR/{inputs,inverted/phase_series.h5,maskPS.h5}"

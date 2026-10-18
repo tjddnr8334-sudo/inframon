@@ -268,7 +268,7 @@ def crosscheck_via_pinn(*, L: float, b: float, h: float, E: float = 3.0e10,
     proj = tmp_h5 or (tempfile.mkdtemp() + "/os_pinn.h5")
     with ProjectStore(proj, mode="w") as store:
         g = "/insar"
-        store.write_array(f"{g}/point_id", np.arange(n_points))
+        store.write_array(f"{g}/point_id", np.arange(n_points, dtype=np.int64))
         store.write_array(f"{g}/xyz", xyz)
         store.write_array(f"{g}/member", np.zeros(n_points, np.int8))
         store.write_array(f"{g}/coherence", np.full(n_points, 0.9))

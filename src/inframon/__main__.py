@@ -138,6 +138,13 @@ def main() -> None:
     p.add_argument("--pontifex-replace", action="store_true",
                    help="올리기 전에 이 교량의 inframon 소스 레코드를 지운다(재처리·플랫폼 합성 "
                         "실행분이 섞여 있을 때). --bmap-sync 에도 적용")
+    p.add_argument("--pontifex-bmaps-id", default=None, metavar="교량관리번호",
+                   help="창고에 KICT B-Maps 교량관리번호를 연결 — 이 번호로 B-Maps 탭이 열린다")
+    p.add_argument("--pontifex-legal", default=None, metavar="JSON",
+                   help="법정 근거표 입력(bridge.json 보다 우선): safety_grade(A~E), "
+                        "facility_class, road_kind, inspections{정기안전점검: 날짜, ...}")
+    p.add_argument("--pontifex-no-ifc", action="store_true",
+                   help="project.h5 옆 IFC 를 창고에 올리지 않는다")
     p.add_argument("--audit-artifacts", nargs="*", default=None, metavar="PROJECT_H5",
                    help="산출물(project.h5)이 보고에 쓸 수 있는 것인지 감사해 표로 출력 후 "
                         "종료. 경로를 생략하면 data/ 아래를 훑는다. --audit-out 으로 "
@@ -200,12 +207,36 @@ def main() -> None:
                    help="SLC 보관 폴더 지정 후 종료(예: E:\\SLC — 없으면 만든다). 이후 새 다운로드가 "
                         "여기(<폴더>/<궤도 프레임>/)에 떨어지고, 있는 장면은 재사용해 다운로드를 "
                         "건너뛴다. 환경변수 INFRAMON_SLC_DIR 이 우선.")
+    p.add_argument("--slc-inventory", nargs="*", default=None, metavar="DIR",
+                   help="SLC 보관 현황(궤도별 장수·기간·공백·받다 만 조각)을 출력 후 종료. DIR 생략 시 "
+                        "--slc-dir 보관 폴더. .zip 과 조립된 .SAFE 모두 센다. 각 폴더에 "
+                        ".inframon_slc_index.json 색인을 남긴다.")
+    p.add_argument("--slc-inventory-csv", default=None, metavar="CSV",
+                   help="--slc-inventory 의 장면 목록을 CSV 로 저장")
+    p.add_argument("--legal-table", default=None, metavar="BRIDGE_JSON",
+                   help="교량 메타(bridge.json — length_m·max_span_m·n_spans·bridge_type, 선택: "
+                        "safety_grade·inspections·road_kind)로 법정 근거표(종별·점검 기한)를 "
+                        "출력 후 종료")
+    p.add_argument("--region-registry", default=None, metavar="BRIDGES_CSV",
+                   help="지역 교량 전수 대장: scripts/region_inventory.py 의 bridges.csv 로 교량마다 법정 "
+                        "종별·점검 기한(자료 기준일 기준)·위성 관측 가능성을 판정해 요약을 출력 후 종료")
+    p.add_argument("--region-registry-json", default=None, metavar="OUT_JSON",
+                   help="--region-registry 결과 전체를 JSON 으로 저장")
+    p.add_argument("--region-registry-push", action="store_true",
+                   help="--region-registry 결과를 Pontifex 창고(/api/ingest/registry/)에 올린다 "
+                        "(--pontifex-base, --pontifex-token 사용)")
+    p.add_argument("--region-registry-computed", nargs="*", default=None, metavar="BURST",
+                   help="위성 계산을 마친 버스트 ID(예: 054_114061_IW2) — 그 버스트에 든 교량을 '계산됨'으로 표시")
     p.add_argument("--insar-tools", action="store_true",
                    help="InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 설치 상태를 감지·안내하고 종료. "
                         "WSL 자체가 없으면 설치 명령부터 안내(exit 1 = 준비 안 됨).")
     p.add_argument("--insar-tools-install", action="store_true",
                    help="F코어 툴체인을 WSL 에 **실제 설치**(00_setup_env.sh 실행, 수 GB·수십 분). "
                         "ISCE2 는 필수로 강제 — 실패 시 exit 1. WSL 미설치면 설치 명령 안내 후 종료.")
+    p.add_argument("--stamps-install", action="store_true",
+                   help="StaMPS 를 WSL 에 **내려받아 전처리기(mt_prep_*)까지 빌드**(git clone + make, "
+                        "수백 MB·몇 분). MATLAB 없이도 여기까지는 된다 — 시계열을 푸는 stamps(1,8) "
+                        "만 MATLAB 이 필요하며, 있는지 따로 알려준다.")
     p.add_argument("--doctor", nargs="?", const="", default=None, metavar="PATH",
                    help="환경·데이터 준비도 진단 후 종료. PATH 가 폴더면 인벤토리, .h5 면 preflight 포함")
     p.add_argument("--locate", default=None, metavar="X,Y",
@@ -254,6 +285,14 @@ def main() -> None:
                    help="--pipeline ⑬ 디지털트윈에 쓸 트윈측 IFC(부재 GlobalId 결합). "
                         "없으면 점군 트윈만 만들고 진행한다(체인은 끊기지 않음). "
                         "부재 테이블(JSON)만 있으면 --gltf-elements 로 줘도 된다.")
+    p.add_argument("--pipeline-count", type=int, default=8, metavar="N",
+                   help="--pipeline full: 내려받아 처리할 SLC 장면 수(기본 8). 시계열 품질은 "
+                        "장면 수·기간이 정한다 — 의미 있는 속도는 25장·1년 이상 권장. "
+                        "장당 ~7GB.")
+    p.add_argument("--pipeline-start", default=None, metavar="YYYY-MM-DD",
+                   help="--pipeline 조회 시작일(기본 2024-01-01). 장면 수를 늘리려면 기간부터 넓힌다.")
+    p.add_argument("--pipeline-end", default=None, metavar="YYYY-MM-DD",
+                   help="--pipeline 조회 종료일(기본 2025-07-01).")
     p.add_argument("--pipeline-adi", action="store_true",
                    help="--pipeline full: ⑨ PS/DS 를 진폭분산 ADI 로(쌍별 진폭 ~20분 추가). 기본 코히런스 1차.")
     p.add_argument("--export-bim", default=None, metavar="H5,OUT_PREFIX",
@@ -447,6 +486,12 @@ def main() -> None:
     p.add_argument("--region-push", action="store_true",
                    help="--region: 판정을 Pontifex 에 올린다(소스 inframon_region). 플랫폼의 기존 교량과 "
                         "이름·좌표로 맞추고, 확인 필요·판정 불가는 제외. --pontifex-base/-token/-dry-run 을 같이 쓴다")
+    p.add_argument("--region-grade5", action="store_true",
+                   help="--region: 변위 5단계 등급(우수·양호·정상·주의·위험)을 형식·경간·종별 허용값으로 도출해 "
+                        "분포를 출력하고 data/region/<이름>/grade5.csv 로 저장")
+    p.add_argument("--region-cri", action="store_true",
+                   help="--region: 법규 기반 CRI — 위성 변위 ÷ 허용 한계(1.0 = 한계). 보조로 세부지침 "
+                        "환산 결함도·상태등급을 함께 계산하고 data/region/<이름>/cri_guideline.csv 로 저장")
     p.add_argument("--region-push-review", action="store_true",
                    help="--region-push: '확인 필요' 판정도 올린다(레코드에 review·사유 표기)")
     p.add_argument("--region-export", metavar="BRIDGE_ID",
@@ -668,6 +713,9 @@ def main() -> None:
                   f"(중심성 {acq.frame.centrality_km:+.1f}km, {acq.frame.n_scenes}장 중 {len(acq.downloaded)} 확보)")
             if acq.from_store:
                 print(f"  보관폴더 재사용: {len(acq.from_store)}장 (다운로드 생략 — --slc-dir)")
+            if acq.damaged:
+                print(f"  ⚠️ 손상 제외  : {len(acq.damaged)}장 — 다시 받아도 zip 이 깨져 "
+                      f"스택에서 뺐습니다: {', '.join(acq.damaged)}")
             print(f"  burst      : {acq.burst.subswath}#{acq.burst.burst_index} "
                   f"({'포함' if acq.contained else '⚠️ 밖'})")
             for c in acq.considered[:-1]:
@@ -1110,7 +1158,10 @@ def main() -> None:
                                   twin_value=args.gltf_value,
                                   engine=args.pipeline_engine,
                                   engine_source=args.pipeline_source,
-                                  bridge_name=args.pipeline_name)
+                                  bridge_name=args.pipeline_name,
+                                  snap_count=args.pipeline_count,
+                                  **({"start": args.pipeline_start} if args.pipeline_start else {}),
+                                  **({"end": args.pipeline_end} if args.pipeline_end else {}))
         print(rep.summary())
         return
 
@@ -1309,7 +1360,7 @@ def main() -> None:
     if args.pontifex_push or args.pontifex_register:
         import sys as _sys
 
-        from .pontifex import PontifexError, ensure_bridge, find_bridge, push
+        from .pontifex import PontifexError, ensure_bridge, find_bridge, push_bundle
 
         try:
             bid = args.pontifex_bridge_id
@@ -1333,17 +1384,38 @@ def main() -> None:
                 print("  ⛔ --pontifex-bridge-id 가 필요합니다"
                       "(또는 --pontifex-register 로 먼저 등록).")
                 _sys.exit(2)
-            res = push(args.pontifex_push, int(bid), base=args.pontifex_base,
-                       token=args.pontifex_token, dry_run=args.pontifex_dry_run,
-                       allow_unreportable=args.pontifex_force, replace=args.pontifex_replace)
+            import json as _json
+            from pathlib import Path as _P
+            legal_meta = (_json.loads(_P(args.pontifex_legal).read_text(encoding="utf-8"))
+                          if args.pontifex_legal else None)
+            res, extra = push_bundle(args.pontifex_push, int(bid), base=args.pontifex_base,
+                                     token=args.pontifex_token, dry_run=args.pontifex_dry_run,
+                                     allow_unreportable=args.pontifex_force,
+                                     bmaps_id=args.pontifex_bmaps_id, legal_meta=legal_meta,
+                                     send_ifc=not args.pontifex_no_ifc,
+                                     replace=args.pontifex_replace)
             print("=" * 56)
-            print("  ⑭ Pontifex 연동")
+            print("  ⑭ Pontifex 창고 연동")
             print("=" * 56)
             print(f"  {res.describe()}")
+            print(f"  부재 GUID 레코드 {extra['n_element_records']}건 · "
+                  f"IFC {extra['found'].get('ifc') or '없음'}")
+            lg = extra["legal"]
+            print(f"  법정 근거: {lg['facility_class']['label']} · 안전등급 "
+                  f"{lg['safety_grade']['grade'] or '미상'} · "
+                  + " · ".join(f"{i['kind']} {i['next_due'] or '-'}"
+                               + (" (경과)" if i["overdue"] else "")
+                               for i in lg["inspections"] if i["applicable"]))
             for w in res.warnings:
                 print(f"  ⚠️  {w}")
             if not args.pontifex_dry_run:
-                print(f"  확인: {args.pontifex_base}/bridge/{bid}/")
+                ir = extra.get("ifc_result") or {}
+                if ir:
+                    print(f"  IFC 보관: 부재 {(ir.get('ifc') or {}).get('element_count')} · "
+                          f"결합 {ir.get('match_counts')}")
+                print(f"  창고: {args.pontifex_base}/warehouse/bridge/{bid}/")
+                if args.pontifex_bmaps_id:
+                    print(f"  B-Maps 탭: {args.pontifex_base}/addin/bmaps/tab/{args.pontifex_bmaps_id}/")
             print("=" * 56)
         except PontifexError as e:
             print(f"  ⛔ {e}")
@@ -1583,7 +1655,102 @@ def main() -> None:
         print("=" * 56)
         return
 
-    if args.insar_tools or args.insar_tools_install:
+    if args.slc_inventory is not None:
+        import csv as _csv
+
+        from .insar.slc_store import get_slc_dir, inventory
+
+        roots = args.slc_inventory or ([get_slc_dir()] if get_slc_dir() else [])
+        if not roots:
+            print("  ⛔ 보관 폴더가 없습니다 — --slc-inventory E:\SLC 처럼 지정하거나 --slc-dir 로 설정하세요.")
+            return
+        inv = inventory(roots)
+        print("=" * 72)
+        print(f"  SLC 보관 현황 — {', '.join(inv['roots'])}")
+        print(f"  장면 {inv['n_scenes']} · {inv['size_gb']} GB · 받다 만 조각 {inv['incomplete']}")
+        print("-" * 72)
+        print(f"  {'궤도':<10}{'장면':>5}{'날짜':>6}  {'처음':<11}{'마지막':<11}{'GB':>7}{'공백>24일':>9}  최대 공백")
+        for t in inv["tracks"]:
+            lg = t["largest_gap"]
+            print(f"  {t['key']:<10}{t['n_scenes']:>5}{t['n_dates']:>6}  {t['first']:<11}{t['last']:<11}"
+                  f"{t['size_gb']:>7}{t['gaps_over_24d']:>9}  "
+                  + (f"{lg['from']}~{lg['to']} ({lg['days']}일)" if lg else "-"))
+        print("=" * 72)
+        if args.slc_inventory_csv:
+            cols = ["scene", "mission", "track", "date", "format", "size_gb", "complete", "folder", "path"]
+            with open(args.slc_inventory_csv, "w", newline="", encoding="utf-8-sig") as fh:
+                w = _csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
+                w.writeheader()
+                w.writerows(inv["scenes"])
+            print(f"  CSV: {args.slc_inventory_csv}")
+        return
+
+    if args.legal_table:
+        import json as _json
+        from pathlib import Path as _P
+
+        from .legal import build_legal_table
+
+        t = build_legal_table(_json.loads(_P(args.legal_table).read_text(encoding="utf-8")))
+        fc = t["facility_class"]
+        print("=" * 64)
+        print(f"  법정 근거표 — {fc['label']}")
+        for r in fc["reasons"]:
+            print(f"    · {r}")
+        if fc["mismatch"]:
+            print(f"    ⚠️ 공식 종별 {fc['official']}종 ≠ 계산 {fc['computed']}종")
+        sg = t["safety_grade"]
+        print(f"  안전등급 {sg['grade'] or '미상'}" + (f" ({sg['name']}) — {sg['state']}" if sg['name'] else ""))
+        print("-" * 64)
+        for i in t["inspections"]:
+            app = {True: "대상", False: "대상 아님", None: "확인 필요"}[i["applicable"]]
+            print(f"  {i['kind']:<8} {app:<6} {i['interval_text']:<18} 최근 {i['last'] or '-':<11}"
+                  f" 다음 {i['next_due'] or '-'}" + (" ⚠️경과" if i["overdue"] else ""))
+        print("-" * 64)
+        print(f"  {t['notice']}")
+        print("=" * 64)
+        return
+
+    if args.region_registry:
+        import csv as _csv
+        import json as _json
+
+        from .legal.registry import build_registry
+
+        with open(args.region_registry, encoding="utf-8-sig", newline="") as fh:
+            rows = list(_csv.DictReader(fh))
+        reg = build_registry(rows, computed_bursts=set(args.region_registry_computed or []))
+        sm = reg["summary"]
+        print("=" * 64)
+        print(f"  지역 전수 대장 — 교량 {reg['n']}개 ({args.region_registry})")
+        print(f"  종별      {sm['by_class']}")
+        print(f"  안전등급  {sm['by_grade']}")
+        print(f"  위성 관측 {sm['by_observability']} · 궤도 {sm['by_geometry']}")
+        print(f"  자료 기준일에 이미 지난 점검 기한 {sm['overdue_at_data_date']}개 · "
+              f"종별 자료 확인 {sm['class_mismatch']}개 · 계산 완료 {sm['computed']}개")
+        print("-" * 64)
+        for k, v in sm["by_sigungu"].items():
+            print(f"    {k:<6} {v}")
+        if args.region_registry_json:
+            with open(args.region_registry_json, "w", encoding="utf-8") as fh:
+                _json.dump(reg, fh, ensure_ascii=False)
+            print(f"  JSON: {args.region_registry_json}")
+        if args.region_registry_push:
+            from .pontifex import PontifexError, push_registry
+
+            try:
+                got = push_registry(reg["bridges"], base=args.pontifex_base, token=args.pontifex_token,
+                                    progress=lambda a, b: print(f"    올림 {a}/{b}", flush=True))
+            except PontifexError as e:
+                print(f"  ❌ {e}")
+                raise SystemExit(1)
+            print(f"  Pontifex 창고: 새로 {got.get('created', 0)} · 갱신 {got.get('updated', 0)} · "
+                  f"짝(이름) {got.get('name', 0)} · 짝(거리) {got.get('near', 0)} · 짝 없음 {got.get('none', 0)}")
+            print(f"  {args.pontifex_base}/warehouse/region/")
+        print("=" * 64)
+        return
+
+    if args.insar_tools or args.insar_tools_install or args.stamps_install:
         import sys as _sys
 
         from .insar.toolchain import (check_toolchain, format_report, format_wsl_report,
@@ -1593,6 +1760,25 @@ def main() -> None:
         print(format_wsl_report(ws))
         if not ws["ready"]:
             _sys.exit(1)
+
+        if args.stamps_install:
+            from .insar.toolchain import provision_stamps
+
+            r = provision_stamps()
+            if r["status"]:
+                print(format_report(r["status"]))
+            if not r["ok"]:
+                print(f"  ⛔ {r['error']}")
+                _sys.exit(1)
+            print("  ✅ StaMPS 전처리기(mt_prep_*) 빌드 완료")
+            # 빌드 성공과 MATLAB 유무는 다른 문제다 — 묶어서 말하면 원인을 못 가린다.
+            if r["matlab"]:
+                print("  ✅ matlab 감지됨 — scripts/wsl_stamps/30_stamps_matlab.sh 로 진행")
+            else:
+                print("  ⚠️ matlab 이 없습니다. 20단계(mt_prep_snap)까지는 되지만 "
+                      "시계열을 푸는 stamps(1,8) 은 MATLAB 라이선스가 필요합니다.")
+                print("     대안: SARvey 레인(scripts/wsl_sarvey/) 또는 SNAP+snaphu 레인")
+            return
 
         if args.insar_tools_install:
             r = provision_toolchain()
@@ -1696,6 +1882,62 @@ def main() -> None:
                 print(f"  측정점/시점     : N={res['n_points']}, M={res['n_dates']}")
             print("=" * 56)
             return
+        if args.region_grade5:
+            import csv
+
+            from .region import grade5 as _g5
+            s = _g5.summarize(_rr.load_state(root), overrides=rc.get("grade5"))
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "grade5.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with out.open("w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
+                w.writeheader()
+                w.writerows(s["rows"])
+            print("=" * 60)
+            print(f"  변위 5단계 등급 — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print("=" * 60)
+            for g, letter in zip(_g5.GRADES, _g5.LETTERS):
+                n, rv = s["counts"][g], s["review"][g]
+                print(f"  {letter} {g}   : {n:>6,}개" + (f"  (그중 확인 필요 {rv:,})" if rv else ""))
+            print("  근거:")
+            for k in ("grades", "qualitative", "struct_beta", "mgmt_beta", "mgmt_settlement", "class_cuts"):
+                print(f"   · {_g5.SOURCES[k]}")
+            print(f"  저장            : {out}")
+            print("=" * 60)
+            return
+        if args.region_cri:
+            import csv
+
+            from .region import guideline_cri as _gc
+            s = _gc.summarize(_rr.load_state(root), root)
+            out = Path(rc.get("projects_dir") or f"data/region/{root.name}") / "cri_guideline.csv"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with out.open("w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(s["rows"][0]) if s["rows"] else ["id"])
+                w.writeheader()
+                w.writerows(s["rows"])
+            print("=" * 60)
+            print(f"  법규 기반 CRI(허용 한계 대비) — {rc.get('title', '')} (판정된 교량 {len(s['rows']):,}개)")
+            print("=" * 60)
+            cr = [r["CRI_허용한계비"] for r in s["rows"]]
+            bands = ((0.25, "<0.25"), (0.5, "0.25~0.5"), (0.75, "0.5~0.75"), (1.0, "0.75~1.0"))
+            cnt = {name: 0 for _, name in bands} | {"≥1.0": 0}
+            for x in cr:
+                cnt[next((name for cut, name in bands if x < cut), "≥1.0")] += 1
+            print("  CRI(허용 한계 대비) : " + " · ".join(f"{k} {v:,}" for k, v in cnt.items())
+                  + "   (1.0 = 허용 한계)")
+            print("  -- 보조 지표 --")
+            print("  하부구조 위성 평가 : " + " · ".join(f"{k} {v:,}" for k, v in s["letters"].items()))
+            print("  상태등급(위성 반영): " + " · ".join(f"{k} {v:,}" for k, v in s["grades"].items()))
+            print("  기존 점검등급      : " + " · ".join(f"{k} {v:,}" for k, v in s["base_grades"].items()))
+            n_major = sum(1 for r in s["rows"] if r["중대한결함_해당가능"])
+            print(f"  중대한 결함 해당 가능(하부구조 d 이하): {n_major:,}개 — 현장 확인 대상")
+            print("  근거:")
+            for line in _gc.SOURCES:
+                print(f"   · {line}")
+            print(f"  저장            : {out}")
+            print("=" * 60)
+            return
         if args.region_push:
             import sys as _sys
 
@@ -1706,6 +1948,7 @@ def main() -> None:
                     root, base=args.pontifex_base, token=args.pontifex_token,
                     dry_run=args.pontifex_dry_run, include_review=args.region_push_review,
                     levels=tuple(rc.get("pontifex_levels") or _rp.LEVEL_MAP),
+                    grade5_overrides=rc.get("grade5"),
                     report_path=Path(rc.get("projects_dir") or f"data/region/{root.name}")
                     / "pontifex_push.json")
             except PontifexError as e:

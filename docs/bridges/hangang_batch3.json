@@ -1,0 +1,38 @@
+[
+ {
+  "name": "양화대교",
+  "lat": 37.542465,
+  "lon": 126.90301,
+  "track": "F:/SLC/seoul_work/track_양화대교.h5",
+  "proc": "F:/SLC/seoul_work/양화대교",
+  "master": "20220330",
+  "out": "docs/bridges/양화대교"
+ },
+ {
+  "name": "잠수교",
+  "lat": 37.51475,
+  "lon": 126.996468,
+  "track": "F:/SLC/seoul_work/track_잠수교.h5",
+  "proc": "F:/SLC/seoul_work/잠수교",
+  "master": "20220330",
+  "out": "docs/bridges/잠수교"
+ },
+ {
+  "name": "천호대교",
+  "lat": 37.542476,
+  "lon": 127.113706,
+  "track": "F:/SLC/seoul_work/track_천호대교.h5",
+  "proc": "F:/SLC/seoul_work/천호대교",
+  "master": "20220330",
+  "out": "docs/bridges/천호대교"
+ },
+ {
+  "name": "암사대교",
+  "lat": 37.569152,
+  "lon": 127.131795,
+  "track": "F:/SLC/seoul_work/track_암사대교.h5",
+  "proc": "F:/SLC/seoul_work/암사대교",
+  "master": "20220330",
+  "out": "docs/bridges/암사대교"
+ }
+]

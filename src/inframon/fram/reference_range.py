@@ -147,22 +147,39 @@ class ReferenceRange:
             "tail_excess": tail,
         }
 
+    # 관측조건 허용폭 — 밴드 폭에 맞춰 좁게 잡는다(아래 주석 참조).
+    NOISE_TOL = 0.35          # 노이즈가 기준 대비 ±35% 밖이면 부적합
+    SPAN_TOL_LO, SPAN_TOL_HI = 0.6, 3.0
+    EPOCH_TOL_LO, EPOCH_TOL_HI = 0.7, 5.0
+
     def regime_mismatch(self, *, noise_mm=None, span_days=None, n_epochs=None) -> str | None:
         """새 교량 관측조건이 학습 regime 과 크게 다르면 경고 문자열(없으면 None).
 
         CRI 바닥은 노이즈·기간·**에폭 수**에 의존하므로(에폭 적으면 secular/공명 추정이
         불안정해 CRI 분포가 통째로 올라가 오경보), 이 중 하나라도 크게 벗어나면 부적합
         비교로 표시한다. 이러면 분포이동 판정이 "경고"라도 **잠정**임을 알 수 있다.
+
+        허용폭은 **밴드 폭에 맞춰야 한다.** 예전 노이즈 허용은 2배였는데, 기본 정상범위는
+        정상경계 0.641·위험 0.809 로 폭이 좁아서 노이즈가 1.4배만 돼도 분포 중앙이 이미
+        정상경계를 넘는다. 실제로 성수대교(14.4mm)·한강대교(15.5mm)가 가드를 그냥 통과해
+        '위험'으로 찍혔다 — 같은 교량을 실측 SHM 은 '관리기준 이내'로 본다. 기간·에폭도
+        **양방향**으로 본다: 학습보다 훨씬 길거나 많아도 분포가 달라진다.
         """
         r = self.regime or {}
         msgs = []
-        if noise_mm and r.get("noise_mm") and (noise_mm > 2 * r["noise_mm"]
-                                               or noise_mm < 0.5 * r["noise_mm"]):
-            msgs.append(f"노이즈 {noise_mm:.1f}mm vs 기준 {r['noise_mm']:.1f}mm")
-        if span_days and r.get("span_days") and span_days < 0.6 * r["span_days"]:
-            msgs.append(f"관측기간 {span_days:.0f}d < 기준 {r['span_days']:.0f}d")
-        if n_epochs and r.get("n_epochs") and n_epochs < 0.7 * r["n_epochs"]:
-            msgs.append(f"에폭 {n_epochs}회 < 기준 {r['n_epochs']}회(추정 불안정)")
+        base_n = r.get("noise_mm")
+        if noise_mm and base_n:
+            ratio = noise_mm / base_n
+            if not (1 - self.NOISE_TOL) <= ratio <= (1 + self.NOISE_TOL):
+                msgs.append(f"노이즈 {noise_mm:.1f}mm vs 기준 {base_n:.1f}mm({ratio:.1f}배)")
+        base_s = r.get("span_days")
+        if span_days and base_s and not (self.SPAN_TOL_LO * base_s <= span_days
+                                         <= self.SPAN_TOL_HI * base_s):
+            msgs.append(f"관측기간 {span_days:.0f}d vs 기준 {base_s:.0f}d")
+        base_e = r.get("n_epochs")
+        if n_epochs and base_e and not (self.EPOCH_TOL_LO * base_e <= n_epochs
+                                        <= self.EPOCH_TOL_HI * base_e):
+            msgs.append(f"에폭 {n_epochs}회 vs 기준 {base_e}회(추정 분포 다름)")
         return " · ".join(msgs) if msgs else None
 
     def to_dict(self) -> dict:

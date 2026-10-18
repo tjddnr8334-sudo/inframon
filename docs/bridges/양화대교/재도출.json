@@ -1,0 +1,32 @@
+{
+ "name": "양화대교",
+ "n_deck_ps": 17,
+ "gamma_used": 0.0,
+ "offset_m": 15,
+ "half_m": 6.0,
+ "coh_mean": 0.667,
+ "gamma_median_deck": 0.168,
+ "n_epochs": 51,
+ "temperature_ok": true,
+ "thermal_deck_mm_per_C": -0.117,
+ "elements": 99,
+ "points": 17,
+ "bound": 12,
+ "cri": 0.8525265797907418,
+ "warning": "경고",
+ "notes": [
+  "제원 CSV 에 없음 → OSM 연장으로",
+  "OSM way 가 양방향 차도를 도는 닫힌 선이었다(첫점=끝점) — 주축 양 끝으로 한쪽 차도만 남겨 방위 51.3° · 연장 1457 m 로 잡는다",
+  "OSM 보도 간격 0.4 m 는 등록 교량폭 8 m 와 크게 달라 쓰지 않았다(그 교량 보도가 아닐 수 있다)",
+  "경간수 없음 → 30 m 규칙으로 49 가정",
+  "형하고 6.0 m 가정(표준데이터 교량높이 없음) — 잔차고도로 대체 시도",
+  "⚠ '교면 위' 점이 지면보다 유의하게 **낮다**(z<−2) — 교면 산란체가 아닐 수 있다(제방·교대 주변 지면). 평면 선택을 다시 볼 것"
+ ],
+ "cri_point_median": 0.134,
+ "cri_point_max": 0.24,
+ "cri_over_0p8": 0,
+ "network_resonance_max": 0.833,
+ "velocity_median_mm_yr": 0.23,
+ "n_points": 17,
+ "EI_median": 112000000000.0
+}

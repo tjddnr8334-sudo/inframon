@@ -14,6 +14,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from .slc_store import discard_incomplete, zip_complete
+
 EARTHDATA_HOST = "urs.earthdata.nasa.gov"
 
 
@@ -162,7 +164,8 @@ def download_recipe_slc(
     """레시피의 선별 장면을 Earthdata 자격으로 자동 다운로드.
 
     out_dir 기본은 `<recipe_dir>/SLC`. limit=0 이면 전체, N>0 이면 처음 N장(테스트).
-    skip_existing 이면 이미 받은 `.zip` 은 건너뛴다(증분 재개).
+    skip_existing 이면 **끝까지 받은** `.zip` 만 건너뛴다(증분 재개). 중간에 끊긴
+    조각은 지우고 다시 받는다 — 존재만 보면 손상 zip 이 처리까지 흘러간다.
     """
     recipe_dir = Path(recipe_dir)
     out = Path(out_dir) if out_dir else recipe_dir / "SLC"
@@ -181,9 +184,10 @@ def download_recipe_slc(
     for p in sel:
         name = p.get("sceneName") or p.get("fileID") or ""
         zpath = out / f"{name}.zip"
-        if skip_existing and zpath.exists() and zpath.stat().st_size > 0:
+        if skip_existing and zip_complete(zpath):
             skipped += 1
             continue
+        discard_incomplete(zpath)       # 조각을 남기면 asf_search 가 건너뛴다
         url = p.get("url")
         if url:
             to_get.append(url)

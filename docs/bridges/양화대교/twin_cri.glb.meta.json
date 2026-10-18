@@ -1,0 +1,166 @@
+{
+ "schema": "inframon.gltf.meta/1.0",
+ "glb": "twin_cri.glb",
+ "n_points": 17,
+ "value_channel": "cri",
+ "legend": {
+  "kind": "cri",
+  "vmin": 0.0,
+  "vmax": 1.0,
+  "units": "CRI(무차원)"
+ },
+ "georef": {
+  "origin_lon": 126.90114413081852,
+  "origin_lat": 37.540704315247424,
+  "origin_height_m": 0.0,
+  "projection": "EPSG:5186",
+  "frame": "ENU_meters",
+  "note": "뷰어가 origin 을 eastNorthUpToFixedFrame 로 글로브에 배치",
+  "z_source": "ifc_element_top",
+  "z_detail": "ifc_element_top · 지면 13m · z 21~21m (IFC 부재 상단 + 원점 표고 13m)",
+  "ground_m": 13.0,
+  "deck_z_median_m": 20.79
+ },
+ "binding": {
+  "key": "element_globalid",
+  "note": "IFC 4.3 부재 GlobalId 외래키. --bim-align 이 채우면 시계열↔부재 영구결합"
+ },
+ "features": [
+  {
+   "index": 0,
+   "point_id": 0,
+   "element_globalid": null,
+   "value": 0.5890138035012831,
+   "lon": 126.90051531011964,
+   "lat": 37.539698202129216
+  },
+  {
+   "index": 1,
+   "point_id": 1,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.6246553892810138,
+   "lon": 126.90038954597986,
+   "lat": 37.539698202129216
+  },
+  {
+   "index": 2,
+   "point_id": 2,
+   "element_globalid": null,
+   "value": 0.5936348774379554,
+   "lon": 126.90038954597986,
+   "lat": 37.539572437989435
+  },
+  {
+   "index": 3,
+   "point_id": 3,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.5573757088675787,
+   "lon": 126.90038954597986,
+   "lat": 37.53982396626899
+  },
+  {
+   "index": 4,
+   "point_id": 4,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.5817585457453602,
+   "lon": 126.90051531011964,
+   "lat": 37.53982396626899
+  },
+  {
+   "index": 5,
+   "point_id": 5,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7723779469457047,
+   "lon": 126.9029048287754,
+   "lat": 37.54284230562363
+  },
+  {
+   "index": 6,
+   "point_id": 6,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.789058619214891,
+   "lon": 126.90277906463562,
+   "lat": 37.54259077734408
+  },
+  {
+   "index": 7,
+   "point_id": 7,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7728242563356834,
+   "lon": 126.90114413081852,
+   "lat": 37.540704315247424
+  },
+  {
+   "index": 8,
+   "point_id": 8,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7506911422422775,
+   "lon": 126.90303059291519,
+   "lat": 37.54284230562363
+  },
+  {
+   "index": 9,
+   "point_id": 9,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7190583226320972,
+   "lon": 126.9029048287754,
+   "lat": 37.542716541483856
+  },
+  {
+   "index": 10,
+   "point_id": 10,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.4577172873802646,
+   "lon": 126.90051531011964,
+   "lat": 37.539949730408765
+  },
+  {
+   "index": 11,
+   "point_id": 11,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.714152512869696,
+   "lon": 126.90277906463562,
+   "lat": 37.542716541483856
+  },
+  {
+   "index": 12,
+   "point_id": 12,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7108595485898787,
+   "lon": 126.90416247017318,
+   "lat": 37.543848418741845
+  },
+  {
+   "index": 13,
+   "point_id": 13,
+   "element_globalid": "0B6JBQTDXZ105A_TN1HOTC",
+   "value": 0.7022668987484795,
+   "lon": 126.90265330049584,
+   "lat": 37.5424650132043
+  },
+  {
+   "index": 14,
+   "point_id": 14,
+   "element_globalid": null,
+   "value": 0.5392936978001772,
+   "lon": 126.9002637818401,
+   "lat": 37.53944667384966
+  },
+  {
+   "index": 15,
+   "point_id": 15,
+   "element_globalid": null,
+   "value": 0.548748032014322,
+   "lon": 126.90013801770031,
+   "lat": 37.539320909709886
+  },
+  {
+   "index": 16,
+   "point_id": 16,
+   "element_globalid": null,
+   "value": 0.8525265797907418,
+   "lon": 126.90818692264602,
+   "lat": 37.546992522236266
+  }
+ ]
+}

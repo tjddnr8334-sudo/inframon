@@ -6,12 +6,12 @@
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
-    -19.166666666666664,
+    -27.5,
     -5.0,
     8.4
    ],
    "bbox_max": [
-    -14.166666666666664,
+    -22.5,
     5.0,
     9.0
    ],
@@ -25,12 +25,31 @@
    "ifc_type": "IfcBuildingElementProxy",
    "member": "pier",
    "bbox_min": [
-    14.166666666666671,
+    -2.5,
     -5.0,
     8.4
    ],
    "bbox_max": [
-    19.16666666666667,
+    2.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "0P53ILS$3IU8RMA6U$U4RY",
+   "name": "P3C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    22.5,
+    -5.0,
+    8.4
+   ],
+   "bbox_max": [
+    27.5,
     5.0,
     9.0
    ],
@@ -82,12 +101,12 @@
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
-    -18.166666666666664,
+    -26.5,
     -5.0,
     0.0
    ],
    "bbox_max": [
-    -15.166666666666664,
+    -23.5,
     5.0,
     9.0
    ],
@@ -102,12 +121,32 @@
    "ifc_type": "IfcColumn",
    "member": "pier",
    "bbox_min": [
-    15.166666666666671,
+    -1.5,
     -5.0,
     0.0
    ],
    "bbox_max": [
-    18.16666666666667,
+    1.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "1W_$36LUQS_A12PO6K3O26",
+   "name": "P3",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    23.5,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    26.5,
     5.0,
     9.0
    ],
@@ -129,7 +168,7 @@
    "bbox_max": [
     50.0,
     5.0,
-    10.966666666666669
+    10.55
    ],
    "extra": {
     "bbox_source": "geometry",

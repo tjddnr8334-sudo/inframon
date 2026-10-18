@@ -1,0 +1,79 @@
+{
+ "_설명": "보고서 월별 변위 ↔ 위성 InSAR 교량별 대조",
+ "_주의": "보고서와 위성은 같은 양이 아니다(지점 처짐/신축 vs 교면 LOS 중앙값). 크기가 아니라 시점(위상)을 본다.",
+ "bridges": [
+  {
+   "name": "가양대교",
+   "page": 27,
+   "quantity": "처짐(경사계)",
+   "unit": "mm",
+   "status": "read",
+   "insar_n": 20,
+   "insar_span": [
+    2021.95,
+    2024.9
+   ]
+  },
+  {
+   "name": "원효대교",
+   "page": 34,
+   "quantity": "처짐(경사계)",
+   "unit": "mm",
+   "status": "read",
+   "insar_n": 21,
+   "insar_span": [
+    2021.95,
+    2025.07
+   ]
+  },
+  {
+   "name": "올림픽대교",
+   "page": 42,
+   "quantity": "처짐(레이저)",
+   "unit": "mm",
+   "status": "read",
+   "insar_n": 40,
+   "insar_span": [
+    2021.95,
+    2024.97
+   ]
+  },
+  {
+   "name": "천호대교",
+   "page": 44,
+   "quantity": "처짐(경사변위)",
+   "unit": "mm",
+   "status": "read",
+   "insar_n": 3,
+   "insar_span": [
+    2024.61,
+    2024.9
+   ]
+  },
+  {
+   "name": "암사대교",
+   "page": 46,
+   "quantity": "신축변위",
+   "unit": "mm",
+   "status": "read_unreliable",
+   "insar_n": 7,
+   "insar_span": [
+    2023.95,
+    2024.9
+   ]
+  },
+  {
+   "name": "샛강문화다리",
+   "page": 50,
+   "quantity": "GNSS 연직변위",
+   "unit": "mm",
+   "status": "partial",
+   "report_form": "연도별 Min/Max 표(월별 곡선 없음)",
+   "insar_n": 21,
+   "insar_span": [
+    2021.95,
+    2025.07
+   ]
+  }
+ ]
+}

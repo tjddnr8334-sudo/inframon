@@ -1,0 +1,48 @@
+{
+ "name": "가양대교",
+ "lat": 37.569588,
+ "lon": 126.861186,
+ "track": "F:/SLC/seoul_work/track_가양대교.h5",
+ "proc": "F:/SLC/seoul_work/가양대교",
+ "master": "20220330",
+ "baselines": null,
+ "out": "docs/bridges/가양대교",
+ "length_m": 1700.0,
+ "n_spans": 30,
+ "superstructure": true,
+ "max_span_m": 180.0,
+ "span_layout": "auto",
+ "width_m": 34.0,
+ "clearance_m": 21.0,
+ "ground_m": 3.0,
+ "deck_az_deg": -120.34054585836182,
+ "bridge_type": "box_girder",
+ "material": "steel",
+ "n_epochs": 51,
+ "geometry": [
+  [
+   37.574673,
+   126.864941
+  ],
+  [
+   37.564503,
+   126.857431
+  ]
+ ],
+ "notes": [
+  "CSV 에 폭 없음 → OSM 보도 간격으로",
+  "OSM 어느 way 도 연장 1700 m 와 안 맞음 (토막난 way) → 표준데이터 시점–종점 선분 사용",
+  "⚠ '교면 위' 점이 지면보다 유의하게 **낮다**(z<−2) — 교면 산란체가 아닐 수 있다(제방·교대 주변 지면). 평면 선택을 다시 볼 것"
+ ],
+ "sources": {
+  "specs": "파트너 실측 CSV '가양대교' (45 m)",
+  "bridge_type": "CSV '강박스거더교(STB)' → box_girder",
+  "clearance": "전국교량표준데이터 교량높이 21 m",
+  "deck": "전국교량표준데이터 '가양대교' 시점–종점 선분 1312 m (등록 연장 1700 m · 차이 -23 %)",
+  "width": "전국교량표준데이터 교량폭 34 m",
+  "ground": "Open-Meteo DEM",
+  "ground_offset": "처리 오프셋 ≈ 0 (|B| 0.0 m < 3 m · 지면 점 28 · 도로 양쪽 대칭)",
+  "points": "쉬프트 24.6 m(heading -13.3°) 보정 후 데크 ±30 m 안 167/20000",
+  "span_layout": "measured — 주경간 180 m(실측)를 가운데, 나머지 29경간 52 m 균등"
+ }
+}

@@ -1,0 +1,8 @@
+{
+  "title": "부산광역시 (전체)",
+  "engine_dir": "/mnt/f/bridge-insar-monitor",
+  "engine_config": "config/kr_busan.yaml",
+  "engine_python": "/home/insar/miniforge3/envs/b2s/bin/python",
+  "results_dir": "/mnt/e/InSAR_DATA/bim/kr_busan",
+  "update_days": 12
+}

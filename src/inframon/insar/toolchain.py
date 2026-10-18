@@ -1,5 +1,10 @@
 """InSAR F코어 처리도구(ISCE2/MiaplPy/SARvey) 감지·프로비저닝 안내 — 프로그램 관리.
 
+StaMPS 는 **선택 도구**로 같이 본다. SARvey 가 논문으로 인용하기 마땅치 않아
+갈아 끼울 길이 필요하지만(Hooper 2004·2007), StaMPS 는 MATLAB 기반이라 conda 로
+못 깔고 라이선스도 따로다. 없다고 F코어를 미준비로 판정하면 SARvey 로 잘 돌리는
+사람까지 막히므로, **필수에서 빼고 있으면 알려 주기만** 한다.
+
 바이너리 자체는 파이썬 패키지에 담을 수 없다(각 수 GB·ISCE2 컴파일·시스템 라이브러리).
 대신 inframon 이 **도구 존재를 감지**하고, 없으면 리포에 저장된 **재현가능 레시피**(conda
 `scripts/wsl_sarvey/00_setup_env.sh` 또는 컨테이너 `scripts/wsl_sarvey/Dockerfile`)로 구축하도록
@@ -34,6 +39,17 @@ def _conda_probe() -> str:
     return "{ " + alts + "; } 2>/dev/null"
 
 
+def _stamps_probe() -> str:
+    """StaMPS 는 MATLAB 코드다 — 환경변수 $STAMPS 또는 mt_prep_* 실행파일로 찾는다."""
+    alts = " || ".join((
+        "ls $STAMPS/matlab/ps_load_initial_gamma.m",
+        "ls $STAMPS/bin/mt_prep_snap",
+        "command -v mt_prep_snap",
+        "command -v mt_prep_gamma",
+    ))
+    return "{ " + alts + "; } 2>/dev/null && echo stamps"
+
+
 def _env_probe(env: str, marker: str, *modules: str) -> str:
     """<env> 환경에서 modules 중 하나라도 import 되면 marker 를 출력(발견)."""
     alts = " || ".join(f"{c} run -n {env} python -c 'import {m}'"
@@ -41,17 +57,23 @@ def _env_probe(env: str, marker: str, *modules: str) -> str:
     return "{ " + alts + f"; }} 2>/dev/null && echo {marker}"
 
 
-# (키, 사람이름, 감지 셸명령) — 변수/루프 없이 self-contained. 발견 시 표식(버전/이름) 출력.
-PROBES: list[tuple[str, str, str]] = [
-    ("conda", "conda/mamba (환경관리자)", _conda_probe()),
-    ("isce2", "ISCE2 (스택·코레지스트레이션)", _env_probe("isce2", "isce", "isce")),
+# (키, 사람이름, 감지 셸명령, 필수인가) — 변수/루프 없이 self-contained.
+# 발견 시 표식(버전/이름) 출력. 필수가 아닌 것은 없어도 ready 를 막지 않는다.
+PROBES: list[tuple[str, str, str, bool]] = [
+    ("conda", "conda/mamba (환경관리자)", _conda_probe(), True),
+    ("isce2", "ISCE2 (스택·코레지스트레이션)", _env_probe("isce2", "isce", "isce"), True),
     ("miaplpy", "MiaplPy/MintPy (위상연결)",
-     _env_probe("miaplpy", "miaplpy", "miaplpy", "mintpy")),
-    ("sarvey", "SARvey (MTI 시계열)", _env_probe("sarvey", "sarvey", "sarvey")),
+     _env_probe("miaplpy", "miaplpy", "miaplpy", "mintpy"), True),
+    ("sarvey", "SARvey (MTI 시계열)", _env_probe("sarvey", "sarvey", "sarvey"), True),
+    ("stamps", "StaMPS (PS/SBAS 시계열 · MATLAB · 선택)", _stamps_probe(), False),
 ]
+
+REQUIRED_KEYS: tuple[str, ...] = tuple(k for k, _, _, req in PROBES if req)
 
 SETUP_CONDA = "bash scripts/wsl_sarvey/00_setup_env.sh"
 SETUP_CONTAINER = "docker build -t inframon-insar -f scripts/wsl_sarvey/Dockerfile ."
+SETUP_STAMPS = "bash scripts/wsl_stamps/00_setup_stamps.sh"
+STAMPS_INSTALL_CMD = "python -m inframon --stamps-install"
 
 
 @dataclass
@@ -85,22 +107,28 @@ def default_runner(cmd: str) -> tuple[int, str]:
 def check_toolchain(runner=default_runner) -> dict:
     """F코어 도구 4종을 감지해 준비상태·부족분·프로비저닝 명령을 돌려준다."""
     statuses: list[ToolStatus] = []
-    for key, label, probe in PROBES:
+    for key, label, probe, _req in PROBES:
         rc, out = runner(probe)
         found = rc == 0 and bool(out.strip())
         # 표식은 항상 마지막 줄(발견 echo) — import 시 라이브러리가 찍는 배너는 버린다.
         detail = out.strip().splitlines()[-1][:120] if out.strip() else ""
         statuses.append(ToolStatus(key, label, found, detail))
-    missing = [s.key for s in statuses if not s.found]
+    # StaMPS 처럼 선택인 도구는 ready 를 막지 않는다 — 없으면 알려만 준다.
+    missing = [s.key for s in statuses if not s.found and s.key in REQUIRED_KEYS]
+    optional_missing = [s.key for s in statuses
+                        if not s.found and s.key not in REQUIRED_KEYS]
     ready = not missing
     return {
         "ready": ready,
-        "tools": [{"key": s.key, "label": s.label, "found": s.found, "detail": s.detail}
+        "tools": [{"key": s.key, "label": s.label, "found": s.found,
+                   "detail": s.detail, "required": s.key in REQUIRED_KEYS}
                   for s in statuses],
         "missing": missing,
+        "optional_missing": optional_missing,
         "provision": None if ready else {
             "conda": SETUP_CONDA,
             "container": SETUP_CONTAINER,
+            "stamps": SETUP_STAMPS,
             "note": "도구 바이너리는 리포에 담기 불가(수 GB·컴파일). 위 레시피로 1회 구축하면 "
                     "이후 재사용된다. 컨테이너 정의(Dockerfile)는 리포에 버전 저장됨.",
         },
@@ -164,6 +192,57 @@ def format_wsl_report(st: dict) -> str:
     return "\n".join(lines)
 
 
+def wsl_repo_path() -> str:
+    """리포 경로를 WSL 이 보는 경로로 — Windows 는 E:\프로그램 → /mnt/e/프로그램."""
+    from pathlib import Path
+    repo = Path(__file__).resolve().parents[3]
+    if repo.drive:
+        return f"/mnt/{repo.drive[0].lower()}{repo.as_posix()[2:]}"
+    return repo.as_posix()                  # 리눅스/컨테이너: 이미 POSIX 경로 그대로
+
+
+def run_setup_script(script: str, *, stream=print) -> int:
+    """리포의 설치 스크립트를 WSL 에서 돌리며 진행을 실시간으로 흘린다 → 종료코드."""
+    cmd = f"cd '{wsl_repo_path()}' && bash {script}"
+    argv = (["wsl", "--", "bash", "-lc", cmd] if shutil.which("wsl")
+            else ["bash", "-lc", cmd])
+    p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, errors="replace")
+    for line in p.stdout:                           # 설치 진행을 실시간으로 보여준다
+        stream("  " + line.rstrip().replace("\x00", ""))
+    return p.wait()
+
+
+def provision_stamps(runner=default_runner, *, stream=print) -> dict:
+    """StaMPS 를 **내려받아 전처리기(mt_prep_*)까지 빌드**한다.
+
+    감지만 해 놓고 "알아서 까세요" 로 두면 쓰라는 건지 말라는 건지 모르게 된다.
+    StaMPS 는 git clone + make 라 자동화할 수 있고, **MATLAB 없이도 여기까지는 된다** —
+    mt_prep 은 C/C++ 이다. MATLAB 이 필요한 것은 시계열을 실제로 푸는 `stamps(1,8)`
+    뿐이라, 거기까지 갈 수 있는지를 `matlab` 키로 따로 알려 준다. 빌드 성공과 MATLAB
+    유무를 한 덩어리로 묶으면 "뭐가 없어서 안 되는지" 를 못 가린다.
+    """
+    stream(">> WSL 에서 StaMPS 를 내려받아 전처리기를 빌드합니다.")
+    stream(">> ⚠️ git clone + make — 수백 MB, 몇 분. MATLAB 은 따로 있어야 합니다.")
+    try:
+        rc = run_setup_script("scripts/wsl_stamps/00_setup_stamps.sh", stream=stream)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "setup_rc": 127, "error": str(exc),
+                "status": None, "matlab": False}
+
+    status = check_toolchain(runner=runner)         # 빌드 후 재감지로 검증
+    found = "stamps" not in status.get("optional_missing", [])
+    mrc, _ = runner("command -v matlab")
+    error = None
+    if rc != 0:
+        error = "00_setup_stamps.sh 가 실패했습니다(위 출력 참고)."
+    elif not found:
+        error = ("빌드는 끝났지만 mt_prep 이 감지되지 않습니다 — 새 셸을 열거나 "
+                 "source ~/.bashrc 후 다시 확인하세요.")
+    return {"ok": rc == 0 and found, "setup_rc": rc, "status": status,
+            "matlab": mrc == 0, "error": error}
+
+
 def provision_toolchain(runner=default_runner, *, stream=print) -> dict:
     """WSL 안에 툴체인을 **실제로 구축**한다 — 00_setup_env.sh 실행 후 재감지.
 
@@ -171,26 +250,10 @@ def provision_toolchain(runner=default_runner, *, stream=print) -> dict:
     여기서도 재감지 결과에 isce2 가 없으면 ok=False 로 돌려준다. 수 GB 다운로드·
     수십 분 소요 — 진행 출력은 stream 으로 흘린다.
     """
-    from pathlib import Path
-    repo = Path(__file__).resolve().parents[3]
-    if repo.drive:                          # Windows: E:\프로그램 → /mnt/e/프로그램
-        wsl_repo = f"/mnt/{repo.drive[0].lower()}{repo.as_posix()[2:]}"
-    else:                                   # 리눅스/컨테이너: 이미 POSIX 경로 그대로
-        wsl_repo = repo.as_posix()
-    cmd = f"cd '{wsl_repo}' && bash scripts/wsl_sarvey/00_setup_env.sh"
-
-    stream(f">> WSL 에서 툴체인 구축 시작 (리포: {wsl_repo})")
+    stream(f">> WSL 에서 툴체인 구축 시작 (리포: {wsl_repo_path()})")
     stream(">> ⚠️ 수백 MB~수 GB 다운로드, 수십 분 소요될 수 있습니다.")
-    if shutil.which("wsl"):
-        argv = ["wsl", "--", "bash", "-lc", cmd]
-    else:
-        argv = ["bash", "-lc", cmd]
     try:
-        p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             text=True, errors="replace")
-        for line in p.stdout:                       # 설치 진행을 실시간으로 보여준다
-            stream("  " + line.rstrip().replace("\x00", ""))
-        rc = p.wait()
+        rc = run_setup_script("scripts/wsl_sarvey/00_setup_env.sh", stream=stream)
     except (OSError, subprocess.SubprocessError) as exc:
         return {"ok": False, "setup_rc": 127, "error": str(exc), "status": None}
 
@@ -208,10 +271,16 @@ def format_report(status: dict) -> str:
     """check_toolchain 결과를 사람이 읽는 리포트 문자열로."""
     lines = ["=" * 56, "  InSAR F코어 처리도구 상태 (ISCE2/MiaplPy/SARvey)", "=" * 56]
     for t in status["tools"]:
-        mark = "✅" if t["found"] else "❌"
+        mark = "✅" if t["found"] else ("❌" if t.get("required", True) else "–")
         lines.append(f"  {mark} {t['label']}"
                      + (f"  [{t['detail']}]" if t["found"] and t["detail"] else ""))
     lines.append("-" * 56)
+    if "stamps" in status.get("optional_missing", []):
+        lines.append("  선택(없어도 됨): StaMPS — 쓰려면 아래로 내려받아 빌드합니다")
+        lines.append(f"    · {STAMPS_INSTALL_CMD}   (git clone + make · MATLAB 별도)")
+    for k in status.get("optional_missing", []):
+        if k != "stamps":
+            lines.append(f"  선택(없어도 됨): {k}")
     if status["ready"]:
         lines.append("  준비 완료 — WSL2 F코어 실행 가능")
     else:

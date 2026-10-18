@@ -1,0 +1,82 @@
+{
+ "성수대교": {
+  "year": "1997",
+  "grade": "B",
+  "std_length_m": 1160.0,
+  "std_width_m": 35,
+  "std_height_m": 17,
+  "deck": "트러스교",
+  "insp": "2025-12-11",
+  "record": "성수대교"
+ },
+ "한강대교": {
+  "year": "1937",
+  "grade": "B",
+  "std_length_m": 841.0,
+  "std_width_m": 20,
+  "std_height_m": 10,
+  "deck": "아치교",
+  "insp": "2025-12-16",
+  "record": "한강대교(구교)"
+ },
+ "올림픽대교": {
+  "year": "1990",
+  "grade": "B",
+  "std_length_m": 1470.0,
+  "std_width_m": 30,
+  "std_height_m": 18,
+  "deck": "사장교",
+  "insp": "2025-12-01",
+  "record": "올림픽대교"
+ },
+ "정자교": {
+  "year": "1993",
+  "grade": "—",
+  "std_length_m": 108,
+  "std_width_m": 26.5,
+  "deck": "PC슬래브교",
+  "insp": "—"
+ },
+ "행주대교": {
+  "year": "2000",
+  "grade": "—",
+  "std_length_m": 1460.0,
+  "record": "행주대교(상류교)"
+ },
+ "가양대교": {
+  "year": "2002",
+  "grade": "—",
+  "std_length_m": 1700.0,
+  "record": "가양대교"
+ },
+ "월드컵대교": {
+  "year": "2021",
+  "grade": "—",
+  "std_length_m": 855.0,
+  "record": "월드컵대교 주경간교"
+ },
+ "원효대교": {
+  "year": "1981",
+  "grade": "—",
+  "std_length_m": 1120.0,
+  "record": "원효대교"
+ },
+ "잠수교": {
+  "year": "1976",
+  "grade": "—",
+  "std_length_m": 795.0,
+  "record": "잠수교"
+ },
+ "영동대교": {
+  "year": "1996",
+  "grade": "—",
+  "std_length_m": 230.0,
+  "record": "영동대교북단고가교"
+ },
+ "암사대교": {
+  "year": "2016",
+  "grade": "—",
+  "std_length_m": 1133.0,
+  "record": "구리암사대교"
+ }
+}

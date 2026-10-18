@@ -1,0 +1,179 @@
+{
+ "elements": [
+  {
+   "guid": "2OLDDJUBH1Y_GW3XRJ7GTY",
+   "name": "P1C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    -27.5,
+    -5.0,
+    8.4
+   ],
+   "bbox_max": [
+    -22.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2S62SGQVMB8HB064WJLG8V",
+   "name": "P2C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    -2.5,
+    -5.0,
+    8.4
+   ],
+   "bbox_max": [
+    2.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "1_G7PZ25HQMM83SAC8M4FD",
+   "name": "P3C",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "pier",
+   "bbox_min": [
+    22.5,
+    -5.0,
+    8.4
+   ],
+   "bbox_max": [
+    27.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "05F5U1HAZTJZXD$4UO1I$H",
+   "name": "A1",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    -54.0,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    -50.0,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "2EQQTKCDK21YU_LKUXG31U",
+   "name": "A2",
+   "ifc_type": "IfcBuildingElementProxy",
+   "member": "abutment",
+   "bbox_min": [
+    50.0,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    54.0,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry"
+   }
+  },
+  {
+   "guid": "08X3YEPIXTHKMP_QQ6$S5G",
+   "name": "P1",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    -26.5,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    -23.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "2DCC0CN5UEZ6_IUCHLLYY_",
+   "name": "P2",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    -1.5,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    1.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "0A3PXRSM9L6OCRCY7ERZ3T",
+   "name": "P3",
+   "ifc_type": "IfcColumn",
+   "member": "pier",
+   "bbox_min": [
+    23.5,
+    -5.0,
+    0.0
+   ],
+   "bbox_max": [
+    26.5,
+    5.0,
+    9.0
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "COLUMN"
+   }
+  },
+  {
+   "guid": "2$00XG736AA4EA5EZ5JMF_",
+   "name": "S1",
+   "ifc_type": "IfcSlab",
+   "member": "deck",
+   "bbox_min": [
+    -50.0,
+    -5.0,
+    9.0
+   ],
+   "bbox_max": [
+    50.0,
+    5.0,
+    10.55
+   ],
+   "extra": {
+    "bbox_source": "geometry",
+    "predefined": "FLOOR"
+   }
+  }
+ ]
+}

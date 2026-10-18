@@ -18,6 +18,13 @@ def _http(code: int) -> urllib.error.HTTPError:
     return urllib.error.HTTPError("http://x", code, "err", {}, io.BytesIO(b""))
 
 
+@pytest.fixture(autouse=True)
+def _isolated_cache(tmp_path, monkeypatch):
+    """응답 캐시를 테스트마다 빈 임시 폴더로 — 사용자 홈을 건드리지 않고, 앞 테스트가
+    적어 둔 응답이 다음 테스트의 모의 호출을 가로채지도 않는다."""
+    monkeypatch.setenv("INFRAMON_OSM_CACHE", str(tmp_path / "osm"))
+
+
 # ── 재시도·미러 ──────────────────────────────────────────────────────────
 def test_504_then_mirror_succeeds(monkeypatch):
     calls: list[str] = []

@@ -61,3 +61,24 @@ docs/bridges/*/track_rh_full.h5
 docs/bridges/*/project.h5
 docs/bridges/*/pipeline/
 inframon_handoff_*.zip
+
+# 파이프라인 임시 산출(재현 가능 · 커밋하지 않는다)
+out/
+
+# 실화면 영상 만들 때 쓰는 중간 산출물(실제 clone·venv·녹화 webm)
+.demo_capture/
+
+# 파워포인트 임시 잠금 파일
+~$*
+
+# 교량 폴더 통째 압축본(수십 GB) — 저장소에 넣지 않는다
+docs/bridges/*.zip
+
+# 참고용으로 받아 둔 남의 발표자료 — 250 MB 라 리포에 넣지 않는다(GitHub 100 MB 제한)
+# KAIA 자문회의 원본 자료(제3자·수백 MB) — 판마다 새 이름으로 들어와서
+# v2 만 막아 두면 v11 같은 새 판이 그대로 딸려 들어간다. 이름 전체를 막는다.
+docs/2026 KAIA 자문회의*.pptx
+
+# 손으로 고친 7p 사본(_로고수정 · _찐찐 · _찐찐_song …) — 저장할 때마다
+# 12~26 MB 가 통째로 쌓인다. 리포에는 생성 경로(7p_1 · 7p_vF)만 둔다.
+docs/KICT_Bmaps_Inframon_연구개발_7p_vF_*.pptx

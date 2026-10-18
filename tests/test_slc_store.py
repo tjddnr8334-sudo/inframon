@@ -1,18 +1,27 @@
 """SLC 보관 폴더 — 사용자가 어디에 두든(예: E:\\SLC) 취득이 알아서 인식·재사용.
 
 핵심 계약: 보관 폴더에 있는 장면은 다운로드하지 않는다(하드링크/복사로 끌어옴).
+단, **끝까지 받은** 것만 — 조각은 지우고 다시 받는다.
 네트워크·find_bridge_burst 는 전부 monkeypatch.
 """
 
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from inframon.insar import slc_store
-from inframon.insar.slc_store import get_slc_dir, provide, scan, set_slc_dir
+from inframon.insar.slc_store import (
+    discard_incomplete,
+    get_slc_dir,
+    provide,
+    scan,
+    set_slc_dir,
+    zip_complete,
+)
 
 S1 = "S1A_IW_SLC__1SDV_20240107T093202_20240107T093230_051000_062000_AAAA"
 S2 = "S1A_IW_SLC__1SDV_20240119T093202_20240119T093230_051175_062100_BBBB"
@@ -27,12 +36,27 @@ def cfg(tmp_path, monkeypatch):
     return f
 
 
+def _zip(path: Path, payload: bytes = b"slc") -> Path:
+    """온전한 zip — 완결성 판정이 계약이 된 뒤로 더미는 진짜 zip 이어야 한다."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("measurement.dat", payload)
+    return path
+
+
+def _truncate(path: Path, keep: int = 40) -> Path:
+    """다운로드가 끊긴 조각 — 끝(EOCD)이 잘려 zip 으로 안 열린다."""
+    head = path.read_bytes()[:keep]
+    path.write_bytes(head)
+    return path
+
+
 def _store(tmp_path, *names) -> Path:
     root = tmp_path / "SLC보관"
     (root / "하위폴더").mkdir(parents=True)
     for i, n in enumerate(names):
         d = root if i % 2 == 0 else root / "하위폴더"     # 재귀 탐색 검증
-        (d / f"{n}.zip").write_bytes(b"x" * 10)
+        _zip(d / f"{n}.zip")
     return root
 
 
@@ -88,9 +112,53 @@ def test_provide_keeps_existing_dest_file(cfg, tmp_path):
     root = _store(tmp_path, S1)
     dest = tmp_path / "SLC"
     dest.mkdir()
-    (dest / f"{S1}.zip").write_bytes(b"already-here")
+    _zip(dest / f"{S1}.zip", b"already-here")
     provide([S1], dest, root)
-    assert (dest / f"{S1}.zip").read_bytes() == b"already-here"   # 덮어쓰지 않음
+    with zipfile.ZipFile(dest / f"{S1}.zip") as z:                # 온전하면 덮어쓰지 않음
+        assert z.read("measurement.dat") == b"already-here"
+
+
+def test_zip_complete_rejects_truncated_and_empty(cfg, tmp_path):
+    ok = _zip(tmp_path / "ok.zip")
+    cut = _truncate(_zip(tmp_path / "cut.zip"))
+    (tmp_path / "empty.zip").write_bytes(b"")
+    assert zip_complete(ok) is True
+    assert zip_complete(cut) is False, "끊긴 조각을 '받은 것'으로 보면 SNAP 이 죽는다"
+    assert zip_complete(tmp_path / "empty.zip") is False
+    assert zip_complete(tmp_path / "없다.zip") is False
+
+
+def test_discard_incomplete_removes_both_hardlinks(cfg, tmp_path):
+    """보관본과 작업본은 하드링크 — 한쪽만 지우면 다른 쪽이 남아 또 건너뛴다."""
+    import os
+    store = _truncate(_zip(tmp_path / "store.zip"))
+    work = tmp_path / "work.zip"
+    os.link(store, work)
+    gone = discard_incomplete(work, store)
+    assert len(gone) == 2 and not work.exists() and not store.exists()
+
+
+def test_discard_incomplete_keeps_whole_zip(cfg, tmp_path):
+    ok = _zip(tmp_path / "ok.zip")
+    assert discard_incomplete(ok) == [] and ok.exists()
+
+
+def test_provide_replaces_truncated_dest_from_store(cfg, tmp_path):
+    """작업 폴더에 조각이 있으면 보관본으로 갈아끼운다(예전엔 조각을 그대로 뒀다)."""
+    root = _store(tmp_path, S1)
+    dest = tmp_path / "work" / "SLC"
+    _truncate(_zip(dest / f"{S1}.zip"))
+    assert provide([S1], dest, root) == [S1]
+    assert zip_complete(dest / f"{S1}.zip")
+
+
+def test_provide_skips_truncated_store_copy(cfg, tmp_path):
+    """보관본 자체가 조각이면 재사용했다고 보고하지 않는다 → 다운로드로 넘어간다."""
+    root = _store(tmp_path, S1)
+    _truncate(next(iter(scan(root))))
+    dest = tmp_path / "work" / "SLC"
+    assert provide([S1], dest, root) == []
+    assert not (dest / f"{S1}.zip").exists()
 
 
 def test_provide_noop_without_store(cfg, tmp_path):
@@ -119,7 +187,7 @@ def test_acquire_reuses_store_and_downloads_only_missing(cfg, tmp_path, monkeypa
     def fake_download(urls, out_dir, session):
         downloaded.extend(urls)
         for u in urls:
-            (Path(out_dir) / u.rsplit("/", 1)[1]).write_bytes(b"dl")
+            _zip(Path(out_dir) / u.rsplit("/", 1)[1])
 
     monkeypatch.setattr(snap_acquire, "find_bridge_burst", lambda *a, **k: _Burst())
     res = snap_acquire.acquire(
@@ -155,7 +223,7 @@ def test_acquire_downloads_into_store_and_links_into_slc_dir(cfg, tmp_path, monk
     def fake_download(urls, out_dir, session):
         targets.append(out_dir)
         for u in urls:
-            (Path(out_dir) / u.rsplit("/", 1)[1]).write_bytes(b"dl")
+            _zip(Path(out_dir) / u.rsplit("/", 1)[1])
 
     monkeypatch.setattr(snap_acquire, "find_bridge_burst", lambda *a, **k: _Burst())
     res = snap_acquire.acquire(

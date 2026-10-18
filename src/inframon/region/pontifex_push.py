@@ -19,7 +19,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import pontifex as px
+from . import grade5 as g5
+from . import guideline_cri as gc
 from . import results as rr
+
+# 받는 쪽(Pontifex·B-Maps)이 이 글자(A~E)를 법정 안전등급으로 읽지 않도록 척도 이름을 데이터에 같이 싣는다.
+# 법정 안전등급(시행령 별표 8)은 책임기술자가 점검·진단으로 정하며, 위성 값은 참고·선별용이다.
+SCALE_GRADE5 = "위성 변위 참고등급(5단계) — 법정 안전등급(시행령 별표 8) 아님"
+SCALE_CRI = "위성 변위 ÷ 허용 한계(CRI)와 세부지침 환산 결함도(보조) — 법정 안전등급 아님"
 
 SOURCE = "inframon_region"
 # 광역 판정(정상·관심·주의·경고) → 플랫폼 등급(0 정상 · 1 주의 · 2 경고 · 3 위험).
@@ -27,12 +34,82 @@ SOURCE = "inframon_region"
 # '관심'은 플랫폼에 없어 가장 낮은 비정상 등급(주의)으로 보낸다. region.json 의
 # ``pontifex_levels`` 로 바꿀 수 있다.
 LEVEL_MAP = (0, 1, 1, 2)
+CRI_LEVEL = 2          # 법규 기반 CRI ≥ 1.0(허용 한계 도달 = 세부지침 '중대한 결함 해당 가능') → 최소 '경고'
 BATCH = 500
+MAX_BYTES = 2_000_000
 
 
 def _iso(yyyymmdd: str) -> str | None:
     d = "".join(ch for ch in str(yyyymmdd or "") if ch.isdigit())[:8]
     return f"{d[:4]}-{d[4:6]}-{d[6:8]}" if len(d) == 8 else None
+
+
+def _pct(x) -> str:
+    return f"{round(100 * float(x or 0))}%"
+
+
+def headline(r: dict, status: str) -> str:
+    """판정 이유 한 문장 — 플랫폼 교량 화면의 '결론' 칸에 그대로 쓴다(숫자는 엔진 값 그대로)."""
+    now, proj = r.get("rn"), r.get("r10")
+    if now is None:
+        return f"위성 판정: {status}"
+    s = f"허용변위의 {_pct(now)}"
+    if status == "정상":
+        s += " — 허용 범위 안입니다."
+    elif proj is not None and proj > (now or 0):
+        s += f" — 같은 속도가 이어지면 10년 뒤 {_pct(proj)}로 예측됩니다."
+    else:
+        s += f" — 판정 {status}."
+    if r.get("conf") == "낮음":
+        s += f" 교량 위 측정점이 {r.get('nps') or 0}개뿐이라 신뢰도는 낮습니다."
+    return s
+
+
+def action(r: dict, status: str) -> str:
+    """관리자가 할 일 한 줄. 법정 점검을 대신하지 않는다 — 어디부터 볼지만 말한다."""
+    where = next((w for w in (r.get("wh") or [])[:3] if w), "")
+    spot = f" 변위가 큰 곳: {where}." if where and status != "정상" else ""
+    if r.get("rv"):
+        return "판정을 확정하기 전에 자료 확인이 필요합니다." + (f" ({r['nt']})" if r.get("nt") else "")
+    return {"정상": "별도 조치 없음 — 정기점검 일정대로 진행합니다.",
+            "관심": "다음 정기점검 때 먼저 확인합니다.",
+            "주의": "가까운 시일 안에 현장 확인을 권합니다.",
+            "경고": "현장 확인이 필요합니다."}.get(status, "") + spot
+
+
+def cri_headline(c: dict, r: dict, status: str) -> tuple[str, str]:
+    """법규 기반 CRI 가 있으면 결론 문장을 CRI 로 쓴다(엔진의 관리 기준 비율과 섞지 않는다).
+
+    할 일은 CRI ≥ 1.0 이면 현장 확인, 아니면 엔진 판정의 할 일(지도 색과 어긋나지 않게).
+    """
+    pct = f"{round(100 * c['cri'])}%"
+    gov = c["governing"].split("(")[0].strip()
+    if c["cri"] >= 1.0:
+        s = f"위성 변위가 허용 한계의 {pct}입니다({gov}). 세부지침상 '중대한 결함'에 해당할 수 있습니다."
+        a = "현장 확인이 필요합니다 — 교대·교각 기울음과 기초 부등침하를 확인합니다."
+    else:
+        s = f"위성 변위는 허용 한계의 {pct}입니다({gov})."
+        a = action(r, status)
+    if r.get("conf") == "낮음":
+        s += f" 교량 위 측정점이 {r.get('nps') or 0}개뿐이라 신뢰도는 낮습니다."
+    if r.get("rv") and c["cri"] >= 1.0:
+        a = "판정을 확정하기 전에 자료 확인이 필요합니다." + (f" ({r['nt']})" if r.get("nt") else "")
+    return s, a
+
+
+def evidence_series(root, bridge_id: str, track) -> dict | None:
+    """근거 그래프용 변위 시계열(주변 지반 대비). 열 신축 보정 수직 > 수직 > LOS 순으로 하나."""
+    import sqlite3
+    try:
+        by_kind = (rr.series(root, bridge_id) or {}).get(track) or {}
+    except sqlite3.Error:               # 시계열 표가 없는 이력 DB — 근거 그래프 없이 판정만 보낸다
+        return None
+    for kind in ("vert_tc", "vert", "los"):
+        pts = [(_iso(d), v) for d, v in by_kind.get(kind) or [] if v is not None and _iso(d)]
+        if pts:
+            return {"kind": kind, "label": rr.KINDS[kind], "unit": "mm",
+                    "dates": [d for d, _ in pts], "mm": [round(float(v), 1) for _, v in pts]}
+    return None
 
 
 def platform_candidates(cities: dict, *, base: str, token: str | None = None) -> dict:
@@ -57,10 +134,13 @@ def platform_candidates(cities: dict, *, base: str, token: str | None = None) ->
 
 
 def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
-         include_review: bool = False, levels=LEVEL_MAP, candidates: dict | None = None) -> dict:
+         include_review: bool = False, levels=LEVEL_MAP, candidates: dict | None = None,
+         evidence: bool = True, grade5_overrides: dict | None = None) -> dict:
     """무엇을 올릴지 정한다(전송 없음) → {records, matched, skipped{사유: n}, unmatched[...]}.
 
     ``candidates`` 를 주면 플랫폼을 조회하지 않는다(테스트·재사용).
+    ``evidence`` 면 레코드에 결론 문장(headline·action)과 근거(변위 시계열)를 같이 싣는다 —
+    플랫폼이 등급만이 아니라 '왜'를 같은 화면에서 펼쳐 보일 수 있게.
     """
     state = rr.load_state(root)
     dates = rr.last_dates(root)
@@ -91,6 +171,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                   for c, ps in cen.items() if c}
         candidates = platform_candidates(cities, base=base, token=token)
 
+    series = gc.load_series(root) if evidence else {}
     records, matched, unmatched, taken = [], [], [], {}
     for b in todo:
         r = b["r"]
@@ -104,13 +185,49 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             continue
         taken[hit["id"]] = b["id"]
         lv = int(r["lv"])
+        st_name = rr.status(lv)
+        level = int(levels[lv])
+        extra = {}
+        if evidence:
+            extra = {"headline": headline(r, st_name), "action": action(r, st_name),
+                     "where": next((w for w in (r.get("wh") or [])[:3] if w), ""),
+                     "obs_years": r.get("tob"), "d_10y_mm": r.get("d10"),
+                     "series": evidence_series(root, b["id"], r.get("trk"))}
+            g = g5.grade_bridge(b, overrides=grade5_overrides)
+            if g and g["idx"] >= 0:                 # 5단계 변위 등급 — 형식·경간·종별 허용값과 출처를 같이
+                a = g["allow"]
+                extra["grade5"] = {
+                    "scale": SCALE_GRADE5, "legal_grade": False,
+                    "grade": g["grade"], "letter": g["letter"], "ratio_mgmt": g["ratio_mgmt"],
+                    "ratio_struct": g["ratio_struct"], "basis": g["basis"],
+                    "structure": "연속" if a["structure"] == "continuous" else "단순",
+                    "type": a["type"], "class": a["class"], "span_m": a["span_m"],
+                    "struct_diff_mm": a["struct_diff_mm"], "mgmt_diff_mm": a["mgmt_diff_mm"],
+                    "mgmt_settlement_mm": a["mgmt_settlement_mm"],
+                    "sources": [a["sources"][k] for k in ("grades", "qualitative", "struct_beta",
+                                                           "mgmt_beta", "mgmt_settlement", "class_cuts")],
+                }
+            a = gc.assess(b, series.get(b["id"]))
+            if a is not None:                       # 법규 기반 CRI — 위성 변위 ÷ 허용 한계, 보조 지표 포함
+                extra["cri_guideline"] = {
+                    "scale": SCALE_CRI, "legal_grade": False,
+                    "cri": a["cri"], "governing": a["governing"], "over_limit": a["cri"] >= 1.0,
+                    "settle_up_mm": a["settle_up_mm"], "beta": a["beta"], "beta_limit": a["beta_limit"],
+                    "span_m": a["span_m"] and round(a["span_m"], 1), "structure": "연속" if a["continuous"] else "단순",
+                    "letter": a["letter"], "major_defect": a["major_defect"], "why": a["why"],
+                    "defect_score": a["score"], "grade": a["grade"], "base_grade": (b.get("gr") or None),
+                    "sources": list(gc.SOURCES),
+                }
+                extra["headline"], extra["action"] = cri_headline(extra["cri_guideline"], r, st_name)
+                if a["cri"] >= 1.0:
+                    level = max(level, CRI_LEVEL)
         matched.append({"id": b["id"], "name": b["n"], "city": b.get("c"),
                         "pontifex_id": hit["id"], "match": why, "status": rr.status(lv)})
         records.append({
             "bridge_id": hit["id"],
             "source": SOURCE,
             "observed_at": _iso(dates[(b["id"], r.get("trk"))]),
-            "warning_level": int(levels[lv]),
+            "warning_level": level,
             "critical_members": [],
             "summary_json": {
                 "kind": "insar_allowable_displacement",
@@ -125,6 +242,7 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                 "note": r.get("nt"),
                 "engine_bridge_id": b["id"],
                 "produced_by": "inframon.region",
+                **extra,
             },
         })
     for u in unmatched:
@@ -134,14 +252,31 @@ def plan(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
             "skipped": skipped, "unmatched": unmatched}
 
 
+def _batches(recs: list, max_bytes: int = MAX_BYTES):
+    """레코드를 BATCH 개 · max_bytes 이하로 나눈다(플랫폼 요청 본문 한도 — Django 기본 2.5 MB)."""
+    import json
+
+    chunk, size = [], 0
+    for r in recs:
+        n = len(json.dumps(r, ensure_ascii=False).encode("utf-8")) + 1
+        if chunk and (len(chunk) >= BATCH or size + n > max_bytes):
+            yield chunk
+            chunk, size = [], 0
+        chunk.append(r)
+        size += n
+    if chunk:
+        yield chunk
+
+
 def push_region(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
                 dry_run: bool = False, include_review: bool = False, levels=LEVEL_MAP,
-                report_path=None, candidates: dict | None = None) -> dict:
+                report_path=None, candidates: dict | None = None,
+                grade5_overrides: dict | None = None) -> dict:
     """판정을 플랫폼에 올린다 → {sent, errors, levels{등급: n}, skipped, unmatched, ...}."""
     import json
 
     p = plan(root, base=base, token=token, include_review=include_review, levels=levels,
-             candidates=candidates)
+             candidates=candidates, grade5_overrides=grade5_overrides)
     recs = p["records"]
     by_level: dict[int, int] = {}
     for r in recs:
@@ -151,9 +286,9 @@ def push_region(root, *, base: str = px.DEFAULT_BASE, token: str | None = None,
            "skipped": p["skipped"], "unmatched": p["unmatched"], "matched": p["matched"]}
     if dry_run:
         return out
-    for i in range(0, len(recs), BATCH):
+    for chunk in _batches(recs):
         got = px._post(f"{base.rstrip('/')}/api/ingest/sensing/",
-                       {"summary_records": recs[i:i + BATCH], "member_records": []}, token,
+                       {"summary_records": chunk, "member_records": []}, token,
                        timeout=120.0)
         out["sent"] += int(got.get("summary_n", 0))
         out["errors"] += [str(e) for e in got.get("errors") or []]
